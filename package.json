@@ -1,0 +1,13 @@
+{
+  "name": "emberwood",
+  "version": "1.0.0",
+  "description": "A tiny 3D action RPG in the browser (Three.js + KayKit)",
+  "private": true,
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=14"
+  }
+}

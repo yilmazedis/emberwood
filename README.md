@@ -15,9 +15,13 @@ Then open http://localhost:8765. Three.js loads from a CDN, so you need an inter
 
 ## Deploy
 
-It's a static site: point the subdomain's document root at a clone of this repo, and update it with `git pull`.
-`.htaccess` sets the model MIME types and cache headers, and blocks web access to `.git`.
-Live at https://emberwood.kerimcaglar.com.
+Live at https://emberwood.kerimcaglar.com. Two ways to host it:
+
+- **Node.js app** (current): in the hosting panel's "Setup Node.js App", set the application root to the clone,
+  the URL to the subdomain, and the startup file to `server.js`. It only uses Node built-ins, so no `npm install` is needed.
+  Deploy with `git pull`. Restart the app only when `server.js` itself changes.
+- **Static files:** point the subdomain's document root at the clone. `.htaccess` sets the model MIME types
+  and cache headers, and blocks web access to `.git`.
 
 ## Controls
 
