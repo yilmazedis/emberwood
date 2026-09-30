@@ -31,7 +31,36 @@ export const BASES = {
   necro_staff: { name: 'Necromancer Staff', type: 'Staff', slot: 'weapon', model: 'Skeleton_Staff', dmg: [8, 12], speed: 1.0, spell: 0.7, mp: 30, twoHanded: true, w: 0, boneW: 4 },
   bone_buckler: { name: 'Bone Buckler', type: 'Shield', slot: 'offhand', model: 'Skeleton_Shield_Small_A', armor: 7, w: 0, boneW: 5 },
   grave_ward: { name: 'Grave Ward', type: 'Shield', slot: 'offhand', model: 'Skeleton_Shield_Large_A', armor: 12, w: 0, boneW: 3 },
+
+  // Gloves, boots and rings. The packs have no models for these, so `gear` describes a small
+  // procedural model (icons + ground drops, see gear.js). On the Knight, gloves and boots recolor
+  // the skin-weighted hand/foot area; `cover` lists the bones they cover (1 = fully).
+  leather_gloves: { name: 'Leather Gloves', type: 'Gloves', slot: 'hands', armor: 2, atkSpd: 0.03, w: 7,
+    gear: { kind: 'gloves', color: 0x8b5a34, trim: 0x5a3a20, metal: 0.05, rough: 0.8 }, cover: { hand: 1 } },
+  iron_gauntlets: { name: 'Iron Gauntlets', type: 'Gauntlets', slot: 'hands', armor: 5, w: 5,
+    gear: { kind: 'gloves', color: 0xd4dbe4, trim: 0x7d858f, metal: 0.4, rough: 0.35, plate: true }, cover: { hand: 1, lowerarm: 1 } },
+  brawler_gauntlets: { name: "Brawler's Gauntlets", type: 'Gauntlets', slot: 'hands', armor: 4, dmgPct: 0.05, w: 4,
+    gear: { kind: 'gloves', color: 0x4d5157, trim: 0xc9a25a, metal: 0.4, rough: 0.4, plate: true }, cover: { hand: 1, lowerarm: 0.7 } },
+  leather_boots: { name: 'Leather Boots', type: 'Boots', slot: 'feet', armor: 2, moveSpd: 0.04, w: 7,
+    gear: { kind: 'boots', color: 0x7a4b2a, trim: 0x4e3019, metal: 0.05, rough: 0.8 }, cover: { foot: 1, toes: 1 } },
+  iron_greaves: { name: 'Iron Greaves', type: 'Boots', slot: 'feet', armor: 6, w: 5,
+    gear: { kind: 'boots', color: 0xd4dbe4, trim: 0x7d858f, metal: 0.4, rough: 0.35, plate: true }, cover: { foot: 1, toes: 1, lowerleg: 1 } },
+  wanderer_boots: { name: "Wanderer's Boots", type: 'Boots', slot: 'feet', armor: 1, moveSpd: 0.08, w: 4,
+    gear: { kind: 'boots', color: 0x3f5f3a, trim: 0x8b5a34, metal: 0.05, rough: 0.85 }, cover: { foot: 1, toes: 1, lowerleg: 1 } },
+  silver_band: { name: 'Silver Band', type: 'Ring', slot: 'ring', mp: 12, w: 4,
+    gear: { kind: 'ring', color: 0xcfd4dc, gem: 0x5a9bff } },
+  gold_signet: { name: 'Gold Signet', type: 'Ring', slot: 'ring', dmgPct: 0.04, w: 4,
+    gear: { kind: 'ring', color: 0xdcae40, gem: 0xe0304a } },
+  emerald_ring: { name: 'Emerald Ring', type: 'Ring', slot: 'ring', hp: 15, w: 4,
+    gear: { kind: 'ring', color: 0xcfd4dc, gem: 0x2fd07a } },
+  bone_grips: { name: 'Bone Grips', type: 'Gloves', slot: 'hands', armor: 3, crit: 0.03, w: 0, boneW: 4,
+    gear: { kind: 'gloves', color: 0xe4d8bc, trim: 0x8a7d62, metal: 0, rough: 0.6, plate: true }, cover: { hand: 1, lowerarm: 0.5 } },
+  grave_walkers: { name: 'Grave Walkers', type: 'Boots', slot: 'feet', armor: 4, regen: 1.5, w: 0, boneW: 4,
+    gear: { kind: 'boots', color: 0x3a3a46, trim: 0xe4d8bc, metal: 0.2, rough: 0.55, plate: true }, cover: { foot: 1, toes: 1, lowerleg: 1 } },
 };
+
+// Stats a base can grant on its own (shown as white "implicit" lines on the item).
+const IMPLICIT_KEYS = ['hp', 'mp', 'spell', 'dmgPct', 'atkSpd', 'moveSpd', 'crit', 'regen'];
 
 export const AFFIXES = {
   dmgPct: { fmt: (v) => `+${Math.round(v * 100)}% Damage`, roll: (il) => rand(0.05, 0.1) * (1 + il * 0.12), pre: 'Keen' },
@@ -52,6 +81,9 @@ const LEGENDARY = {
   offhand: ["Aegis of Dawn", "Bulwark of Ages", "The Unbroken", "Ossuary Wall"],
   head: ["Crown of the Fallen", "Helm of the Ember Lord"],
   back: ["Mantle of Ash", "Wings of the Phoenix"],
+  hands: ["Grasp of the Ember King", "Stonefist", "Hands of Ruin"],
+  feet: ["Stormstriders", "Ashwalkers", "Boots of the Long Road"],
+  ring: ["The Ember Seal", "Band of Endless Night", "Ouroboros Loop", "Heart of the Woods"],
 };
 
 let uid = 1;
@@ -76,7 +108,7 @@ export function makeItem(baseKey, ilvl = 1, rarity = 'common', nameOverride = nu
     stats.speed = base.speed;
   }
   if (base.armor) stats.armor = Math.round(base.armor * (1 + 0.2 * (ilvl - 1)) * r.mult);
-  for (const k of ['hp', 'mp', 'spell', 'dmgPct', 'moveSpd']) if (base[k]) stats[k] = base[k];
+  for (const k of IMPLICIT_KEYS) if (base[k]) stats[k] = base[k];
 
   const affixes = [];
   const n = randInt(r.affixes[0], r.affixes[1]);
@@ -104,7 +136,7 @@ export function makeItem(baseKey, ilvl = 1, rarity = 'common', nameOverride = nu
   const value = Math.round((6 + ilvl * 3) * (1 + RARITY_ORDER.indexOf(rarity) * 1.5));
   return {
     id: newId(), base: baseKey, name, rarity, ilvl, slot: base.slot, type: base.type,
-    model: model || null, icon: base.icon || model, meshes: base.meshes || null,
+    model: model || null, icon: base.icon || (base.gear ? `gear_${baseKey}` : model), meshes: base.meshes || null,
     twoHanded: !!base.twoHanded, stats, affixes, value,
   };
 }
@@ -125,12 +157,14 @@ export function itemLines(item) {
   if (baseArmor) main.push(`${s.armor - (item.affixes.find((a) => a.k === 'armor')?.v || 0)} Armor`);
   const aff = item.affixes.map((a) => AFFIXES[a.k].fmt(a.v));
   const b = BASES[item.base];
-  const implicit = [];
-  if (b.hp) implicit.push(`+${b.hp} Max Life`);
-  if (b.mp) implicit.push(`+${b.mp} Max Mana`);
-  if (b.spell) implicit.push(`+${Math.round(b.spell * 100)}% Spell Power`);
-  if (b.dmgPct) implicit.push(`+${Math.round(b.dmgPct * 100)}% Damage`);
-  if (b.moveSpd) implicit.push(`+${Math.round(b.moveSpd * 100)}% Move Speed`);
+  const implicit = IMPLICIT_KEYS.filter((k) => b[k]).map((k) => AFFIXES[k].fmt(b[k]));
   if (b.twoHanded) implicit.push('Two-Handed');
   return { main, implicit, aff };
 }
+
+// Stat rows used to compare an item against the one it would replace.
+export const COMPARE_STATS = [
+  ['armor', 'Armor'], ['hp', 'Max Life'], ['mp', 'Max Mana'], ['dmgPct', 'Damage', 'pct'],
+  ['atkSpd', 'Attack Speed', 'pct'], ['crit', 'Critical Chance', 'pct'], ['moveSpd', 'Move Speed', 'pct'],
+  ['spell', 'Spell Power', 'pct'], ['regen', 'Life per Second', 'dec'],
+];

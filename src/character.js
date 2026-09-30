@@ -63,6 +63,40 @@ const SWINGS = {
 };
 const NO_KEYS = [[0, 0], [1, 0]];
 
+// ---------------------------------------------------------------- gloves & boots on the model
+// The Knight has no separate glove/boot meshes, but its hands and feet are skinned to their own
+// bones. uBoneTint[bone] = (glove amount, boot amount); each vertex sums it by its skin weights,
+// and the fragment shader blends in the gear's colour, metalness/roughness and glow.
+const MAX_BONES = 32;
+
+function injectGearTint(shader, uniforms) {
+  Object.assign(shader.uniforms, uniforms);
+  shader.vertexShader = shader.vertexShader
+    .replace('#include <common>', `#include <common>
+      uniform vec2 uBoneTint[${MAX_BONES}];
+      varying vec2 vGear;`)
+    .replace('#include <begin_vertex>', `#include <begin_vertex>
+      vGear = uBoneTint[int(skinIndex.x)] * skinWeight.x + uBoneTint[int(skinIndex.y)] * skinWeight.y
+            + uBoneTint[int(skinIndex.z)] * skinWeight.z + uBoneTint[int(skinIndex.w)] * skinWeight.w;`);
+  shader.fragmentShader = shader.fragmentShader
+    .replace('#include <common>', `#include <common>
+      uniform vec3 uGloveColor; uniform vec3 uBootColor;
+      uniform vec3 uGloveMat; uniform vec3 uBootMat; // metalness, roughness, glow
+      uniform vec3 uGearGlow;
+      varying vec2 vGear;`)
+    .replace('#include <map_fragment>', `#include <map_fragment>
+      float gloveA = clamp(vGear.x, 0.0, 1.0), bootA = clamp(vGear.y, 0.0, 1.0);
+      float gearLum = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));
+      diffuseColor.rgb = mix(diffuseColor.rgb, uGloveColor * (0.55 + 0.9 * gearLum), gloveA);
+      diffuseColor.rgb = mix(diffuseColor.rgb, uBootColor * (0.55 + 0.9 * gearLum), bootA);`)
+    .replace('#include <metalnessmap_fragment>', `#include <metalnessmap_fragment>
+      metalnessFactor = mix(mix(metalnessFactor, uGloveMat.x, gloveA), uBootMat.x, bootA);`)
+    .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+      roughnessFactor = mix(mix(roughnessFactor, uGloveMat.y, gloveA), uBootMat.y, bootA);`)
+    .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+      totalEmissiveRadiance += uGearGlow * (uGloveMat.z * gloveA + uBootMat.z * bootA);`);
+}
+
 export class Humanoid {
   constructor(charName, { scale = 1, tint = null } = {}) {
     const c = cloneCharacter(charName);
@@ -106,6 +140,46 @@ export class Humanoid {
 
   setMeshVisible(name, visible) {
     if (this.meshes[name]) this.meshes[name].visible = visible;
+  }
+
+  // Give the arm/leg meshes their own material that can show gloves and boots (see injectGearTint).
+  enableGearTint() {
+    if (this.gear !== undefined) return;
+    const limbs = Object.values(this.meshes).filter((m) => m.isSkinnedMesh && /_(Arm|Leg)(Left|Right)$/.test(m.name));
+    if (!limbs.length) { this.gear = null; return; }
+    const uniforms = {
+      uBoneTint: { value: Array.from({ length: MAX_BONES }, () => new THREE.Vector2()) },
+      uGloveColor: { value: new THREE.Color() },
+      uBootColor: { value: new THREE.Color() },
+      uGloveMat: { value: new THREE.Vector3() },
+      uBootMat: { value: new THREE.Vector3() },
+      uGearGlow: { value: new THREE.Color(0xff6a10).multiplyScalar(0.1) },
+    };
+    const mat = limbs[0].material.clone();
+    mat.onBeforeCompile = (shader) => injectGearTint(shader, uniforms);
+    for (const m of limbs) m.material = mat;
+    this.materials.push(mat);
+    this.baseEmissive.push(mat.emissive.clone());
+    const bones = limbs[0].skeleton.bones;
+    this.gear = { uniforms, boneIndex: (name) => bones.findIndex((b) => b.name === name) };
+  }
+
+  // region 'hands' | 'feet'; spec = { color, metal, rough, glow, cover: { hand: 1, lowerarm: 0.7, … } } or null
+  setGear(region, spec) {
+    if (!this.gear) return;
+    const u = this.gear.uniforms;
+    const axis = region === 'hands' ? 'x' : 'y';
+    for (const v of u.uBoneTint.value) v[axis] = 0;
+    if (!spec) return;
+    for (const [bone, amount] of Object.entries(spec.cover)) {
+      for (const side of ['l', 'r']) {
+        const i = this.gear.boneIndex(bone + side); // bone names are sanitized: "hand.l" -> "handl"
+        if (i >= 0 && i < MAX_BONES) u.uBoneTint.value[i][axis] = amount;
+      }
+    }
+    (region === 'hands' ? u.uGloveColor : u.uBootColor).value.set(spec.color);
+    // No environment map in this world, so real metalness only darkens: keep it low on the model.
+    (region === 'hands' ? u.uGloveMat : u.uBootMat).value.set(Math.min(spec.metal ?? 0, 0.2), spec.rough ?? 0.8, spec.glow ?? 0);
   }
 
   // Make a material glow (e.g. the skeletons' "Glow" eye material); bloom picks it up.

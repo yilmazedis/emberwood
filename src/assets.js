@@ -2,6 +2,8 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
+import { BASES } from './items.js';
+import { buildGearModel, GEAR_ICON_ROT } from './gear.js';
 
 export const Assets = { chars: {}, clips: {}, items: {}, icons: {} };
 
@@ -120,6 +122,10 @@ export function buildIcons() {
     const isMug = name.startsWith('mug');
     const rot = isShield ? [0.15, -0.5, 0] : isMug ? [0.2, -0.6, 0] : [0, 0.5, -Math.PI / 4];
     Assets.icons[name] = snapshot(cloneItem(name), { rot });
+  }
+  // Gloves, boots and rings: procedural models (gear.js).
+  for (const [key, base] of Object.entries(BASES)) {
+    if (base.gear) Assets.icons[`gear_${key}`] = snapshot(buildGearModel(base.gear), { rot: GEAR_ICON_ROT[base.gear.kind] });
   }
   // Helmets and cape are parts of the Knight mesh: render just those parts.
   const part = (visible, dir, rot = [0, 0, 0]) => {

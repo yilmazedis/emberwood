@@ -2,7 +2,8 @@
 import * as THREE from 'three';
 import { cloneItem } from './assets.js';
 import { heightAt } from './world.js';
-import { RARITY } from './items.js';
+import { RARITY, BASES } from './items.js';
+import { buildGearModel } from './gear.js';
 import { hdr } from './fx.js';
 import { rand } from './util.js';
 
@@ -149,10 +150,14 @@ export class LootManager {
 
   dropItem(item, pos) {
     let obj;
+    const gear = BASES[item.base]?.gear;
     if (item.model) {
       obj = cloneItem(item.model);
       obj.scale.setScalar(0.62);
       obj.rotation.set(0, 0, item.slot === 'weapon' ? 1.25 : 0);
+    } else if (gear) {
+      obj = buildGearModel(gear);
+      obj.scale.setScalar(gear.kind === 'ring' ? 0.9 : 0.8);
     } else {
       obj = makeBag();
     }

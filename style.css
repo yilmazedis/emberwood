@@ -137,7 +137,15 @@ button:hover { border-color: var(--edge-hi); color: #fff; }
 #vignette { position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity .35s; box-shadow: inset 0 0 160px 40px rgba(200, 0, 0, .55); }
 
 /* Inventory */
-#inventory { position: absolute; right: 16px; top: 232px; width: 372px; max-height: calc(100vh - 320px); overflow-y: auto; padding: 0 14px 12px; }
+/* Desktop: equipment + stats on the left, bag on the right, the knight visible in between.
+   Phones: one combined panel (stacked in portrait, side by side in landscape; see below). */
+#inventory { position: absolute; inset: 0; pointer-events: none; }
+.inv-left, .inv-right { position: absolute; overflow-y: auto; padding: 0 14px 12px; background: rgba(22, 17, 12, 0.95); touch-action: pan-y; }
+.inv-left { left: calc(16px + var(--sal)); top: calc(112px + var(--sat)); width: 360px; max-height: calc(100vh - 128px); }
+.inv-right { right: calc(16px + var(--sar)); top: calc(232px + var(--sat)); width: 372px; max-height: calc(100vh - 248px); }
+#inventory header small { font: 500 11px Inter, sans-serif; color: var(--muted); margin-left: 8px; letter-spacing: 0; }
+.eq-row { display: flex; justify-content: space-between; margin-top: 12px; }
+.eq-slot[data-slot^="ring"] { border-radius: 50%; } /* the class list is rewritten on refresh */
 #inventory header, #help header { display: flex; justify-content: space-between; align-items: center; padding: 10px 0 8px; font: 800 16px Cinzel, serif; color: var(--gold); border-bottom: 1px solid rgba(201, 162, 90, .25); margin-bottom: 10px; }
 header .close { padding: 0 9px; font-size: 18px; line-height: 24px; }
 .doll { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
@@ -154,8 +162,6 @@ header .close { padding: 0 9px; font-size: 18px; line-height: 24px; }
 #stats { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 16px; margin: 12px 0; font: 600 12px Inter, sans-serif; color: var(--muted); }
 #stats div { display: flex; justify-content: space-between; }
 #stats b { color: var(--text); }
-.bag-title { font: 800 13px Cinzel, serif; color: var(--gold); margin-bottom: 6px; }
-.bag-title small { font: 500 11px Inter, sans-serif; color: var(--muted); margin-left: 6px; }
 #bag { display: grid; grid-template-columns: repeat(5, 62px); gap: 6px; justify-content: space-between; }
 #inventory footer { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; }
 .gold { display: flex; align-items: center; gap: 6px; font: 800 15px Inter, sans-serif; color: var(--gold); }
@@ -196,7 +202,16 @@ header .close { padding: 0 9px; font-size: 18px; line-height: 24px; }
   #minimap-wrap { transform: scale(.75); transform-origin: top right; }
   #menu-buttons { top: 176px; bottom: auto; flex-direction: column; align-items: flex-end; }
   #boss { top: 112px; width: 70vw; }
-  #inventory { top: 16px; right: 16px; left: 16px; width: auto; max-height: calc(100vh - 120px); }
+  #inventory {
+    inset: calc(12px + var(--sat)) calc(12px + var(--sar)) calc(12px + var(--sab)) calc(12px + var(--sal));
+    overflow-y: auto; pointer-events: auto; padding: 0 14px 12px;
+    background: rgba(22, 17, 12, 0.96); border: 1px solid var(--edge); border-radius: 10px;
+  }
+  .inv-left, .inv-right { position: static; width: auto; max-height: none; overflow: visible; padding: 0; background: none; border: 0; box-shadow: none; }
+  .inv-right .close { display: none; }
+  .inv-right header { margin-top: 8px; }
+  #bag { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  #bag .bag-slot { width: auto; height: auto; aspect-ratio: 1; }
   #xpbar { width: 90vw; }
   .slot { width: 46px; height: 46px; }
   #log { display: none; }
@@ -289,18 +304,23 @@ body.touch #boss-name { font-size: 13px; }
 /* landscape phones: bag in two columns so it fits the short screen */
 @media (max-height: 520px) and (orientation: landscape) {
   #inventory {
-    top: calc(8px + var(--sat)); bottom: calc(8px + var(--sab)); right: calc(8px + var(--sar)); left: auto;
-    width: min(700px, calc(100vw - 16px)); max-height: none;
-    display: grid; grid-template-columns: 300px 1fr; grid-template-rows: auto 1fr; column-gap: 18px; align-content: start;
+    inset: calc(8px + var(--sat)) calc(8px + var(--sar)) calc(8px + var(--sab)) auto;
+    width: min(720px, calc(100vw - 16px)); overflow-y: auto; pointer-events: auto; padding: 0 14px 12px;
+    background: rgba(22, 17, 12, 0.96); border: 1px solid var(--edge); border-radius: 10px;
+    display: grid; grid-template-columns: auto 1fr; column-gap: 20px; align-items: start;
   }
-  #inventory header { grid-column: 1 / -1; }
+  .inv-left, .inv-right { position: static; width: auto; max-height: none; overflow: visible; padding: 0; background: none; border: 0; box-shadow: none; }
+  .inv-left .close { display: none; }
+  .inv-right .close { display: inline-block; }
+  .inv-right header { margin-top: 0; }
   #inventory #stats { margin: 8px 0 0; }
   #inventory #bag { grid-template-columns: repeat(5, 52px); gap: 6px; justify-content: start; }
   #inventory .bag-slot { width: 52px; height: 52px; }
-  #inventory .eq-slot { width: 54px; height: 54px; }
-  #doll-canvas { width: 150px; height: 183px; }
+  #inventory .eq-slot { width: 50px; height: 50px; }
+  #inventory .eq-col { gap: 10px; }
+  #inventory .eq-row { margin-top: 8px; }
+  #doll-canvas { width: 130px; height: 159px; }
 }
-body.touch #inventory { background: rgba(22, 17, 12, 0.96); }
 
 /* install prompt on the title screen */
 #install { font: 700 14px Inter, sans-serif; color: var(--gold); border-color: var(--edge-hi); margin-top: 4px; }
@@ -329,3 +349,7 @@ body.touch #inventory { background: rgba(22, 17, 12, 0.96); }
 #tooltip { z-index: 30; }
 #death { z-index: 40; }
 #loading { z-index: 50; }
+
+/* item comparison lines in tooltips */
+.tt-cmp { margin-top: 6px; }
+.tt-replaces { color: var(--muted); font-style: italic; }

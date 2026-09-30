@@ -70,9 +70,9 @@
     <button id="btn-sound" title="Sound (M)">Sound <kbd>M</kbd></button>
   </div>
 
-  <div id="inventory" class="panel hidden">
-    <header><span>Character</span><button class="close" data-close="inventory">×</button></header>
-    <div class="inv-left">
+  <div id="inventory" class="hidden">
+    <section class="panel inv-left">
+      <header><span>Character</span><button class="close" data-close="inventory" aria-label="Close">×</button></header>
       <div class="doll">
         <div class="eq-col">
           <div class="eq-slot" data-slot="head"><span>Head</span></div>
@@ -84,13 +84,19 @@
           <div class="eq-slot" data-slot="offhand"><span>Off-hand</span></div>
         </div>
       </div>
+      <div class="eq-row">
+        <div class="eq-slot" data-slot="hands"><span>Hands</span></div>
+        <div class="eq-slot" data-slot="ring1"><span>Ring</span></div>
+        <div class="eq-slot" data-slot="ring2"><span>Ring</span></div>
+        <div class="eq-slot" data-slot="feet"><span>Feet</span></div>
+      </div>
       <div id="stats"></div>
-    </div>
-    <div class="inv-right">
-      <div class="bag-title">Bag <small class="desk-only">click to equip · right-click to sell</small><small class="touch-only">tap an item for options</small></div>
+    </section>
+    <section class="panel inv-right">
+      <header><span>Bag <small class="desk-only">click to equip · right-click to sell</small><small class="touch-only">tap an item for options</small></span><button class="close" data-close="inventory" aria-label="Close">×</button></header>
       <div id="bag"></div>
       <footer><span class="gold"><i class="coin"></i><b id="gold">0</b></span><button id="buy-ale">Buy Ale · 25g</button></footer>
-    </div>
+    </section>
   </div>
 
   <div id="tooltip" class="hidden"></div>

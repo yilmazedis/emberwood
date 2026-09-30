@@ -1,7 +1,7 @@
 // HTML HUD: bars, action bar, nameplates, floating numbers, minimap, inventory, tooltips.
 import * as THREE from 'three';
 import { Assets } from './assets.js';
-import { RARITY, itemLines } from './items.js';
+import { RARITY, itemLines, COMPARE_STATS } from './items.js';
 import { SKILLS, xpForLevel } from './player.js';
 import { rand } from './util.js';
 
@@ -87,10 +87,11 @@ export class UI {
       return;
     }
     if (!item) return this.closeMenu();
-    this.openMenu(d, this.itemTip(item, true, true), [
-      ['Equip', () => p.equipFromBag(i)],
-      [`Sell · ${item.value}g`, () => p.sell(i)],
-    ]);
+    const eq = p.equipment;
+    const equip = item.slot === 'ring' && eq.ring1 && eq.ring2
+      ? [['Left ring', () => p.equipFromBag(i, 'ring1')], ['Right ring', () => p.equipFromBag(i, 'ring2')]]
+      : [['Equip', () => p.equipFromBag(i)]];
+    this.openMenu(d, this.itemTip(item, true, true), [...equip, [`Sell · ${item.value}g`, () => p.sell(i)]]);
   }
 
   equipClick(slot, d) {
@@ -371,7 +372,7 @@ export class UI {
     const p = this.game.player;
     this.el.gold.textContent = p.gold;
     if (!this.invOpen) return;
-    const labels = { head: 'Head', back: 'Back', weapon: 'Weapon', offhand: 'Off-hand' };
+    const labels = { head: 'Head', back: 'Back', weapon: 'Weapon', offhand: 'Off-hand', hands: 'Hands', feet: 'Feet', ring1: 'Ring', ring2: 'Ring' };
     for (const d of document.querySelectorAll('.eq-slot')) {
       const it = p.equipment[d.dataset.slot];
       d.className = `eq-slot${it ? ` r-${it.rarity}` : ''}`;
@@ -398,16 +399,26 @@ export class UI {
     const { main, implicit, aff } = itemLines(item);
     let cmp = '';
     if (fromBag) {
-      const cur = this.game.player.equipment[item.slot];
+      // compare against what it would replace (for rings: the ring that would come off)
+      const p = this.game.player;
+      const cur = p.equipment[p.slotFor(item)];
+      const line = (d, text) => `<span class="${d > 0 ? 'up' : 'down'}">${d > 0 ? '▲' : '▼'} ${text}</span>`;
       const parts = [];
+      if (item.slot === 'ring' && p.equipment.ring1 && p.equipment.ring2) {
+        parts.push(`<span class="tt-replaces">Replaces ${cur.name}</span>`);
+      }
       if (item.stats.dmgMin) {
         const dps = (st) => (st?.dmgMin ? ((st.dmgMin + st.dmgMax) / 2) * st.speed : 3.9);
         const d = dps(item.stats) - dps(cur?.stats);
-        parts.push(`<span class="${d >= 0 ? 'up' : 'down'}">${d >= 0 ? '▲' : '▼'} ${Math.abs(d).toFixed(1)} damage per second</span>`);
+        if (Math.abs(d) >= 0.05) parts.push(line(d, `${Math.abs(d).toFixed(1)} damage per second`));
       }
-      const da = (item.stats.armor || 0) - (cur?.stats.armor || 0);
-      if (da) parts.push(`<span class="${da >= 0 ? 'up' : 'down'}">${da >= 0 ? '▲' : '▼'} ${Math.abs(da)} armor</span>`);
-      if (parts.length) cmp = `<div style="margin-top:6px">${parts.join('<br>')}</div>`;
+      for (const [k, label, kind] of COMPARE_STATS) {
+        const d = (item.stats[k] || 0) - (cur?.stats[k] || 0);
+        const v = kind === 'pct' ? `${Math.round(Math.abs(d) * 100)}%` : kind === 'dec' ? Math.abs(d).toFixed(1) : String(Math.round(Math.abs(d)));
+        if (/^0(\.0)?%?$/.test(v)) continue;
+        parts.push(line(d, `${v} ${label}`));
+      }
+      if (parts.length) cmp = `<div class="tt-cmp">${parts.join('<br>')}</div>`;
     }
     const hint = fromBag ? `Click to equip · Right-click to sell for ${item.value}g` : 'Click to unequip';
     return `<div class="tt-name" style="color:${r.color}">${item.name}</div>

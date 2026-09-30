@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { Humanoid } from './character.js';
 import { heightAt, resolveCollision } from './world.js';
-import { makeItem } from './items.js';
+import { makeItem, BASES } from './items.js';
 import { dampAngle, yawTo, rand } from './util.js';
 import { hdr } from './fx.js';
 
@@ -15,6 +15,16 @@ export const SKILLS = [
 
 export const xpForLevel = (lvl) => Math.round(60 * Math.pow(lvl, 1.55));
 const _axis = new THREE.Vector2();
+const _ember = new THREE.Vector3();
+
+export const emptyEquipment = () => ({ weapon: null, offhand: null, head: null, back: null, hands: null, feet: null, ring1: null, ring2: null });
+
+// Gloves/boots: colour + material from the base, glowing when legendary.
+function gearLook(item) {
+  if (!item) return null;
+  const b = BASES[item.base];
+  return { ...b.gear, cover: b.cover, glow: item.rarity === 'legendary' ? 1 : 0 };
+}
 
 export function applyEquipmentVisuals(h, eq) {
   const glow = (it) => (it && it.rarity === 'legendary' ? 0xff6a10 : null);
@@ -24,6 +34,9 @@ export function applyEquipmentVisuals(h, eq) {
   h.setMeshVisible('Knight_Helmet', head.includes('Knight_Helmet'));
   h.setMeshVisible('Knight_HelmetVisor', head.includes('Knight_HelmetVisor'));
   h.setMeshVisible('Knight_Cape', !!eq.back);
+  h.enableGearTint();
+  h.setGear('hands', gearLook(eq.hands));
+  h.setGear('feet', gearLook(eq.feet));
 }
 
 export class Player {
@@ -40,7 +53,7 @@ export class Player {
     this.gold = 0;
     this.potions = 3;
     this.bag = new Array(20).fill(null);
-    this.equipment = { weapon: null, offhand: null, head: null, back: null };
+    this.equipment = emptyEquipment();
     this.cd = { attack: 0, cleave: 0, fireball: 0, whirlwind: 0, heal: 0, potion: 0 };
     this.action = null;
     this.queued = null;
@@ -67,7 +80,7 @@ export class Player {
     this.gold = s.gold || 0;
     this.potions = s.potions ?? 3;
     this.bag = Array.from({ length: 20 }, (_, i) => s.bag?.[i] || null);
-    this.equipment = { weapon: null, offhand: null, head: null, back: null, ...s.equipment };
+    this.equipment = { ...emptyEquipment(), ...s.equipment };
     this.onGearChanged(false);
     this.hp = this.stats.maxHp;
     this.mp = this.stats.maxMp;
@@ -127,22 +140,33 @@ export class Player {
     return true;
   }
 
-  equipFromBag(i) {
+  // Equipment slot an item goes into. Rings fill the empty ring slot first; with both taken,
+  // they replace the weaker ring (lower value) unless a slot is given explicitly.
+  slotFor(item) {
+    if (item.slot !== 'ring') return item.slot;
+    const eq = this.equipment;
+    if (!eq.ring1) return 'ring1';
+    if (!eq.ring2) return 'ring2';
+    return eq.ring2.value < eq.ring1.value ? 'ring2' : 'ring1';
+  }
+
+  equipFromBag(i, target = null) {
     const it = this.bag[i];
     if (!it) return;
     const eq = this.equipment;
+    const slot = target || this.slotFor(it);
     // what else has to come off?
     const extra = [];
     if (it.twoHanded && eq.offhand) extra.push('offhand');
     if (it.slot === 'offhand' && eq.weapon?.twoHanded) extra.push('weapon');
-    const prev = eq[it.slot];
+    const prev = eq[slot];
     const freeAfter = this.bag.filter((x) => !x).length + (prev ? 0 : 1);
     if (extra.length > freeAfter) {
       this.game.ui.centerMsg('Not enough room in your bag');
       return;
     }
     this.bag[i] = prev || null;
-    eq[it.slot] = it;
+    eq[slot] = it;
     for (const s of extra) {
       this.bag[this.freeSlot()] = eq[s];
       eq[s] = null;
@@ -466,5 +490,25 @@ export class Player {
       if (this.stepT > 0.28) { this.stepT = 0; g.fx.dust(this.pos, 2); }
     }
     this.h.update(dt);
+    this.legendaryEmbers(dt);
+  }
+
+  // Legendary gloves/boots shed a few embers from the hands/feet.
+  legendaryEmbers(dt) {
+    const eq = this.equipment;
+    const spots = [];
+    if (eq.hands?.rarity === 'legendary') spots.push('handl', 'handr');
+    if (eq.feet?.rarity === 'legendary') spots.push('footl', 'footr');
+    if (!spots.length) return;
+    this.emberT = (this.emberT || 0) + dt;
+    if (this.emberT < 0.09) return;
+    this.emberT = 0;
+    const bone = this.h.bones[spots[Math.floor(Math.random() * spots.length)]];
+    if (!bone) return;
+    bone.getWorldPosition(_ember);
+    this.game.fx.add.emit({
+      pos: _ember, count: 1, spread: 0.07, velSpread: 0.25, vel: { x: 0, y: 0.9, z: 0 },
+      color: hdr(0xffa040, 2.2), colorEnd: hdr(0xff3a10, 0.3), size: 0.12, sizeEnd: 0.02, life: 0.7, drag: 1.2,
+    });
   }
 }

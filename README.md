@@ -62,6 +62,8 @@ Variants: `?size=192`, `?size=512&maskable` (Android adaptive icon), `?size=180&
 | Walk / run / idle / hit / death / throw animations | KayKit shared rig animations (`assets/animations`) |
 | Swords, axes, shields, staff, ale mug | KayKit item models (`assets/items`), attached to the `handslot` bones |
 | Helmets and cape | Parts of the Knight model, shown or hidden when equipped |
+| Gloves and boots on the knight | The Knight's hands/feet are recolored by a shader that follows the skinning weights of the hand/forearm and foot/toe/shin bones (`character.js`) |
+| Gloves, boots and rings (icons, loot on the ground) | Small procedural models (`gear.js`); the packs have none |
 | Sword swings | Generated in code (`character.js`); the free pack has no attack clips |
 | Terrain, trees, rocks, grass, water, camps, graveyard | Generated in code (`world.js`), flat-shaded to match KayKit |
 | Slimes | Generated in code (`enemies.js`) |
@@ -75,7 +77,8 @@ Variants: `?size=192`, `?size=512&maskable` (Android adaptive icon), `?size=180&
 - `src/input.js`: keyboard, mouse, joystick and touch buttons (also clears keys the browser never "releases")
 - `src/player.js`: stats, leveling, inventory, skills
 - `src/enemies.js`: monster types, spawn table, AI
-- `src/items.js`: item bases, rarities, affixes, loot rolls
+- `src/items.js`: item bases (weapons, shields, helmets, capes, gloves, boots, rings), rarities, affixes, loot rolls
+- `src/gear.js`: procedural glove/boot/ring models
 - `src/combat.js`: projectiles and ground loot
 - `src/ui.js`, `style.css`: HUD, action bar, minimap, inventory, tooltips
 - `src/character.js`, `src/animator.js`: model setup, animation blending, procedural swings
