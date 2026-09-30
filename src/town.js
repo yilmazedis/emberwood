@@ -184,8 +184,11 @@ export class Town {
     g.ui.openInventory(kind);
     if (kind === 'vendor') {
       this.npc.anim.play('Interact', { timeScale: 1.2 });
-      const n = this.npc.group.position;
-      g.ui.floater(new THREE.Vector3(n.x, n.y + 3.1, n.z), pick(GREETINGS), 'say');
+      if (performance.now() - (this.lastGreet ?? -1e9) > 5000) { // don't stack greetings
+        this.lastGreet = performance.now();
+        const n = this.npc.group.position;
+        g.ui.floater(new THREE.Vector3(n.x, n.y + 3.1, n.z), pick(GREETINGS), 'say');
+      }
     } else {
       g.sfx.play('chest');
     }
