@@ -4,6 +4,7 @@ import { Assets } from './assets.js';
 import { RARITY, itemLines, COMPARE_STATS } from './items.js';
 import { SKILLS, xpForLevel, STASH_SIZE } from './player.js';
 import { ALE_PRICE } from './town.js';
+import { ZONES, TOWN } from './world.js';
 import { rand } from './util.js';
 
 const $ = (id) => document.getElementById(id);
@@ -28,13 +29,14 @@ export class UI {
       death: $('death'), vignette: $('vignette'), help: $('help'),
       shop: $('shop'), buyback: $('buyback'), stash: $('stash'), stashCount: $('stash-count'),
       restock: $('restock'), sellCommons: $('sell-commons'), bagHint: $('bag-hint'),
+      questList: $('quest-list'), tracker: $('tracker'),
     };
     this.plates = [];
     this.floaters = [];
     this.v = new THREE.Vector3();
     this.mm = this.el.minimap.getContext('2d');
     this.invOpen = false;
-    this.invMode = 'character'; // character | vendor | stash — which panel sits next to the bag
+    this.invMode = 'character'; // character | vendor | stash | board — which panel sits next to the bag
     this.tipTarget = null;
     this.mouse = { x: 0, y: 0 };
     this.el.portrait.src = Assets.icons.portrait;
@@ -60,6 +62,12 @@ export class UI {
       d.addEventListener('mouseleave', () => { if (!this.touch) this.hideTip(); });
     }
     this.el.sellCommons.addEventListener('click', () => this.game.town.sellCommons());
+    // quest card buttons: Accept / Skip / Abandon / Claim
+    this.el.questList.addEventListener('click', (e) => {
+      const b = e.target.closest('button[data-act]');
+      if (!b) return;
+      this.game.quests[b.dataset.act](b.dataset.slot === 'main' ? 'main' : Number(b.dataset.slot));
+    });
     document.addEventListener('pointerdown', (e) => {
       if (this.menuAnchor && !this.el.tooltip.contains(e.target) && !this.menuAnchor.contains(e.target)) this.closeMenu();
     }, true);
@@ -440,7 +448,8 @@ export class UI {
     el.classList.toggle('hidden', !(force ?? el.classList.contains('hidden')));
   }
 
-  // mode: 'character' (I key), 'vendor' (at the merchant), 'stash' (at the chest). The bag is always shown.
+  // mode: 'character' (I key), 'vendor' (at the merchant), 'stash' (at the chest), 'board' (quests).
+  // The bag is always shown.
   openInventory(mode = 'character') {
     this.closeMenu();
     this.hideTip();
@@ -495,7 +504,51 @@ export class UI {
       : `click to ${this.atStash() ? 'store' : 'equip'} · right-click to sell`;
     if (this.invMode === 'vendor') this.refreshVendor();
     else if (this.invMode === 'stash') this.refreshStash();
+    else if (this.invMode === 'board') this.refreshBoard();
     else this.refreshCharacter();
+  }
+
+  // ---------------------------------------------------------------- quests
+  refreshBoard() {
+    const s = this.game.quests.state;
+    this.el.questList.innerHTML = [
+      '<div class="sec-title">Main quest</div>',
+      s.main ? this.questCard('main', s.main) : '<div class="quest-card all-done">The story is done for now. Bounties keep coming.</div>',
+      '<div class="sec-title">Bounties <small>new ones after you claim or skip</small></div>',
+      ...s.bounties.map((q, i) => this.questCard(i, q)),
+    ].join('');
+  }
+
+  questCard(slot, q) {
+    const d = q.def, goal = d.goal, r = d.reward, main = slot === 'main';
+    const rewards = [r.gold && `${r.gold}g`, r.xp && `${r.xp} XP`, r.potions && `${r.potions} ale`,
+      r.item && `${RARITY[r.item.minRarity].label}${r.item.minRarity === 'legendary' ? '' : '+'} item`].filter(Boolean).join(' · ');
+    const progress = q.state === 'offer' ? '' : `
+      <div class="q-goal"><span>${this.game.quests.goalLabel(q)}</span><b>${q.progress} / ${goal.count}</b></div>
+      <div class="q-bar"><i style="width:${Math.round((q.progress / goal.count) * 100)}%"></i></div>`;
+    const actions = q.state === 'offer'
+      ? `<button data-act="accept" data-slot="${slot}">Accept</button>${main ? '' : `<button class="ghost" data-act="skip" data-slot="${slot}">Skip</button>`}`
+      : q.state === 'done'
+        ? `<button class="claim" data-act="claim" data-slot="${slot}">Claim reward</button>`
+        : `<button class="ghost" data-act="abandon" data-slot="${slot}">Abandon</button>`;
+    return `<div class="quest-card ${q.state}${main ? ' main' : ''}">
+      <div class="q-head"><span class="q-title">${main ? '◆ ' : ''}${d.title}</span>${d.level ? `<span class="q-lvl">Lv ${d.level}</span>` : ''}</div>
+      <div class="q-text">${d.text}</div>${progress}
+      <div class="q-foot"><span class="q-reward">${rewards}</span><span class="q-actions">${actions}</span></div>
+    </div>`;
+  }
+
+  // Accepted quests, shown on screen while you play.
+  refreshTracker() {
+    const quests = this.game.quests, items = quests.tracked();
+    this.el.tracker.classList.toggle('hidden', !items.length);
+    this.el.tracker.innerHTML = items.map(({ slot, q }) => {
+      const title = `<div class="trk-title">${slot === 'main' ? '◆ ' : ''}${q.def.title}</div>`;
+      if (q.state === 'done') return `<div class="trk done">${title}<div class="trk-goal ok">✓<span> Claim at the notice board</span></div></div>`;
+      const count = q.def.goal.count;
+      return `<div class="trk">${title}<div class="trk-goal"><span>${quests.goalLabel(q)}</span><b>${q.progress} / ${count}</b></div>
+        <div class="trk-bar"><i style="width:${Math.round((q.progress / count) * 100)}%"></i></div></div>`;
+    }).join('');
   }
 
   refreshVendor() {
@@ -624,6 +677,30 @@ export class UI {
     ctx.beginPath();
     ctx.moveTo(cx, cy - 5); ctx.lineTo(cx + 5, cy); ctx.lineTo(cx, cy + 5); ctx.lineTo(cx - 5, cy); ctx.closePath();
     ctx.fill(); ctx.stroke();
+    // quest targets: a dashed gold ring on the zone; a gold "!" on the board when it has news
+    ctx.save();
+    ctx.setLineDash([4, 3]);
+    ctx.strokeStyle = 'rgba(255, 210, 90, 0.95)';
+    ctx.lineWidth = 1.6;
+    for (const { q } of g.quests.tracked()) {
+      const zone = q.state === 'active' && ZONES.find((z) => z.id === q.def.zone);
+      if (!zone) continue;
+      const [zx, zy] = m(zone.x, zone.z);
+      ctx.beginPath();
+      ctx.arc(zx, zy, (zone.r / (2 * R)) * S + 2, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.restore();
+    if (g.quests.markerVisible()) {
+      const [bx, by] = m(TOWN.board.x, TOWN.board.z);
+      ctx.font = '900 12px Inter, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = '#2a1a06';
+      ctx.strokeText('!', bx + 5, by - 3);
+      ctx.fillStyle = '#ffd24a';
+      ctx.fillText('!', bx + 5, by - 3);
+    }
     for (const l of g.loot.list) {
       if (l.kind !== 'item') continue;
       const [x, y] = m(l.group.position.x, l.group.position.z);

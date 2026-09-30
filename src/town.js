@@ -117,6 +117,39 @@ function buildChest(scene) {
   return { group: g, hinge };
 }
 
+// Quest notice board: posts, a small gable roof, pinned notes, and a golden "!" that floats
+// above it when there is a new story quest or a reward to claim.
+function buildBoard(scene) {
+  const { x, z } = TOWN.board;
+  const g = new THREE.Group();
+  g.position.set(x, heightAt(x, z), z);
+  g.rotation.y = -0.4; // turned toward the fire
+  const wood = mat(0x8a5a33), dark = mat(0x5a3a20), roof = mat(0x6b3a2a);
+  const papers = [mat(0xf1e1bf, 0.95), mat(0xe6d3a8, 0.95)], pin = mat(0xc0392b, 0.5);
+  for (const s of [-1, 1]) g.add(mesh(new THREE.CylinderGeometry(0.09, 0.11, 2.5, 6), dark, s * 1.0, 1.25, 0));
+  g.add(box(2.2, 1.3, 0.1, wood, 0, 1.55, 0));
+  g.add(box(2.3, 0.08, 0.14, dark, 0, 2.22, 0));
+  g.add(box(2.3, 0.08, 0.14, dark, 0, 0.88, 0));
+  g.add(box(2.6, 0.06, 0.46, roof, 0, 2.43, 0.15, 0.6));
+  g.add(box(2.6, 0.06, 0.46, roof, 0, 2.43, -0.15, -0.6));
+  [[-0.62, 1.8, -0.08], [-0.05, 1.6, 0.06], [0.58, 1.82, 0.1], [0.4, 1.25, -0.05], [-0.55, 1.24, 0.07]].forEach(([nx, ny, rz], i) => {
+    g.add(mesh(new THREE.PlaneGeometry(0.42, 0.5), papers[i % 2], nx, ny, 0.056, 0, 0, rz));
+    g.add(mesh(new THREE.SphereGeometry(0.035, 6, 4), pin, nx, ny + 0.2, 0.07));
+  });
+  // the golden "!" (a gap wide enough that the bloom doesn't merge the dot into the bar)
+  const glowMat = new THREE.MeshStandardMaterial({ color: 0xffd24a, emissive: 0xffb020, emissiveIntensity: 1.5, flatShading: true });
+  const marker = new THREE.Group();
+  marker.position.set(0, 3.0, 0);
+  marker.add(mesh(new THREE.BoxGeometry(0.18, 0.5, 0.18), glowMat, 0, 0.41, 0));
+  marker.add(mesh(new THREE.BoxGeometry(0.18, 0.18, 0.18), glowMat, 0, -0.07, 0));
+  g.add(marker);
+  scene.add(g);
+  // colliders along the board, between the posts
+  const cy = g.rotation.y;
+  for (const lx of [-1, 0, 1]) addCollider(x + lx * Math.cos(cy), z - lx * Math.sin(cy), 0.4);
+  return { group: g, marker };
+}
+
 export class Town {
   constructor(game) {
     this.game = game;
@@ -129,6 +162,7 @@ export class Town {
 
     buildStall(scene);
     this.chest = buildChest(scene);
+    this.board = buildBoard(scene);
 
     // Wren: the Ranger model, quiver hidden, standing behind the counter
     this.npc = new Humanoid('Ranger');
@@ -142,23 +176,33 @@ export class Town {
     this.vendorSpot = new THREE.Vector2(v.x, v.z + 1.25);
     const cy = this.chest.group.rotation.y;
     this.stashSpot = new THREE.Vector2(s.x + Math.sin(cy) * 1.05, s.z + Math.cos(cy) * 1.05);
+    const by = this.board.group.rotation.y, b = TOWN.board;
+    this.boardSpot = new THREE.Vector2(b.x + Math.sin(by) * 1.3, b.z + Math.cos(by) * 1.3);
 
     const npcPos = this.npc.group.position;
     this.vendorLabel = ui.createNpcLabel('Wren', 'Merchant', 'Trade', () => this.open('vendor'), (out) => out.set(npcPos.x, npcPos.y + 2.75, npcPos.z));
     const chestPos = this.chest.group.position;
     this.stashLabel = ui.createNpcLabel('Stash', 'Your storage', 'Open', () => this.open('stash'), (out) => out.set(chestPos.x, chestPos.y + 1.25, chestPos.z));
+    const boardPos = this.board.group.position;
+    this.boardLabel = ui.createNpcLabel('Notice Board', 'Quests', 'Read', () => this.open('board'), (out) => out.set(boardPos.x, boardPos.y + 3.95, boardPos.z));
+    this.labels = { vendor: this.vendorLabel, stash: this.stashLabel, board: this.boardLabel };
   }
 
   // ---------------------------------------------------------------- per frame
   update(dt) {
     const g = this.game, p = g.player, ui = g.ui;
     const open = ui.invOpen ? ui.invMode : null;
-    const dv = Math.hypot(p.pos.x - this.vendorSpot.x, p.pos.z - this.vendorSpot.y);
-    const ds = Math.hypot(p.pos.x - this.stashSpot.x, p.pos.z - this.stashSpot.y);
-    this.near = !p.alive ? null : dv < REACH && dv <= ds ? 'vendor' : ds < REACH ? 'stash' : null;
-    this.vendorLabel.el.classList.toggle('near', this.near === 'vendor' && open !== 'vendor');
-    this.stashLabel.el.classList.toggle('near', this.near === 'stash' && open !== 'stash');
-    if ((open === 'vendor' && dv > LEAVE) || (open === 'stash' && ds > LEAVE)) ui.closeInventory();
+    // the closest of the stall, the chest and the board within reach
+    const dist = {
+      vendor: Math.hypot(p.pos.x - this.vendorSpot.x, p.pos.z - this.vendorSpot.y),
+      stash: Math.hypot(p.pos.x - this.stashSpot.x, p.pos.z - this.stashSpot.y),
+      board: Math.hypot(p.pos.x - this.boardSpot.x, p.pos.z - this.boardSpot.y),
+    };
+    this.near = null;
+    let best = REACH;
+    if (p.alive) for (const k in dist) if (dist[k] < best) { best = dist[k]; this.near = k; }
+    for (const k in this.labels) this.labels[k].el.classList.toggle('near', this.near === k && open !== k);
+    if (open in dist && dist[open] > LEAVE) ui.closeInventory();
 
     // the merchant watches you when you're close (but never turns their back to the camp)
     const n = this.npc.group.position;
@@ -170,6 +214,14 @@ export class Town {
 
     this.lid += ((open === 'stash' ? 1 : 0) - this.lid) * (1 - Math.exp(-8 * dt));
     this.chest.hinge.rotation.x = -1.85 * this.lid;
+
+    const marker = this.board.marker;
+    marker.visible = g.quests.markerVisible();
+    if (marker.visible) {
+      this.markerT = (this.markerT || 0) + dt;
+      marker.rotation.y = this.markerT * 1.6;
+      marker.position.y = 3.0 + Math.sin(this.markerT * 2.4) * 0.12;
+    }
 
     if (open !== 'vendor' && (this.pendingRestock || Date.now() >= p.shop.restockAt)) this.restock();
   }
@@ -189,6 +241,8 @@ export class Town {
         const n = this.npc.group.position;
         g.ui.floater(new THREE.Vector3(n.x, n.y + 3.1, n.z), pick(GREETINGS), 'say');
       }
+    } else if (kind === 'board') {
+      g.sfx.play('page');
     } else {
       g.sfx.play('chest');
     }

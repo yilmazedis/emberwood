@@ -18,6 +18,7 @@ const _axis = new THREE.Vector2();
 const _ember = new THREE.Vector3();
 
 export const STASH_SIZE = 30;
+const freshQuests = () => ({ mainIndex: 0, main: null, bounties: [null, null, null] }); // see quests.js
 export const emptyEquipment = () => ({ weapon: null, offhand: null, head: null, back: null, hands: null, feet: null, ring1: null, ring2: null });
 
 // Gloves/boots: colour + material from the base, glowing when legendary.
@@ -57,6 +58,7 @@ export class Player {
     this.equipment = emptyEquipment();
     this.stash = new Array(STASH_SIZE).fill(null);
     this.shop = { stock: [], restockAt: 0 }; // the merchant's stock (see town.js)
+    this.quests = freshQuests();
     this.cd = { attack: 0, cleave: 0, fireball: 0, whirlwind: 0, heal: 0, potion: 0 };
     this.action = null;
     this.queued = null;
@@ -76,7 +78,7 @@ export class Player {
   serialize() {
     return {
       v: 1, level: this.level, xp: this.xp, gold: this.gold, potions: this.potions,
-      bag: this.bag, equipment: this.equipment, stash: this.stash, shop: this.shop,
+      bag: this.bag, equipment: this.equipment, stash: this.stash, shop: this.shop, quests: this.quests,
     };
   }
 
@@ -89,6 +91,7 @@ export class Player {
     this.equipment = { ...emptyEquipment(), ...s.equipment };
     this.stash = Array.from({ length: STASH_SIZE }, (_, i) => s.stash?.[i] || null);
     this.shop = Array.isArray(s.shop?.stock) ? s.shop : { stock: [], restockAt: 0 };
+    this.quests = Array.isArray(s.quests?.bounties) ? s.quests : freshQuests();
     this.onGearChanged(false);
     this.hp = this.stats.maxHp;
     this.mp = this.stats.maxMp;

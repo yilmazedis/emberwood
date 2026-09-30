@@ -11,7 +11,7 @@ export const WATER_Y = 0.35;
 export const POND = { x: -27, z: 20, r: 8 };
 
 export const ZONES = [
-  { id: 'camp', name: 'Emberwood Camp', sub: 'Safe haven · merchant & stash', x: 0, z: 0, r: 12, safe: true },
+  { id: 'camp', name: 'Emberwood Camp', sub: 'Safe haven · merchant, stash & quests', x: 0, z: 0, r: 12, safe: true },
   { id: 'meadow', name: 'Slime Meadow', sub: 'Level 1 – 2', x: 0, z: -30, r: 13 },
   { id: 'glade', name: 'Sunny Glade', sub: 'Level 1', x: 26, z: 12, r: 10 },
   { id: 'pond', name: 'Mirror Pond', sub: 'Level 2', x: -27, z: 20, r: 14 },
@@ -23,10 +23,11 @@ export const ZONES = [
 
 export const GRAVEYARD = { x: 3, z: 46, r: 13.5 };
 
-// The camp market (north-west corner, facing south toward the fire and the camera):
-// the merchant's stall counter and the stash chest. Built in town.js.
-export const TOWN = { vendor: { x: -3.2, z: -7.4 }, stash: { x: -6.9, z: -5.9 } };
-const nearTown = (x, z) => Math.hypot(x - TOWN.vendor.x, z - TOWN.vendor.z - 0.8) < 3.4 || Math.hypot(x - TOWN.stash.x, z - TOWN.stash.z) < 1.8;
+// The north end of camp (facing south toward the fire and the camera): the merchant's stall
+// counter and the stash chest on the west side, the quest notice board on the east. Built in town.js.
+export const TOWN = { vendor: { x: -3.2, z: -7.4 }, stash: { x: -6.9, z: -5.9 }, board: { x: 4.6, z: -7.4 } };
+const nearTown = (x, z) => Math.hypot(x - TOWN.vendor.x, z - TOWN.vendor.z - 0.8) < 3.4
+  || Math.hypot(x - TOWN.stash.x, z - TOWN.stash.z) < 1.8 || Math.hypot(x - TOWN.board.x, z - TOWN.board.z - 0.4) < 2.2;
 
 export const PATHS = [
   [[0, 0], [3, -15], [0, -30]],

@@ -25,7 +25,7 @@ Live at https://emberwood.kerimcaglar.com. Two ways to host it:
 
 ## Controls
 
-**Desktop:** WASD to move · left click to attack (hold to keep swinging) · 1–4 skills · Q ale (heal) · I bag · E trade / stash (in camp) · mouse wheel to zoom
+**Desktop:** WASD to move · left click to attack (hold to keep swinging) · 1–4 skills · Q ale (heal) · I bag · E trade / stash / notice board (in camp) · mouse wheel to zoom
 
 **Phones and tablets** (switches automatically on the first touch): a floating joystick on the left half of the screen
 (push a little to walk, fully to run), a hold-to-attack sword button and skill buttons on the right. On touch screens,
@@ -34,6 +34,12 @@ attacks and skills aim at the nearest enemy. In the bag, tap an item to see it, 
 **Camp:** Wren the merchant sells ale and gear around your level (new stock every 5 minutes and on level-up),
 buys back anything you sold this session, and can sell all your common items at once. The stash chest next to
 the stall holds 30 items; both are saved with your character.
+
+**Quests:** the notice board on the east side of camp has a five-part story (the meadow slimes, the bandit hideout,
+the cultists at the stones, the graveyard, then Grok) and three bounties that are rerolled when you claim or skip them
+(slay monsters, pick up gold, find magic items). Accepted quests show under your portrait with their progress, and
+their zone gets a dashed gold ring on the minimap. When one is done, go back to the board to claim gold, XP, ale or
+an item; a golden "!" over the board means there's a new story quest or a reward waiting.
 
 ## Install as an app (PWA)
 
@@ -70,7 +76,7 @@ Variants: `?size=192`, `?size=512&maskable` (Android adaptive icon), `?size=180&
 | Gloves, boots and rings (icons, loot on the ground) | Small procedural models (`gear.js`); the packs have none |
 | Sword swings | Generated in code (`character.js`); the free pack has no attack clips |
 | Terrain, trees, rocks, grass, water, camps, graveyard | Generated in code (`world.js`), flat-shaded to match KayKit |
-| Market stall and stash chest | Generated in code (`town.js`), with the pack's items as wares on the counter |
+| Market stall, stash chest and notice board | Generated in code (`town.js`), with the pack's items as wares on the counter |
 | Slimes | Generated in code (`enemies.js`) |
 | Inventory icons and portrait | Rendered at startup from the same 3D models (`assets.js`) |
 | Fire, sparks, slash arcs, glow | Particles, shaders and bloom (`fx.js`) |
@@ -84,7 +90,8 @@ Variants: `?size=192`, `?size=512&maskable` (Android adaptive icon), `?size=180&
 - `src/enemies.js`: monster types, spawn table, AI
 - `src/items.js`: item bases (weapons, shields, helmets, capes, gloves, boots, rings), rarities, affixes, loot rolls
 - `src/gear.js`: procedural glove/boot/ring models
-- `src/town.js`: the camp market: merchant, stall, stash chest, shop stock, buyback, stash transfers
+- `src/town.js`: the camp: merchant, stall, stash chest, notice board, shop stock, buyback, stash transfers
+- `src/quests.js`: the story quests, bounty templates, progress and rewards
 - `src/combat.js`: projectiles and ground loot
 - `src/ui.js`, `style.css`: HUD, action bar, minimap, inventory, tooltips
 - `src/character.js`, `src/animator.js`: model setup, animation blending, procedural swings

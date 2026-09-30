@@ -52,6 +52,7 @@
     <div class="bar bossbar"><div class="fill" id="boss-fill"></div></div>
   </div>
 
+  <div id="tracker" class="hidden"></div>
   <div id="zone-toast"></div>
   <div id="center-msg"></div>
 
@@ -106,6 +107,11 @@
       <header><span>Stash <small id="stash-count"></small></span><button class="close" data-close="inventory" aria-label="Close">×</button></header>
       <div id="stash"></div>
     </section>
+    <!-- the quest notice board (open at the board in camp) -->
+    <section class="panel inv-left inv-board">
+      <header><span>Notice Board <small>quests</small></span><button class="close" data-close="inventory" aria-label="Close">×</button></header>
+      <div id="quest-list"></div>
+    </section>
     <section class="panel inv-right">
       <header><span>Bag <small id="bag-hint"></small></span><button class="close" data-close="inventory" aria-label="Close">×</button></header>
       <div id="bag"></div>
@@ -123,7 +129,8 @@
       <li><kbd>1</kbd>–<kbd>4</kbd> Skills, aimed at the cursor</li>
       <li><kbd>Q</kbd> Drink ale (heal)</li>
       <li><kbd>I</kbd> / <kbd>B</kbd> Character &amp; bag</li>
-      <li><kbd>E</kbd> Trade with Wren the merchant, or open your stash (in camp)</li>
+      <li><kbd>E</kbd> Trade with Wren the merchant, open your stash, or read the notice board (in camp)</li>
+      <li>Accept quests at the notice board, then come back to claim the reward. The golden <b>!</b> means something is waiting.</li>
       <li><kbd>Mouse wheel</kbd> Zoom</li>
       <li>Walk over loot to pick it up. The camp is safe and heals you fast.</li>
     </ul>
@@ -133,7 +140,8 @@
       <li><b>Skill buttons</b> aim at the nearest enemy for you.</li>
       <li><b>Ale</b> heals 40% of your life.</li>
       <li><b>Bag</b>: tap an item to see it, then Equip or Sell.</li>
-      <li><b>In camp</b>: tap <b>Trade</b> above Wren the merchant, or <b>Open</b> above your stash chest.</li>
+      <li><b>In camp</b>: tap <b>Trade</b> above Wren the merchant, <b>Open</b> above your stash chest, or <b>Read</b> at the notice board.</li>
+      <li>Accept quests at the notice board, then come back to claim the reward. The golden <b>!</b> means something is waiting.</li>
       <li>Walk over loot to pick it up. The camp is safe and heals you fast.</li>
     </ul>
   </div>

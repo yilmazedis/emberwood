@@ -16,6 +16,7 @@ import { Sfx } from './audio.js';
 import { randomItem } from './items.js';
 import { Input } from './input.js';
 import { Town } from './town.js';
+import { Quests } from './quests.js';
 import { angleDiff, yawTo, randInt, rand, chance, clamp } from './util.js';
 
 const SAVE_KEY = 'emberwood-save-v1';
@@ -101,7 +102,8 @@ export class Game {
     this.player.onGearChanged(false);
     this.player.pos.set(0, heightAt(0, 3.5), 3.5);
     this.camFocus.copy(this.player.pos);
-    this.town = new Town(this); // merchant + stash in camp (after loading: it reads the saved shop)
+    this.quests = new Quests(this); // story + bounties (reads the saved quest state)
+    this.town = new Town(this); // merchant, stash and notice board in camp (after loading: it reads the saved shop)
 
     // static fire lights (camp + bandit hideout) and the crystal glow
     this.fireLights = this.world.fires.slice(0, 2).map((f) => {
@@ -131,12 +133,13 @@ export class Game {
     this.sfx.init();
     this.player.h.anim.play('Spawn_Ground', { timeScale: 1.1 });
     this.ui.log('Welcome to <b>Emberwood</b>. Slimes roam the meadow to the north.');
-    this.ui.log('Wren the merchant and your stash are at the north end of camp.');
+    this.ui.log('Wren the merchant, your stash and the quest notice board are at the north end of camp.');
     this.ui.log(this.input.touchMode
       ? 'Left thumb moves · hold the sword to attack · skills aim for you'
       : 'WASD to move · Click to attack · 1–4 skills · Q ale · I bag');
     this.last = performance.now();
     this.ui.zoneToast({ name: 'Emberwood', sub: 'A tiny action RPG' });
+    this.ui.refreshTracker();
     setInterval(() => this.save(), 10000);
     const loop = () => {
       requestAnimationFrame(loop);
@@ -276,6 +279,7 @@ export class Game {
     const xp = Math.max(1, Math.round(d.xp * (1 + 0.25 * (e.level - 1)) * clamp(1 - (levelGap - 2) * 0.2, 0.2, 1.2)));
     p.gainXp(xp);
     this.ui.floater(new THREE.Vector3(e.pos.x, e.pos.y + e.height + 0.6, e.pos.z), `+${xp} XP`, 'xp');
+    this.quests.onEvent('kill', { type: e.type });
     const at = e.pos.clone();
     if (chance(0.75)) this.loot.dropGold(Math.round(randInt(d.gold[0], d.gold[1]) * (1 + 0.2 * (e.level - 1))), at);
     if (chance(d.boss ? 1 : 0.07)) this.loot.dropPotion(at);
@@ -310,6 +314,7 @@ export class Game {
     this.player.gold += n;
     this.ui.floater(new THREE.Vector3(pos.x, pos.y + 1, pos.z), `+${n}g`, 'gold');
     this.sfx.play('gold');
+    this.quests.onEvent('gold', { amount: n });
     this.ui.refreshInventory();
   }
 

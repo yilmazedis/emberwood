@@ -90,6 +90,8 @@ export class Sfx {
       case 'equip': this._noise(now, 0.12, 'bandpass', 1500, 3000, 0.3 * v, 5); this._tone(now, 0.1, 'square', 300, 200, 0.05 * v); break;
       case 'drink': this._tone(now, 0.25, 'sine', 300, 500, 0.2 * v); break;
       case 'heal': [523, 659, 784].forEach((f, i) => this._tone(now + i * 0.06, 0.35, 'sine', f, f * 1.01, 0.12 * v, 0.02)); break;
+      case 'quest': [392, 523, 659, 784].forEach((f, i) => this._tone(now + i * 0.08, i === 3 ? 0.7 : 0.25, 'triangle', f, f, 0.18 * v, 0.01)); this._tone(now + 0.24, 0.7, 'sine', 1568, 1568, 0.05 * v, 0.02); break;
+      case 'page': this._noise(now, 0.14, 'bandpass', 2600, 1200, 0.22 * v, 1.2); this._noise(now + 0.09, 0.1, 'bandpass', 3400, 1800, 0.14 * v, 1.2); break;
       case 'levelup': [523, 659, 784, 1047].forEach((f, i) => this._tone(now + i * 0.1, 0.5, 'triangle', f, f, 0.2 * v, 0.02)); break;
       default: break;
     }

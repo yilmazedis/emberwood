@@ -221,6 +221,7 @@ export class LootManager {
         if (p.addItem(l.data)) {
           g.ui.log(`Picked up <b style="color:${RARITY[l.data.rarity].color}">${l.data.name}</b>`);
           g.sfx.play('pickup');
+          g.quests.onEvent('loot', { rarity: l.data.rarity });
           this.remove(l);
         } else if (this.fullMsgT <= 0) {
           g.ui.centerMsg('Your bag is full');

@@ -358,7 +358,8 @@ body.touch #boss-name { font-size: 13px; }
 /* only the panel for the current mode sits next to the bag */
 #inventory:not([data-mode="character"]) .inv-character,
 #inventory:not([data-mode="vendor"]) .inv-vendor,
-#inventory:not([data-mode="stash"]) .inv-stash { display: none; }
+#inventory:not([data-mode="stash"]) .inv-stash,
+#inventory:not([data-mode="board"]) .inv-board { display: none; }
 
 /* name tags above Wren and the stash; the button shows when you're in reach */
 .plate.npc { text-align: center; }
@@ -402,4 +403,53 @@ button:disabled { opacity: 0.5; cursor: default; }
   #inventory #stash .bag-slot { width: 42px; height: 42px; aspect-ratio: auto; }
   #inventory .sec-title { margin: 0 0 6px; }
   #inventory button.wide { margin-bottom: 0; }
+}
+
+/* ------------------------------------------------------------------ quests */
+/* notice board cards */
+.quest-card { padding: 9px 11px 10px; margin-bottom: 10px; border: 1px solid #4a3a24; border-radius: 9px; background: linear-gradient(#2c2217, #1c150e); }
+.quest-card.main { border-color: #9a7a3e; box-shadow: inset 0 0 16px rgba(240, 190, 90, 0.14); }
+.quest-card.done { border-color: #7fae44; box-shadow: inset 0 0 16px rgba(140, 220, 90, 0.2); }
+.quest-card.all-done { font: italic 500 12.5px/1.4 Inter, sans-serif; color: var(--muted); }
+.q-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.q-title { font: 800 14px Cinzel, serif; color: var(--gold); }
+.q-lvl { font: 700 11px Inter, sans-serif; color: var(--muted); white-space: nowrap; }
+.q-text { font: 500 12.5px/1.4 Inter, sans-serif; color: #d9cfbb; margin: 4px 0 8px; }
+.q-goal { display: flex; justify-content: space-between; font: 600 12px Inter, sans-serif; color: var(--muted); }
+.q-goal b { color: var(--text); }
+.q-bar { height: 6px; margin: 4px 0 9px; border-radius: 3px; background: #120d09; border: 1px solid #3b2d1d; overflow: hidden; }
+.q-bar i, .trk-bar i { display: block; height: 100%; background: linear-gradient(90deg, #b8741e, var(--gold)); transition: width 0.3s; }
+.quest-card.done .q-bar i, .trk.done .trk-bar i { background: linear-gradient(90deg, #4f9a2a, #9be06a); }
+.q-foot { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 6px 8px; }
+.q-reward { font: 700 11.5px Inter, sans-serif; color: var(--gold); }
+.q-actions { display: flex; gap: 6px; margin-left: auto; }
+.q-actions button { padding: 5px 12px; font-size: 12.5px; }
+.q-actions button.ghost { background: none; color: var(--muted); }
+.q-actions button.claim { color: #221606; font-weight: 800; background: linear-gradient(#ffe7a6, #d9a53a); border-color: #f5d27a; }
+body.touch .q-actions button { padding: 9px 16px; font-size: 14px; }
+
+/* on-screen tracker for accepted quests (under the player frame, clicks pass through) */
+#tracker { position: absolute; left: calc(16px + var(--sal)); top: calc(118px + var(--sat)); width: 230px; display: grid; gap: 7px; }
+.trk { padding: 6px 9px 7px; background: rgba(10, 8, 6, 0.55); border-left: 2px solid var(--edge-hi); border-radius: 5px; text-shadow: 0 1px 2px #000; }
+.trk.done { border-left-color: #9be06a; }
+.trk-title { font: 800 12.5px Cinzel, serif; color: var(--gold); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.trk-goal { display: flex; justify-content: space-between; gap: 8px; margin-top: 2px; font: 600 11.5px Inter, sans-serif; color: #d9cfbb; }
+.trk-goal.ok { display: block; color: #b6f08a; }
+.trk-bar { height: 3px; margin-top: 4px; border-radius: 2px; background: rgba(0, 0, 0, 0.55); overflow: hidden; }
+body.touch #tracker { top: calc(106px + var(--sat)); width: 200px; gap: 5px; }
+/* phones: one line per quest (title and count over a thin bar), clear of the view and the joystick */
+@media (max-width: 480px), (max-height: 520px) and (orientation: landscape) {
+  body.touch #tracker { gap: 4px; }
+  body.touch .trk { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 8px; align-items: baseline; padding: 3px 8px 4px; }
+  body.touch .trk-title { font-size: 11.5px; }
+  body.touch .trk-goal { margin: 0; font-size: 11px; }
+  body.touch .trk-goal span { display: none; }
+  body.touch .trk-bar { grid-column: 1 / -1; margin-top: 3px; height: 2px; }
+}
+@media (max-width: 480px) {
+  body.touch #tracker { top: calc(88px + var(--sat)); width: 180px; }
+}
+@media (max-height: 520px) and (orientation: landscape) {
+  body.touch #tracker { gap: 3px; }
+  body.touch .trk-bar { display: none; }
 }
