@@ -84,7 +84,7 @@ Variants: `?size=192`, `?size=512&maskable` (Android adaptive icon), `?size=180&
 | Sword swings | Generated in code (`character.js`); the free pack has no attack clips |
 | Terrain, trees, rocks, grass, water, camps, graveyard | Generated in code (`world.js`), flat-shaded to match KayKit |
 | Market stall, stash chest and notice board | Generated in code (`town.js`), with the pack's items as wares on the counter |
-| The crypt: walls, floors, pillars, stairs, torches, banners, chests, props | KayKit Dungeon models (`assets/dungeon`), placed on a 4 m grid and merged into two meshes (`dungeon.js`); walls on the camera side are clipped low |
+| The crypt: walls, floors, pillars, stairs, torches, banners, chests, props | KayKit Dungeon models, packed into one file (`assets/dungeon/crypt.glb`), placed on a 4 m grid and merged into two meshes (`dungeon.js`); walls on the camera side are clipped low |
 | Morvain the Lich | The Skeleton Mage, scaled up and tinted violet, with a glowing staff; his rune circle is a shader (`dungeon.js`) |
 | Slimes | Generated in code (`enemies.js`) |
 | Inventory icons and portrait | Rendered at startup from the same 3D models (`assets.js`) |
@@ -108,11 +108,13 @@ Variants: `?size=192`, `?size=512&maskable` (Android adaptive icon), `?size=180&
 
 ## Adding more art
 
-KayKit's other free packs (Forest, Halloween…) use the same rig and style. The Skeletons pack was added this way
-(the Dungeon pack's pieces are listed by name in `dungeon.js` and loaded from `assets/dungeon`):
+KayKit's other free packs (Forest, Halloween…) use the same rig and style. The Skeletons pack was added this way:
 
 - **New monster:** copy the `.glb` into `assets/characters/`, add its name to `CHARACTERS` in `assets.js`, and add an entry to `ENEMY_TYPES` and `SPAWNS` in `enemies.js`. The skeleton entries show the options: `offhand` (shield), `style: 'chop'`, `eyes` (glow color), `bolt` (caster projectile color), `loot: 'bone'` (loot table).
 - **New weapon or shield:** copy the `.gltf`, `.bin` and texture into `assets/items/`, add the model name to `ITEM_MODELS`, and add a base to `BASES` in `items.js`.
+- **More crypt pieces:** name any Dungeon pack model in `dungeon.js` (e.g. `put('barrel_large', x, z)`), then repack:
+  `node tools/pack-dungeon.mjs "<KayKit_Dungeon_Pack_1.1_FREE>/Assets/gltf"`. It writes every model `dungeon.js`
+  names into `assets/dungeon/crypt.glb`, one file instead of ~80 (the host is slow to answer each request).
 - **Attack animations:** if you get a pack with combat clips (for example Rig_Medium_CombatMelee), drop the `.glb` into `assets/animations/`, add it to `ANIMATIONS`, and call `anim.play('<clip name>')` instead of `startSwing`.
 
 Progress is saved in the browser's localStorage. To start over, run `localStorage.removeItem('emberwood-save-v1')` in the console.

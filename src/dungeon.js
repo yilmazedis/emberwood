@@ -1,8 +1,8 @@
 // The Forgotten Crypt: a hand-made dungeon beneath the graveyard, built from the KayKit Dungeon
 // pack on a 4 m grid. It sits far north of the overworld in the same scene, so combat, loot and
 // particles work unchanged; going down swaps the lighting, fog and minimap (setInside).
-// Walls on the camera side of a room are cut down to knee height so they never hide the fight,
-// and the models only load the first time someone goes down.
+// Walls on the camera side of a room are cut down to knee height so they never hide the fight.
+// The pieces come packed in one file (tools/pack-dungeon.mjs), fetched when you near the graveyard.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -408,6 +408,7 @@ function runeCircle() {
 const LOOK = { fog: 0x0b0a0e, near: 26, far: 64, hemiSky: 0x9aa0c8, hemiGround: 0x3a3028, hemi: 1.0, sun: 0xa4b0e0, sunI: 1.2 };
 const REACH = 2.4;
 const CHEST_REFILL = 5 * 60 * 1000;
+const PACK = 'assets/dungeon/crypt.glb';
 
 export class Dungeon {
   constructor(game) {
@@ -465,18 +466,27 @@ export class Dungeon {
     this.sources.push({ pos: new THREE.Vector3(this.hoard.x, 1.8, this.hoard.z + 1.2), color: 0xffc860, power: 7, dist: 8, gain: () => (this.hoard.unlocked ? 1 : 0) });
   }
 
-  // Models are fetched the first time someone goes down (a second or two, behind the fade).
+  // The packed models: downloaded once, early (see update), and parsed when someone goes down.
+  fetchPack() {
+    if (!this.pack) {
+      this.pack = fetch(PACK)
+        .then((r) => { if (!r.ok) throw new Error(`${PACK}: ${r.status}`); return r.arrayBuffer(); })
+        .catch((err) => { this.pack = null; throw err; });
+    }
+    return this.pack;
+  }
+
+  // Builds the crypt the first time someone goes down (behind the fade).
   load() {
     if (!this.loading) this.loading = this.build().catch((err) => { this.loading = null; throw err; });
     return this.loading;
   }
 
   async build() {
-    const names = new Set(PIECES.map((p) => p.m));
-    for (const c of CHESTS) names.add(c.model);
-    const loader = new GLTFLoader();
+    const gltf = await new GLTFLoader().parseAsync(await this.fetchPack(), '');
+    this.pack = null; // parsed: let the download go
     const models = {};
-    await Promise.all([...names].map((n) => loader.loadAsync(`assets/dungeon/${n}.gltf`).then((gl) => { models[n] = gl.scene; })));
+    for (const root of gltf.scene.children) models[root.userData.model] = root;
 
     let map = null;
     const parts = {};
@@ -505,6 +515,7 @@ export class Dungeon {
     const place = new THREE.Matrix4(), local = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0);
     const at = new THREE.Vector3(), sc = new THREE.Vector3();
     for (const p of PIECES) {
+      if (!parts[p.m]) { console.warn(`crypt: ${p.m} is missing from ${PACK} (run tools/pack-dungeon.mjs)`); continue; }
       place.compose(at.set(p.x, p.y, p.z), q.setFromAxisAngle(up, p.rot), p.scale ? sc.fromArray(p.scale) : sc.set(1, 1, 1));
       if (p.ox) place.multiply(local.makeTranslation(p.ox, 0, 0));
       for (const part of parts[p.m]) {
@@ -628,6 +639,11 @@ export class Dungeon {
   // ---------------------------------------------------------------- per frame
   update(dt) {
     const g = this.game, p = g.player;
+    // walking toward the graveyard: start downloading the crypt so the door opens without a wait
+    if (!this.pack && !this.loading && Math.hypot(p.pos.x - CRYPT.x, p.pos.z - CRYPT.z) < 32 && performance.now() > (this.retryAt || 0)) {
+      this.retryAt = performance.now() + 15000; // offline or a failed download: try again later, not every frame
+      this.fetchPack().catch(() => {});
+    }
     let best = null, bd = REACH;
     if (p.alive && !g.traveling) {
       for (const s of this.spots) {

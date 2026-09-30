@@ -24,5 +24,5 @@ RedirectMatch 404 \.log$
 </IfModule>
 
 <IfModule mod_deflate.c>
-  AddOutputFilterByType DEFLATE text/html text/css text/javascript application/javascript model/gltf+json application/octet-stream application/manifest+json
+  AddOutputFilterByType DEFLATE text/html text/css text/javascript application/javascript model/gltf+json model/gltf-binary application/octet-stream application/manifest+json
 </IfModule>
