@@ -17,6 +17,7 @@ export const xpForLevel = (lvl) => Math.round(60 * Math.pow(lvl, 1.55));
 const _axis = new THREE.Vector2();
 const _ember = new THREE.Vector3();
 
+export const STASH_SIZE = 30;
 export const emptyEquipment = () => ({ weapon: null, offhand: null, head: null, back: null, hands: null, feet: null, ring1: null, ring2: null });
 
 // Gloves/boots: colour + material from the base, glowing when legendary.
@@ -54,6 +55,8 @@ export class Player {
     this.potions = 3;
     this.bag = new Array(20).fill(null);
     this.equipment = emptyEquipment();
+    this.stash = new Array(STASH_SIZE).fill(null);
+    this.shop = { stock: [], restockAt: 0 }; // the merchant's stock (see town.js)
     this.cd = { attack: 0, cleave: 0, fireball: 0, whirlwind: 0, heal: 0, potion: 0 };
     this.action = null;
     this.queued = null;
@@ -71,7 +74,10 @@ export class Player {
   }
 
   serialize() {
-    return { v: 1, level: this.level, xp: this.xp, gold: this.gold, potions: this.potions, bag: this.bag, equipment: this.equipment };
+    return {
+      v: 1, level: this.level, xp: this.xp, gold: this.gold, potions: this.potions,
+      bag: this.bag, equipment: this.equipment, stash: this.stash, shop: this.shop,
+    };
   }
 
   load(s) {
@@ -81,6 +87,8 @@ export class Player {
     this.potions = s.potions ?? 3;
     this.bag = Array.from({ length: 20 }, (_, i) => s.bag?.[i] || null);
     this.equipment = { ...emptyEquipment(), ...s.equipment };
+    this.stash = Array.from({ length: STASH_SIZE }, (_, i) => s.stash?.[i] || null);
+    this.shop = Array.isArray(s.shop?.stock) ? s.shop : { stock: [], restockAt: 0 };
     this.onGearChanged(false);
     this.hp = this.stats.maxHp;
     this.mp = this.stats.maxMp;
@@ -194,23 +202,13 @@ export class Player {
     if (!it) return;
     this.bag[i] = null;
     this.gold += it.value;
+    this.game.town?.addBuyback(it);
     this.game.sfx.play('gold');
     this.game.ui.log(`Sold ${it.name} for <b>${it.value}g</b>`, 'gold');
     this.game.ui.refreshInventory();
     this.game.save();
   }
 
-  buyAle() {
-    if (this.gold < 25) {
-      this.game.ui.centerMsg('Not enough gold');
-      return;
-    }
-    this.gold -= 25;
-    this.potions++;
-    this.game.sfx.play('gold');
-    this.game.ui.refreshInventory();
-    this.game.save();
-  }
 
   onGearChanged(save = true) {
     const hpFrac = this.hp !== undefined ? this.hp / this.stats.maxHp : 1;
@@ -240,6 +238,7 @@ export class Player {
       this.game.sfx.play('levelup');
       this.game.ui.floater(this.headPos(), `Level ${this.level}`, 'info');
       this.game.ui.buildActionBar();
+      this.game.town?.onLevelUp();
       this.game.save();
     }
   }
@@ -384,7 +383,7 @@ export class Player {
   drinkAle() {
     const g = this.game;
     if (!this.alive || this.cd.potion > 0) return;
-    if (this.potions <= 0) { g.ui.centerMsg('No ale left — buy more in your bag (I)'); return; }
+    if (this.potions <= 0) { g.ui.centerMsg('No ale left — the merchant in camp sells more'); return; }
     if (this.hp >= this.stats.maxHp) { g.ui.centerMsg('Already at full life'); return; }
     this.potions--;
     this.cd.potion = 1.5;
@@ -414,6 +413,7 @@ export class Player {
     const lost = Math.floor(this.gold * 0.1);
     this.gold -= lost;
     g.sfx.play('death');
+    g.ui.closeInventory();
     setTimeout(() => g.ui.showDeath(true), 1400);
     g.save();
   }

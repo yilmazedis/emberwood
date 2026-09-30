@@ -2,7 +2,8 @@
 import * as THREE from 'three';
 import { Assets } from './assets.js';
 import { RARITY, itemLines, COMPARE_STATS } from './items.js';
-import { SKILLS, xpForLevel } from './player.js';
+import { SKILLS, xpForLevel, STASH_SIZE } from './player.js';
+import { ALE_PRICE } from './town.js';
 import { rand } from './util.js';
 
 const $ = (id) => document.getElementById(id);
@@ -25,36 +26,40 @@ export class UI {
       boss: $('boss'), bossName: $('boss-name'), bossFill: $('boss-fill'), minimap: $('minimap'), zoneName: $('zone-name'),
       inventory: $('inventory'), bag: $('bag'), stats: $('stats'), gold: $('gold'), tooltip: $('tooltip'),
       death: $('death'), vignette: $('vignette'), help: $('help'),
+      shop: $('shop'), buyback: $('buyback'), stash: $('stash'), stashCount: $('stash-count'),
+      restock: $('restock'), sellCommons: $('sell-commons'), bagHint: $('bag-hint'),
     };
     this.plates = [];
     this.floaters = [];
     this.v = new THREE.Vector3();
     this.mm = this.el.minimap.getContext('2d');
     this.invOpen = false;
+    this.invMode = 'character'; // character | vendor | stash — which panel sits next to the bag
     this.tipTarget = null;
     this.mouse = { x: 0, y: 0 };
     this.el.portrait.src = Assets.icons.portrait;
 
-    // bag slots
-    this.bagSlots = [];
-    // Mouse: hover shows the tooltip, click equips, right-click sells.
-    // Touch: tap selects an item and opens a small menu (Equip / Sell), so nothing happens by accident.
-    for (let i = 0; i < 20; i++) {
-      const d = document.createElement('div');
-      d.className = 'bag-slot';
-      d.addEventListener('click', () => this.bagClick(i, d));
-      d.addEventListener('contextmenu', (e) => { e.preventDefault(); if (!this.touch) { this.game.player.sell(i); this.hideTip(); } });
-      d.addEventListener('mouseenter', () => { if (!this.touch) this.showTip(d, () => this.game.player.bag[i] && this.itemTip(this.game.player.bag[i], true)); });
-      d.addEventListener('mouseleave', () => { if (!this.touch) this.hideTip(); });
-      this.el.bag.appendChild(d);
-      this.bagSlots.push(d);
-    }
+    // Item grids. Mouse: hover shows the tooltip, click acts (equip / buy / store / take), right-click sells.
+    // Touch: tap selects an item and opens a small menu with the choices, so nothing happens by accident.
+    const p = () => this.game.player;
+    this.bagSlots = this.makeSlots(this.el.bag, 20, {
+      click: (i, d) => this.bagClick(i, d),
+      tip: (i) => p().bag[i] && this.itemTip(p().bag[i], { compare: true, hint: this.bagHint(p().bag[i]) }),
+      sell: (i) => p().sell(i),
+    });
+    this.shopSlots = this.makeSlots(this.el.shop, 10, { cls: 'shop-slot', click: (i, d) => this.shopClick(i, d), tip: (i) => this.shopTip(i) });
+    this.buybackSlots = this.makeSlots(this.el.buyback, 5, { cls: 'shop-slot', click: (i, d) => this.buybackClick(i, d), tip: (i) => this.buybackTip(i) });
+    this.stashSlots = this.makeSlots(this.el.stash, STASH_SIZE, {
+      click: (i, d) => this.stashClick(i, d),
+      tip: (i) => p().stash[i] && this.itemTip(p().stash[i], { compare: true, hint: 'Click to take' }),
+    });
     for (const d of document.querySelectorAll('.eq-slot')) {
       const slot = d.dataset.slot;
       d.addEventListener('click', () => this.equipClick(slot, d));
-      d.addEventListener('mouseenter', () => { if (!this.touch) this.showTip(d, () => this.game.player.equipment[slot] && this.itemTip(this.game.player.equipment[slot], false)); });
+      d.addEventListener('mouseenter', () => { if (!this.touch) this.showTip(d, () => p().equipment[slot] && this.itemTip(p().equipment[slot], { hint: 'Click to unequip' })); });
       d.addEventListener('mouseleave', () => { if (!this.touch) this.hideTip(); });
     }
+    this.el.sellCommons.addEventListener('click', () => this.game.town.sellCommons());
     document.addEventListener('pointerdown', (e) => {
       if (this.menuAnchor && !this.el.tooltip.contains(e.target) && !this.menuAnchor.contains(e.target)) this.closeMenu();
     }, true);
@@ -67,7 +72,6 @@ export class UI {
     $('btn-bag').addEventListener('click', () => this.toggleInventory());
     $('btn-help').addEventListener('click', () => this.togglePanel('help'));
     $('btn-sound').addEventListener('click', () => this.toggleSound());
-    $('buy-ale').addEventListener('click', () => this.game.player.buyAle());
     $('respawn').addEventListener('click', () => this.game.player.respawn());
     this.buildActionBar();
   }
@@ -78,20 +82,45 @@ export class UI {
     this.closeMenu();
   }
 
+  // A grid of item slots with mouse tooltips; `sell` enables right-click selling.
+  makeSlots(parent, n, { click, tip, sell = null, cls = '' }) {
+    return Array.from({ length: n }, (_, i) => {
+      const d = document.createElement('div');
+      d.dataset.cls = cls;
+      d.className = `bag-slot ${cls}`;
+      d.addEventListener('click', () => click(i, d));
+      d.addEventListener('contextmenu', (e) => { e.preventDefault(); if (sell && !this.touch) { sell(i); this.hideTip(); } });
+      d.addEventListener('mouseenter', () => { if (!this.touch) this.showTip(d, () => tip(i)); });
+      d.addEventListener('mouseleave', () => { if (!this.touch) this.hideTip(); });
+      parent.appendChild(d);
+      return d;
+    });
+  }
+
+  atStash() {
+    return this.invOpen && this.invMode === 'stash';
+  }
+
+  bagHint(item) {
+    return `Click to ${this.atStash() ? 'store' : 'equip'} · Right-click to sell for ${item.value}g`;
+  }
+
   bagClick(i, d) {
     const p = this.game.player, item = p.bag[i];
     if (!this.touch) {
-      p.equipFromBag(i);
+      if (this.atStash()) this.game.town.store(i);
+      else p.equipFromBag(i);
       this.hideTip();
       this.maybeTip(d);
       return;
     }
     if (!item) return this.closeMenu();
     const eq = p.equipment;
-    const equip = item.slot === 'ring' && eq.ring1 && eq.ring2
+    const equip = item.slot === 'ring' && eq.ring1 && eq.ring2 && !this.atStash()
       ? [['Left ring', () => p.equipFromBag(i, 'ring1')], ['Right ring', () => p.equipFromBag(i, 'ring2')]]
       : [['Equip', () => p.equipFromBag(i)]];
-    this.openMenu(d, this.itemTip(item, true, true), [...equip, [`Sell · ${item.value}g`, () => p.sell(i)]]);
+    const store = this.atStash() ? [['Store', () => this.game.town.store(i)]] : [];
+    this.openMenu(d, this.itemTip(item, { compare: true }), [...store, ...equip, [`Sell · ${item.value}g`, () => p.sell(i)]]);
   }
 
   equipClick(slot, d) {
@@ -102,7 +131,56 @@ export class UI {
       return;
     }
     if (!item) return this.closeMenu();
-    this.openMenu(d, this.itemTip(item, false, true), [['Unequip', () => p.unequip(slot)]]);
+    this.openMenu(d, this.itemTip(item), [['Unequip', () => p.unequip(slot)]]);
+  }
+
+  // Merchant grid: slot 0 is ale (always in stock), then the rotating gear.
+  shopClick(i, d) {
+    const town = this.game.town, p = this.game.player;
+    if (i === 0) {
+      if (!this.touch) { town.buyAle(); this.maybeTip(d); return; }
+      return this.openMenu(d, this.aleTip(), [
+        [`Buy 1 · ${ALE_PRICE}g`, () => town.buyAle()],
+        [`Buy 5 · ${ALE_PRICE * 5}g`, () => { for (let k = 0; k < 5 && p.gold >= ALE_PRICE; k++) town.buyAle(); }],
+      ]);
+    }
+    const entry = p.shop.stock[i - 1];
+    if (!entry) return this.closeMenu();
+    if (!this.touch) { town.buy(i - 1); this.hideTip(); return; }
+    this.openMenu(d, this.itemTip(entry.item, { compare: true }), [[`Buy · ${entry.price}g`, () => town.buy(i - 1)]]);
+  }
+
+  buybackClick(i, d) {
+    const town = this.game.town, entry = town.buyback[i];
+    if (!entry) return this.closeMenu();
+    if (!this.touch) { town.buyBack(i); this.hideTip(); return; }
+    this.openMenu(d, this.itemTip(entry.item, { compare: true }), [[`Buy back · ${entry.price}g`, () => town.buyBack(i)]]);
+  }
+
+  stashClick(i, d) {
+    const town = this.game.town, item = this.game.player.stash[i];
+    if (!item) return this.closeMenu();
+    if (!this.touch) { town.take(i); this.hideTip(); return; }
+    this.openMenu(d, this.itemTip(item, { compare: true }), [['Take', () => town.take(i)]]);
+  }
+
+  aleTip() {
+    const p = this.game.player;
+    return `<div class="tt-name">Hearty Ale</div><div class="tt-type">Potion · you have ${p.potions}</div>Restores 40% of your maximum Life.
+      ${this.touch ? '' : `<div class="tt-hint">Click to buy for ${ALE_PRICE}g</div>`}`;
+  }
+
+  shopTip(i) {
+    if (i === 0) return this.aleTip();
+    const p = this.game.player, entry = p.shop.stock[i - 1];
+    if (!entry) return null;
+    const hint = p.gold >= entry.price ? `Click to buy for ${entry.price}g` : `Costs ${entry.price}g · not enough gold`;
+    return this.itemTip(entry.item, { compare: true, hint });
+  }
+
+  buybackTip(i) {
+    const entry = this.game.town.buyback[i];
+    return entry && this.itemTip(entry.item, { compare: true, hint: `Click to buy back for ${entry.price}g` });
   }
 
   // Tooltip with action buttons, anchored under (or above) a slot. Used on touch screens.
@@ -147,7 +225,7 @@ export class UI {
         key: s.key, skill: s, cls: `slot-s${i + 1}`, icon: SKILL_SVG[s.id], sep: i === 0,
         tip: () => `<div class="tt-name">${s.name}</div><div class="tt-type">${s.mp} mana · ${s.cd}s cooldown${p.level < s.level ? ` · unlocks at level ${s.level}` : ''}</div>${s.desc}`,
       })),
-      { key: 'Q', potion: true, cls: 'slot-potion', icon: `<img src="${Assets.icons.mug_full}" alt="">`, sep: true, tip: () => `<div class="tt-name">Hearty Ale</div><div class="tt-type">Q · ${p.potions} left</div>Restores 40% of your maximum Life. Buy more in your bag for 25 gold, or find them on monsters.` },
+      { key: 'Q', potion: true, cls: 'slot-potion', icon: `<img src="${Assets.icons.mug_full}" alt="">`, sep: true, tip: () => `<div class="tt-name">Hearty Ale</div><div class="tt-type">Q · ${p.potions} left</div>Restores 40% of your maximum Life. Buy more from Wren, the merchant in camp, or find them on monsters.` },
     ];
     this.el.slots.innerHTML = '';
     this.slotEls = defs.map((d) => {
@@ -216,6 +294,18 @@ export class UI {
     return p;
   }
 
+  // Name + role above a friendly character, with an action button that shows when you're in reach.
+  createNpcLabel(name, title, action, onAction, getPos) {
+    const el = document.createElement('div');
+    el.className = 'plate npc';
+    el.innerHTML = `<div class="npc-name">${name}</div><div class="npc-title">${title}</div><button class="npc-act">${action} <kbd>E</kbd></button>`;
+    el.querySelector('button').addEventListener('click', () => onAction());
+    this.el.plates.appendChild(el);
+    const p = { el, getPos, kind: 'label', max: 26 };
+    this.plates.push(p);
+    return p;
+  }
+
   createLabel(text, color, getPos) {
     const el = document.createElement('div');
     el.className = 'plate loot';
@@ -271,7 +361,7 @@ export class UI {
     el.className = `floater ${cls}`;
     el.textContent = text;
     this.el.floaters.appendChild(el);
-    this.floaters.push({ el, pos: pos.clone(), t: 0, dx: rand(-18, 18), life: cls === 'info' ? 1.8 : 1.0 });
+    this.floaters.push({ el, pos: pos.clone(), t: 0, dx: cls === 'say' ? 0 : rand(-18, 18), life: cls === 'info' ? 1.8 : cls === 'say' ? 2.6 : 1.0 });
   }
 
   updateFloaters(dt) {
@@ -342,19 +432,38 @@ export class UI {
   }
 
   togglePanel(id, force) {
-    const el = $(id);
-    const open = force ?? el.classList.contains('hidden');
-    el.classList.toggle('hidden', !open);
     if (id === 'inventory') {
-      this.invOpen = open;
-      this.game.doll.visible = open;
-      if (open) this.refreshInventory();
-      else { this.closeMenu(); this.hideTip(); }
+      const open = force ?? !(this.invOpen && this.invMode === 'character');
+      return open ? this.openInventory('character') : this.closeInventory();
     }
+    const el = $(id);
+    el.classList.toggle('hidden', !(force ?? el.classList.contains('hidden')));
+  }
+
+  // mode: 'character' (I key), 'vendor' (at the merchant), 'stash' (at the chest). The bag is always shown.
+  openInventory(mode = 'character') {
+    this.closeMenu();
+    this.hideTip();
+    this.invMode = mode;
+    this.el.inventory.dataset.mode = mode;
+    this.el.inventory.classList.remove('hidden');
+    this.invOpen = true;
+    this.game.doll.visible = mode === 'character';
+    this.refreshInventory();
+  }
+
+  closeInventory() {
+    if (!this.invOpen) return;
+    this.el.inventory.classList.add('hidden');
+    this.invOpen = false;
+    this.game.doll.visible = false;
+    this.closeMenu();
+    this.hideTip();
   }
 
   toggleInventory() {
-    this.togglePanel('inventory');
+    if (this.invOpen && this.invMode === 'character') this.closeInventory();
+    else this.openInventory('character');
   }
 
   toggleSound() {
@@ -368,21 +477,63 @@ export class UI {
     return item ? `<img src="${Assets.icons[item.icon]}" alt="">` : '';
   }
 
+  paintSlot(d, item, extra = '') {
+    d.className = `bag-slot ${d.dataset.cls || ''}${item ? ` r-${item.rarity}` : ''}`;
+    d.innerHTML = this.slotHtml(item) + extra;
+  }
+
+  priceTag(price) {
+    return `<span class="price${this.game.player.gold < price ? ' short' : ''}">${price}</span>`;
+  }
+
   refreshInventory() {
     const p = this.game.player;
     this.el.gold.textContent = p.gold;
     if (!this.invOpen) return;
+    p.bag.forEach((it, i) => this.paintSlot(this.bagSlots[i], it));
+    this.el.bagHint.textContent = this.touch ? 'tap an item for options'
+      : `click to ${this.atStash() ? 'store' : 'equip'} · right-click to sell`;
+    if (this.invMode === 'vendor') this.refreshVendor();
+    else if (this.invMode === 'stash') this.refreshStash();
+    else this.refreshCharacter();
+  }
+
+  refreshVendor() {
+    const p = this.game.player, town = this.game.town;
+    this.paintSlot(this.shopSlots[0], null, `<img src="${Assets.icons.mug_full}" alt="">${this.priceTag(ALE_PRICE)}`);
+    for (let i = 0; i < 9; i++) {
+      const entry = p.shop.stock[i];
+      this.paintSlot(this.shopSlots[i + 1], entry?.item, entry ? this.priceTag(entry.price) : '');
+    }
+    for (let i = 0; i < 5; i++) {
+      const entry = town.buyback[i];
+      this.paintSlot(this.buybackSlots[i], entry?.item, entry ? this.priceTag(entry.price) : '');
+    }
+    const v = town.commonsValue();
+    this.el.sellCommons.textContent = v ? `Sell all common items · +${v}g` : 'No common items to sell';
+    this.el.sellCommons.disabled = !v;
+    this.updateRestock();
+  }
+
+  updateRestock() {
+    const s = this.game.town.secondsToRestock();
+    this.el.restock.textContent = `new stock in ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  }
+
+  refreshStash() {
+    const p = this.game.player;
+    p.stash.forEach((it, i) => this.paintSlot(this.stashSlots[i], it));
+    this.el.stashCount.textContent = `${p.stash.filter(Boolean).length} / ${p.stash.length}`;
+  }
+
+  refreshCharacter() {
+    const p = this.game.player;
     const labels = { head: 'Head', back: 'Back', weapon: 'Weapon', offhand: 'Off-hand', hands: 'Hands', feet: 'Feet', ring1: 'Ring', ring2: 'Ring' };
     for (const d of document.querySelectorAll('.eq-slot')) {
       const it = p.equipment[d.dataset.slot];
       d.className = `eq-slot${it ? ` r-${it.rarity}` : ''}`;
       d.innerHTML = it ? this.slotHtml(it) : `<span>${labels[d.dataset.slot]}</span>`;
     }
-    p.bag.forEach((it, i) => {
-      const d = this.bagSlots[i];
-      d.className = `bag-slot${it ? ` r-${it.rarity}` : ''}`;
-      d.innerHTML = this.slotHtml(it);
-    });
     const s = p.stats;
     const rows = [
       ['Level', p.level], ['Damage', `${s.dmgLo}–${s.dmgHi}`],
@@ -394,11 +545,12 @@ export class UI {
     this.el.stats.innerHTML = rows.map(([k, v]) => `<div><span>${k}</span><b>${v}</b></div>`).join('');
   }
 
-  itemTip(item, fromBag, noHint = false) {
+  // compare: show ▲/▼ against the equipped item it would replace; hint: grey line at the bottom.
+  itemTip(item, { compare = false, hint = null } = {}) {
     const r = RARITY[item.rarity];
     const { main, implicit, aff } = itemLines(item);
     let cmp = '';
-    if (fromBag) {
+    if (compare) {
       // compare against what it would replace (for rings: the ring that would come off)
       const p = this.game.player;
       const cur = p.equipment[p.slotFor(item)];
@@ -420,13 +572,12 @@ export class UI {
       }
       if (parts.length) cmp = `<div class="tt-cmp">${parts.join('<br>')}</div>`;
     }
-    const hint = fromBag ? `Click to equip · Right-click to sell for ${item.value}g` : 'Click to unequip';
     return `<div class="tt-name" style="color:${r.color}">${item.name}</div>
       <div class="tt-type">${item.rarity === 'common' ? '' : `${r.label} `}${item.type} · item level ${item.ilvl}</div>
       ${main.map((l) => `<div class="tt-main">${l}</div>`).join('')}
       ${implicit.map((l) => `<div>${l}</div>`).join('')}
       ${aff.map((l) => `<div class="tt-aff">${l}</div>`).join('')}
-      ${cmp}${noHint ? '' : `<div class="tt-hint">${hint}</div>`}`;
+      ${cmp}${hint ? `<div class="tt-hint">${hint}</div>` : ''}`;
   }
 
   showTip(target, htmlFn) {
@@ -518,6 +669,10 @@ export class UI {
     this.updateActionBar();
     this.updatePlates();
     this.updateFloaters(dt);
+    if (this.invOpen && this.invMode === 'vendor') {
+      this._rsT = (this._rsT || 0) + dt;
+      if (this._rsT > 0.5) { this._rsT = 0; this.updateRestock(); }
+    }
     this._mmT = (this._mmT || 0) + dt;
     if (this._mmT > 0.05) { this._mmT = 0; this.drawMinimap(); }
     if (this.tipTarget && this.tipFn && this.tipTarget.classList.contains('slot')) {

@@ -8,7 +8,7 @@ import { buildGearModel, GEAR_ICON_ROT } from './gear.js';
 export const Assets = { chars: {}, clips: {}, items: {}, icons: {} };
 
 const CHARACTERS = [
-  'Knight', 'Rogue_Hooded', 'Barbarian', 'Mage', // KayKit Adventurers
+  'Knight', 'Rogue_Hooded', 'Barbarian', 'Mage', 'Ranger', // KayKit Adventurers (Ranger = the merchant)
   'Skeleton_Minion', 'Skeleton_Warrior', 'Skeleton_Rogue', 'Skeleton_Mage', // KayKit Skeletons
 ];
 const ANIMATIONS = ['Rig_Medium_General', 'Rig_Medium_MovementBasic'];

@@ -353,3 +353,53 @@ body.touch #boss-name { font-size: 13px; }
 /* item comparison lines in tooltips */
 .tt-cmp { margin-top: 6px; }
 .tt-replaces { color: var(--muted); font-style: italic; }
+
+/* ------------------------------------------------------------------ merchant & stash */
+/* only the panel for the current mode sits next to the bag */
+#inventory:not([data-mode="character"]) .inv-character,
+#inventory:not([data-mode="vendor"]) .inv-vendor,
+#inventory:not([data-mode="stash"]) .inv-stash { display: none; }
+
+/* name tags above Wren and the stash; the button shows when you're in reach */
+.plate.npc { text-align: center; }
+.npc-name { font: 800 14px Cinzel, serif; color: var(--gold); text-shadow: 0 2px 4px #000, 0 0 2px #000; }
+.npc-title { font: 600 11px Inter, sans-serif; color: #e8dcc0; text-shadow: 0 1px 3px #000; margin-bottom: 5px; }
+.npc-act { display: none; font: 700 13px Inter, sans-serif; padding: 6px 12px; color: var(--gold); border-color: var(--edge-hi); box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5); }
+.npc-act kbd { margin-left: 4px; }
+.plate.npc.near .npc-act { display: inline-block; }
+body.touch .npc-act { padding: 10px 20px; font-size: 15px; }
+body.touch .npc-act kbd { display: none; }
+.floater.say { font: italic 600 14px Inter, sans-serif; color: #fff4d6; max-width: 240px; white-space: normal; text-align: center; }
+
+/* shop */
+.sec-title { font: 800 13px Cinzel, serif; color: var(--gold); margin: 4px 0 8px; }
+.sec-title small { font: 500 11px Inter, sans-serif; color: var(--muted); margin-left: 6px; }
+.shop-grid { display: grid; grid-template-columns: repeat(5, 58px); gap: 18px 10px; justify-content: space-between; margin-bottom: 18px; }
+.shop-grid .bag-slot { width: 58px; height: 58px; }
+.shop-slot .price {
+  position: absolute; left: 50%; bottom: -10px; transform: translateX(-50%); padding: 0 6px;
+  font: 800 10.5px/16px Inter, sans-serif; color: var(--gold); white-space: nowrap;
+  background: #1a130d; border: 1px solid #4a3a24; border-radius: 8px;
+}
+.shop-slot .price::before { content: ''; display: inline-block; width: 7px; height: 7px; margin-right: 3px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #fff4b8, #e0a92a 60%, #8a5d10); }
+.shop-slot .price.short { color: #ff7a6a; }
+button.wide { width: 100%; margin: 2px 0 12px; }
+button:disabled { opacity: 0.5; cursor: default; }
+
+/* stash */
+#stash { display: grid; grid-template-columns: repeat(6, 50px); gap: 6px; justify-content: space-between; margin-bottom: 12px; }
+#stash .bag-slot { width: 50px; height: 50px; }
+
+@media (max-width: 900px) {
+  .shop-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  #stash { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .shop-grid .bag-slot, #stash .bag-slot { width: auto; height: auto; aspect-ratio: 1; }
+}
+@media (max-height: 520px) and (orientation: landscape) {
+  #inventory .shop-grid { grid-template-columns: repeat(5, 48px); gap: 16px 8px; margin-bottom: 14px; }
+  #inventory .shop-grid .bag-slot { width: 48px; height: 48px; aspect-ratio: auto; }
+  #inventory #stash { grid-template-columns: repeat(6, 42px); gap: 5px; }
+  #inventory #stash .bag-slot { width: 42px; height: 42px; aspect-ratio: auto; }
+  #inventory .sec-title { margin: 0 0 6px; }
+  #inventory button.wide { margin-bottom: 0; }
+}

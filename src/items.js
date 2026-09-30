@@ -148,6 +148,16 @@ export function randomItem(ilvl, { boost = 0, minRarity = 'common', table = null
   return makeItem(baseKey, ilvl, rollRarity(boost, minRarity));
 }
 
+// Merchant stock: gear around the player's level, common to rare. Legendaries only drop from monsters.
+export function vendorItem(ilvl) {
+  const baseKey = weightedPick(Object.entries(BASES).map(([k, b]) => ({ k, w: b.w }))).k;
+  const rarity = weightedPick([{ k: 'common', w: 55 }, { k: 'magic', w: 35 }, { k: 'rare', w: 10 }]).k;
+  return makeItem(baseKey, ilvl, rarity);
+}
+
+// What the merchant charges; selling pays item.value.
+export const buyPrice = (item) => Math.max(10, Math.round(item.value * 3));
+
 // Human-readable lines for tooltips.
 export function itemLines(item) {
   const s = item.stats;

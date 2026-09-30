@@ -86,6 +86,7 @@ export class Sfx {
       case 'pickup': this._tone(now, 0.08, 'sine', 880, 880, 0.25 * v); this._tone(now + 0.07, 0.12, 'sine', 1320, 1320, 0.25 * v); break;
       case 'drop': this._tone(now, 0.3, 'triangle', 600 + 400 * v, 1400 + 800 * v, 0.12 * v); break;
       case 'gold': this._tone(now, 0.06, 'triangle', 1800, 1800, 0.15 * v); this._tone(now + 0.05, 0.1, 'triangle', 2400, 2400, 0.15 * v); break;
+      case 'chest': this._tone(now, 0.35, 'sawtooth', 140, 95, 0.07 * v, 0.03); this._noise(now, 0.3, 'bandpass', 500, 300, 0.25 * v, 3); this._tone(now + 0.28, 0.12, 'sine', 90, 60, 0.3 * v); break;
       case 'equip': this._noise(now, 0.12, 'bandpass', 1500, 3000, 0.3 * v, 5); this._tone(now, 0.1, 'square', 300, 200, 0.05 * v); break;
       case 'drink': this._tone(now, 0.25, 'sine', 300, 500, 0.2 * v); break;
       case 'heal': [523, 659, 784].forEach((f, i) => this._tone(now + i * 0.06, 0.35, 'sine', f, f * 1.01, 0.12 * v, 0.02)); break;

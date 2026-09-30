@@ -15,6 +15,7 @@ import { Doll } from './doll.js';
 import { Sfx } from './audio.js';
 import { randomItem } from './items.js';
 import { Input } from './input.js';
+import { Town } from './town.js';
 import { angleDiff, yawTo, randInt, rand, chance, clamp } from './util.js';
 
 const SAVE_KEY = 'emberwood-save-v1';
@@ -100,6 +101,7 @@ export class Game {
     this.player.onGearChanged(false);
     this.player.pos.set(0, heightAt(0, 3.5), 3.5);
     this.camFocus.copy(this.player.pos);
+    this.town = new Town(this); // merchant + stash in camp (after loading: it reads the saved shop)
 
     // static fire lights (camp + bandit hideout) and the crystal glow
     this.fireLights = this.world.fires.slice(0, 2).map((f) => {
@@ -129,6 +131,7 @@ export class Game {
     this.sfx.init();
     this.player.h.anim.play('Spawn_Ground', { timeScale: 1.1 });
     this.ui.log('Welcome to <b>Emberwood</b>. Slimes roam the meadow to the north.');
+    this.ui.log('Wren the merchant and your stash are at the north end of camp.');
     this.ui.log(this.input.touchMode
       ? 'Left thumb moves · hold the sword to attack · skills aim for you'
       : 'WASD to move · Click to attack · 1–4 skills · Q ale · I bag');
@@ -158,6 +161,7 @@ export class Game {
         case 'KeyQ': p.drinkAle(); break;
         case 'KeyI': case 'KeyB': case 'Tab': this.ui.toggleInventory(); e.preventDefault(); break;
         case 'KeyH': this.ui.togglePanel('help'); break;
+        case 'KeyE': this.town.interact(); break;
         case 'KeyM': this.ui.toggleSound(); break;
         case 'Escape': this.ui.togglePanel('inventory', false); this.ui.togglePanel('help', false); break;
         default: break;
@@ -368,6 +372,7 @@ export class Game {
 
     this.updateAim();
     this.player.update(dt);
+    this.town.update(dt);
     this.enemies.update(dt);
     this.projectiles.update(dt);
     this.loot.update(dt);
