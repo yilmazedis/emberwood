@@ -30,7 +30,7 @@ export class UI {
       death: $('death'), vignette: $('vignette'), help: $('help'),
       shop: $('shop'), buyback: $('buyback'), stash: $('stash'), stashCount: $('stash-count'),
       restock: $('restock'), sellCommons: $('sell-commons'), bagHint: $('bag-hint'),
-      questList: $('quest-list'), tracker: $('tracker'), fade: $('fade'),
+      questList: $('quest-list'), tracker: $('tracker'), fade: $('fade'), settings: $('settings'),
     };
     this.plates = [];
     this.floaters = [];
@@ -80,7 +80,8 @@ export class UI {
     for (const b of document.querySelectorAll('[data-close]')) b.addEventListener('click', () => this.togglePanel(b.dataset.close, false));
     $('btn-bag').addEventListener('click', () => this.toggleInventory());
     $('btn-help').addEventListener('click', () => this.togglePanel('help'));
-    $('btn-sound').addEventListener('click', () => this.toggleSound());
+    $('btn-settings').addEventListener('click', () => this.toggleSettings());
+    this.bindSettings();
     $('respawn').addEventListener('click', () => this.game.player.respawn());
     this.buildActionBar();
   }
@@ -441,6 +442,7 @@ export class UI {
   }
 
   togglePanel(id, force) {
+    if (id === 'settings') return (force ?? this.el.settings.classList.contains('hidden')) ? this.openSettings() : this.closeSettings();
     if (id === 'inventory') {
       const open = force ?? !(this.invOpen && this.invMode === 'character');
       return open ? this.openInventory('character') : this.closeInventory();
@@ -476,10 +478,78 @@ export class UI {
     else this.openInventory('character');
   }
 
+  // M: mute / unmute everything
   toggleSound() {
-    const on = this.game.sfx.toggle();
-    $('btn-sound').classList.toggle('off', !on);
-    this.centerMsg(on ? 'Sound on' : 'Sound off');
+    const muted = !this.game.settings.muted;
+    this.game.setSetting('muted', muted);
+    $('set-muted').checked = muted;
+    this.centerMsg(muted ? 'Sound off' : 'Sound on');
+  }
+
+  // Esc: close whatever is open, otherwise open the settings
+  escape() {
+    if (this.settingsOpen) return this.closeSettings();
+    if (this.invOpen || !this.el.help.classList.contains('hidden')) {
+      this.closeInventory();
+      this.togglePanel('help', false);
+      return;
+    }
+    this.openSettings();
+  }
+
+  // ---------------------------------------------------------------- settings (the game pauses while open)
+  bindSettings() {
+    const g = this.game;
+    for (const key of ['music', 'sfx', 'ambience']) {
+      const input = $(`set-${key}`);
+      input.addEventListener('input', () => {
+        g.setSetting(key, input.value / 100);
+        input.nextElementSibling.textContent = input.value;
+        if (key === 'sfx') g.sfx.play('pickup'); // hear the new level
+      });
+    }
+    const zoom = $('set-zoom');
+    zoom.addEventListener('input', () => { g.setSetting('zoom', zoom.value / 100); zoom.nextElementSibling.textContent = `${zoom.value}%`; });
+    $('set-muted').addEventListener('change', (e) => g.setSetting('muted', e.target.checked));
+    for (const b of document.querySelectorAll('#set-quality button')) {
+      b.addEventListener('click', () => { g.setSetting('quality', b.dataset.v); this.syncSettings(); });
+    }
+    $('leave-game').addEventListener('click', () => g.leave());
+  }
+
+  syncSettings() {
+    const s = this.game.settings;
+    for (const key of ['music', 'sfx', 'ambience']) {
+      const input = $(`set-${key}`);
+      input.value = Math.round(s[key] * 100);
+      input.nextElementSibling.textContent = input.value;
+    }
+    const zoom = $('set-zoom');
+    zoom.value = Math.round(this.game.zoomTarget * 100);
+    zoom.nextElementSibling.textContent = `${zoom.value}%`;
+    $('set-muted').checked = s.muted;
+    for (const b of document.querySelectorAll('#set-quality button')) b.classList.toggle('on', b.dataset.v === s.quality);
+  }
+
+  openSettings() {
+    this.closeInventory();
+    this.togglePanel('help', false);
+    this.syncSettings();
+    this.el.settings.classList.remove('hidden');
+    this.settingsOpen = true;
+    this.game.paused = true;
+  }
+
+  // keepPaused: leaving the game (it stays paused on the title screen)
+  closeSettings(keepPaused = false) {
+    this.el.settings.classList.add('hidden');
+    this.settingsOpen = false;
+    if (!keepPaused) this.game.paused = false;
+  }
+
+  toggleSettings() {
+    if (this.settingsOpen) this.closeSettings();
+    else this.openSettings();
   }
 
   // ---------------------------------------------------------------- inventory

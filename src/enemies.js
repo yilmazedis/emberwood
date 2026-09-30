@@ -272,7 +272,8 @@ export class Enemy {
     const dx = p.pos.x - this.pos.x, dz = p.pos.z - this.pos.z;
     const dist = Math.hypot(dx, dz);
     const playerZone = zoneAt(p.pos.x, p.pos.z);
-    const targetable = p.alive && !(playerZone && playerZone.safe);
+    // (not in camp, and on the same side of the crypt door)
+    const targetable = p.alive && !(playerZone && playerZone.safe) && this.crypt === inDungeon(p.pos.x, p.pos.z);
     const distHome = this.pos.distanceTo(this.home);
     let speed = 0;
 

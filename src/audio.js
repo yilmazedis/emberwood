@@ -1,30 +1,107 @@
-// Tiny synthesized sound effects (WebAudio) — no audio files needed.
+// Sound, all synthesized with WebAudio (no audio files): the effects in this file, generative music
+// (music.js) and ambience (ambience.js). Each has its own volume; mute silences everything.
+//   effects ─┐
+//   music ───┼─(volume)─ master (mute) ─ fader (sleep/wake) ─ limiter ─ speakers
+//   ambience ┘      └─ reverb sends ─ reverb ─┘
+import { Music } from './music.js';
+import { Ambience } from './ambience.js';
+
+const LEVEL = { sfx: 0.4, music: 1, ambience: 1 }; // each channel's gain at 100%
+
+// A room's echo: decaying stereo noise, used as a convolution reverb.
+function impulse(ctx, seconds, decay) {
+  const len = Math.floor(ctx.sampleRate * seconds);
+  const buf = ctx.createBuffer(2, len, ctx.sampleRate);
+  for (let ch = 0; ch < 2; ch++) {
+    const d = buf.getChannelData(ch);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, decay);
+  }
+  return buf;
+}
+
 export class Sfx {
   constructor() {
     this.ctx = null;
     this.muted = false;
     this.last = {};
+    this.vol = { sfx: 0.8, music: 0.6, ambience: 0.6 }; // replaced by the saved settings (game.js)
+    this.music = null;
+    this.ambience = null;
   }
 
   init() {
     if (this.ctx) return;
     try {
-      this.ctx = new AudioContext();
-      this.master = this.ctx.createGain();
-      this.master.gain.value = 0.32;
-      this.master.connect(this.ctx.destination);
-      const len = this.ctx.sampleRate;
-      this.noise = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
+      const ctx = new AudioContext();
+      this.ctx = ctx;
+      const limiter = ctx.createDynamicsCompressor();
+      limiter.threshold.value = -8;
+      limiter.ratio.value = 6;
+      limiter.connect(ctx.destination);
+      this.fader = ctx.createGain();
+      this.fader.connect(limiter);
+      this.master = ctx.createGain();
+      this.master.gain.value = this.muted ? 0 : 1;
+      this.master.connect(this.fader);
+      this.reverb = ctx.createConvolver();
+      this.reverb.buffer = impulse(ctx, 2.8, 2.4);
+      this.reverb.connect(this.master);
+      this.bus = {};
+      this.sends = {};
+      for (const k of Object.keys(LEVEL)) {
+        this.bus[k] = ctx.createGain();
+        this.bus[k].gain.value = LEVEL[k] * this.vol[k];
+        this.bus[k].connect(this.master);
+      }
+      for (const [k, amount] of [['music', 0.45], ['ambience', 0.2]]) {
+        this.sends[k] = ctx.createGain();
+        this.sends[k].gain.value = amount;
+        this.bus[k].connect(this.sends[k]).connect(this.reverb);
+      }
+      const len = ctx.sampleRate * 2;
+      this.noise = ctx.createBuffer(1, len, ctx.sampleRate);
       const d = this.noise.getChannelData(0);
       for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+      this.music = new Music(ctx, this.bus.music, this.noise);
+      this.ambience = new Ambience(ctx, this.bus.ambience, this.noise);
     } catch {
       this.ctx = null;
     }
   }
 
+  setVolume(kind, v) {
+    this.vol[kind] = v;
+    if (this.ctx) this.bus[kind].gain.setTargetAtTime(LEVEL[kind] * v, this.ctx.currentTime, 0.05);
+  }
+
+  setMuted(m) {
+    this.muted = m;
+    if (this.ctx) this.master.gain.setTargetAtTime(m ? 0 : 1, this.ctx.currentTime, 0.05);
+  }
+
   toggle() {
-    this.muted = !this.muted;
+    this.setMuted(!this.muted);
     return !this.muted;
+  }
+
+  // How much of a channel goes to the reverb (the crypt echoes more than the woods).
+  setReverb(kind, amount) {
+    if (this.ctx) this.sends[kind].gain.setTargetAtTime(amount, this.ctx.currentTime, 0.5);
+  }
+
+  // Fade out and stop the audio clock (title screen, app in the background); wake brings it back.
+  sleep() {
+    if (!this.ctx) return;
+    this.fader.gain.setTargetAtTime(0, this.ctx.currentTime, 0.08);
+    clearTimeout(this.sleepT);
+    this.sleepT = setTimeout(() => this.ctx.suspend().catch(() => {}), 400);
+  }
+
+  wake() {
+    if (!this.ctx) return;
+    clearTimeout(this.sleepT);
+    this.ctx.resume().catch(() => {});
+    this.fader.gain.setTargetAtTime(1, this.ctx.currentTime, 0.15);
   }
 
   _env(node, t0, a, peak, dur) {
@@ -33,7 +110,7 @@ export class Sfx {
     g.gain.exponentialRampToValueAtTime(peak, t0 + a);
     g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
     node.connect(g);
-    g.connect(this.master);
+    g.connect(this.bus.sfx);
     return g;
   }
 

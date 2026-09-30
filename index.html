@@ -68,7 +68,7 @@
   <div id="menu-buttons">
     <button id="btn-bag" title="Inventory (I)">Bag <kbd>I</kbd></button>
     <button id="btn-help" title="Controls (H)">Help <kbd>H</kbd></button>
-    <button id="btn-sound" title="Sound (M)">Sound <kbd>M</kbd></button>
+    <button id="btn-settings" title="Settings (Esc)">Settings <kbd>Esc</kbd></button>
   </div>
 
   <div id="inventory" class="hidden" data-mode="character">
@@ -133,6 +133,7 @@
       <li>Accept quests at the notice board, then come back to claim the reward. The golden <b>!</b> means something is waiting.</li>
       <li>The crypt door in the graveyard leads down to a dungeon and its boss, <b>Morvain the Lich</b>. Step out of his violet circles!</li>
       <li><kbd>Mouse wheel</kbd> Zoom</li>
+      <li><kbd>Esc</kbd> Settings: music, sound, graphics, leave the game · <kbd>M</kbd> mute</li>
       <li>Walk over loot to pick it up. The camp is safe and heals you fast.</li>
     </ul>
     <ul class="touch-only">
@@ -141,11 +142,32 @@
       <li><b>Skill buttons</b> aim at the nearest enemy for you.</li>
       <li><b>Ale</b> heals 40% of your life.</li>
       <li><b>Bag</b>: tap an item to see it, then Equip or Sell.</li>
+      <li><b>Settings</b>: music and sound volume, graphics, camera distance, and leaving the game.</li>
       <li><b>In camp</b>: tap <b>Trade</b> above Wren the merchant, <b>Open</b> above your stash chest, or <b>Read</b> at the notice board.</li>
       <li>Accept quests at the notice board, then come back to claim the reward. The golden <b>!</b> means something is waiting.</li>
       <li>The crypt door in the graveyard leads down to a dungeon and its boss, <b>Morvain the Lich</b>. Step out of his violet circles!</li>
       <li>Walk over loot to pick it up. The camp is safe and heals you fast.</li>
     </ul>
+  </div>
+
+  <!-- settings: the game pauses while this is open -->
+  <div id="settings" class="panel hidden">
+    <header><span>Settings <small>game paused</small></span><button class="close" data-close="settings" aria-label="Close">×</button></header>
+    <div class="set-cols"><div>
+    <div class="set-sec">Sound</div>
+    <label class="set-row"><span>Music</span><input type="range" id="set-music" min="0" max="100" step="5"><output></output></label>
+    <label class="set-row"><span>Sound effects</span><input type="range" id="set-sfx" min="0" max="100" step="5"><output></output></label>
+    <label class="set-row"><span>Ambience</span><input type="range" id="set-ambience" min="0" max="100" step="5"><output></output></label>
+    <label class="set-row check"><span>Mute everything <kbd class="desk-only">M</kbd></span><input type="checkbox" id="set-muted"></label>
+    </div><div>
+    <div class="set-sec">Graphics</div>
+    <div class="set-row"><span>Quality</span><div class="seg" id="set-quality"><button data-v="high">High</button><button data-v="low">Low</button></div></div>
+    <p class="set-note">Low turns off shadows and glow and draws fewer pixels: smoother on older phones.</p>
+    <label class="set-row"><span>Camera distance</span><input type="range" id="set-zoom" min="60" max="150" step="5"><output></output></label>
+    <div class="set-sec">Game</div>
+    <button id="leave-game" class="wide">Leave game</button>
+    <p class="set-note">Saves your progress and goes back to the title screen.</p>
+    </div></div>
   </div>
 
   <!-- black screen while going down to (or up from) the crypt -->

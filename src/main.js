@@ -52,6 +52,22 @@ async function goFullscreen() {
 const game = new Game();
 window.game = game; // handy for debugging from the console
 
+// The title screen fades out on start, and comes back (with Continue) when you leave the game.
+let hideT = 0;
+function hideTitle() {
+  loading.classList.add('gone');
+  clearTimeout(hideT);
+  hideT = setTimeout(() => loading.classList.add('away'), 900);
+}
+game.onLeave = () => {
+  clearTimeout(hideT);
+  loading.classList.add('returned');
+  loading.classList.remove('away');
+  text.textContent = 'Your progress is saved.';
+  startBtn.textContent = 'Continue';
+  requestAnimationFrame(() => loading.classList.remove('gone'));
+};
+
 game.init((f, label) => {
   fill.style.width = `${Math.round(f * 100)}%`;
   if (label) text.textContent = label;
@@ -60,12 +76,12 @@ game.init((f, label) => {
   startBtn.classList.remove('hidden');
   const go = () => {
     goFullscreen();
-    loading.classList.add('gone');
-    setTimeout(() => loading.remove(), 900);
+    hideTitle();
+    if (game.started) { game.resume(); return; }
     game.start();
     cacheForOffline();
   };
-  startBtn.addEventListener('click', go, { once: true });
+  startBtn.addEventListener('click', go);
   if (new URLSearchParams(location.search).has('autostart')) go();
 }).catch((err) => {
   console.error(err);

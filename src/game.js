@@ -5,7 +5,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { loadAssets, buildIcons } from './assets.js';
-import { buildWorld, heightAt, zoneAt, worldUniforms } from './world.js';
+import { buildWorld, heightAt, zoneAt, worldUniforms, POND } from './world.js';
 import { FX } from './fx.js';
 import { Player } from './player.js';
 import { EnemyManager } from './enemies.js';
@@ -18,6 +18,7 @@ import { Input } from './input.js';
 import { Town } from './town.js';
 import { Quests } from './quests.js';
 import { Dungeon } from './dungeon.js';
+import { loadSettings, saveSettings } from './settings.js';
 import { angleDiff, yawTo, randInt, rand, chance, clamp } from './util.js';
 
 const SAVE_KEY = 'emberwood-save-v1';
@@ -62,21 +63,75 @@ export class Game {
     this.bloom = new UnrealBloomPass(new THREE.Vector2(w, h), 0.45, 0.55, 0.95);
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
+    this.settings = loadSettings();
 
     this.input = new Input();
     this.raycaster = new THREE.Raycaster();
     this.aimPoint = new THREE.Vector3();
     this.hover = null;
     this.camFocus = new THREE.Vector3();
-    this.zoom = 1;
-    this.zoomTarget = 1;
+    this.zoom = this.settings.zoom;
+    this.zoomTarget = this.settings.zoom;
     this.shakeAmt = 0;
     this.hitstop = 0;
     this.time = 0;
     this.currentZone = null;
     this.sfx = new Sfx();
+    this.sfx.vol = { music: this.settings.music, sfx: this.settings.sfx, ambience: this.settings.ambience };
+    this.sfx.muted = this.settings.muted;
     this.started = false;
+    this.paused = false; // settings open
+    this.onTitle = false; // left the game (back on the title screen)
+    this.applyQuality(this.settings.quality);
     window.addEventListener('resize', () => this.onResize());
+    // app in the background: save, and let the music and ambience rest
+    document.addEventListener('visibilitychange', () => {
+      if (!this.started) return;
+      if (document.hidden) { this.save(); this.sfx.sleep(); } else if (!this.onTitle) this.sfx.wake();
+    });
+    window.addEventListener('pagehide', () => this.save());
+  }
+
+  // ---------------------------------------------------------------- settings
+  setSetting(key, value) {
+    this.settings[key] = value;
+    saveSettings(this.settings);
+    if (key === 'music' || key === 'sfx' || key === 'ambience') this.sfx.setVolume(key, value);
+    else if (key === 'muted') this.sfx.setMuted(value);
+    else if (key === 'quality') this.applyQuality(value);
+    else if (key === 'zoom') this.zoomTarget = value;
+  }
+
+  // High: sharp, shadows and glow. Low: fewer pixels, no shadows, no bloom (older phones).
+  applyQuality(q) {
+    const low = q === 'low';
+    const ratio = Math.min(window.devicePixelRatio, low ? 1 : this.lowSpec ? 1.5 : 1.75);
+    this.renderer.setPixelRatio(ratio);
+    this.composer.setPixelRatio(ratio);
+    this.bloom.enabled = !low;
+    this.sun.castShadow = !low;
+    this.onResize();
+  }
+
+  // "Leave game": save, stop everything and show the title screen (main.js); resume() comes back.
+  leave() {
+    if (this.onTitle) return;
+    this.save();
+    this.ui.closeSettings(true);
+    this.ui.closeInventory();
+    this.ui.togglePanel('help', false);
+    this.onTitle = true;
+    this.paused = true;
+    this.sfx.music?.play(null);
+    this.sfx.sleep();
+    this.onLeave?.();
+  }
+
+  resume() {
+    this.onTitle = false;
+    this.paused = false;
+    this.sfx.wake();
+    this.last = performance.now();
   }
 
   async init(onProgress) {
@@ -163,7 +218,8 @@ export class Game {
   bindInput() {
     const input = this.input;
     input.onKey = (code, e) => {
-      if (!this.started || e.repeat) return;
+      if (!this.started || e.repeat || this.onTitle) return;
+      if (this.paused && code !== 'Escape' && code !== 'KeyM') return; // settings open: the game waits
       const p = this.player;
       switch (code) {
         case 'Digit1': case 'Digit2': case 'Digit3': case 'Digit4':
@@ -174,16 +230,22 @@ export class Game {
         case 'KeyH': this.ui.togglePanel('help'); break;
         case 'KeyE': this.interact(); break;
         case 'KeyM': this.ui.toggleSound(); break;
-        case 'Escape': this.ui.togglePanel('inventory', false); this.ui.togglePanel('help', false); break;
+        case 'Escape': this.ui.escape(); break;
         default: break;
       }
     };
     input.bindCanvas(this.renderer.domElement, (dir) => {
       this.zoomTarget = clamp(this.zoomTarget + dir * 0.1, 0.6, 1.5);
+      this.settings.zoom = this.zoomTarget;
+      saveSettings(this.settings);
     });
     input.bindStick(document.getElementById('stick-zone'), document.getElementById('stick'), document.getElementById('stick-knob'));
     input.onModeChange = (touch) => this.ui.setTouchMode(touch);
-    window.addEventListener('pointerdown', () => this.sfx.init(), { once: true });
+    // audio may only start (or restart, e.g. on iPhone after the app was in the background) on a tap
+    window.addEventListener('pointerdown', () => {
+      this.sfx.init();
+      if (!this.onTitle && this.started && this.sfx.ctx?.state !== 'running') this.sfx.wake();
+    });
     this.ui.setTouchMode(input.touchMode);
   }
 
@@ -416,6 +478,12 @@ export class Game {
   }
 
   frame(rawDt) {
+    if (this.onTitle) return; // the title screen covers everything
+    if (this.paused) { // settings open: hold still, but keep the camera (zoom slider) and picture alive
+      this.updateCamera(rawDt);
+      this.composer.render();
+      return;
+    }
     rawDt *= this.timeScale ?? 1;
     let dt = rawDt;
     if (this.hitstop > 0) {
@@ -463,12 +531,29 @@ export class Game {
       this.ui.el.zoneName.textContent = zone ? zone.name : 'The Wilds';
     }
     this.ui.setBoss(this.enemies.boss);
+    this.updateSound(rawDt, zone, inside);
 
     this.fx.update(dt);
     this.updateCamera(rawDt);
     this.ui.update(rawDt);
     this.doll.update(rawDt);
     this.composer.render();
+  }
+
+  // Music follows where you are (and boss fights); ambience follows what's around you.
+  updateSound(dt, zone, inside) {
+    const sfx = this.sfx;
+    if (!sfx.music) return;
+    sfx.music.play(this.enemies.boss ? 'boss' : inside ? 'crypt' : 'world');
+    const p = this.player.pos;
+    let fire = Infinity;
+    this.outdoorFires ||= [...this.world.fires, ...this.world.spiritFires];
+    for (const f of inside ? this.dungeon.flames : this.outdoorFires) fire = Math.min(fire, f.distanceTo(p));
+    sfx.ambience.update(dt, { inside, zone: zone?.id, fire, pond: Math.hypot(p.x - POND.x, p.z - POND.z) });
+    if (inside !== this.soundInside) { // the crypt echoes
+      this.soundInside = inside;
+      sfx.setReverb('ambience', inside ? 0.55 : 0.2);
+    }
   }
 
   onResize() {

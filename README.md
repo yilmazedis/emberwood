@@ -25,7 +25,7 @@ Live at https://emberwood.kerimcaglar.com. Two ways to host it:
 
 ## Controls
 
-**Desktop:** WASD to move · left click to attack (hold to keep swinging) · 1–4 skills · Q ale (heal) · I bag · E use what's in reach (merchant, stash, notice board, the crypt door, chests) · mouse wheel to zoom
+**Desktop:** WASD to move · left click to attack (hold to keep swinging) · 1–4 skills · Q ale (heal) · I bag · E use what's in reach (merchant, stash, notice board, the crypt door, chests) · mouse wheel to zoom · Esc settings · M mute
 
 **Phones and tablets** (switches automatically on the first touch): a floating joystick on the left half of the screen
 (push a little to walk, fully to run), a hold-to-attack sword button and skill buttons on the right. On touch screens,
@@ -47,6 +47,20 @@ the sanctum of **Morvain the Lich**. He fires bolt volleys, drops violet grave c
 (step out!), raises skeletons at 70% and 40% life, blinks away when you stand on top of him, and is enraged below
 30%. When he falls, his minions crumble and the hoard behind him opens. The stairs in the first room lead back up.
 The story's last quest sends you down there.
+
+## Sound and settings
+
+Everything you hear is synthesized live with WebAudio; there are no audio files.
+- **Music** (`music.js`): small synth instruments (harp, pads, flute, bass, bells, brass, taiko drums) play seeded,
+  slowly changing patterns, so it never loops exactly. A folk theme in D dorian outdoors, a dark drone with distant bells
+  in the crypt, and a drum-driven battle theme whenever a boss is fighting you; they crossfade.
+- **Ambience** (`ambience.js`): wind and birdsong in the woods, crows and stronger wind in the graveyard, water by the
+  pond, crackling near fires; in the crypt a low rumble, a draft, dripping water and more echo.
+- **Settings** (Esc, or the Settings button): music, sound effect and ambience volume, mute, graphics quality (Low turns
+  off shadows and glow and draws fewer pixels, for older phones), camera distance (phones have no mouse wheel), and
+  **Leave game**, which saves and returns to the title screen (Continue picks up where you were). The game pauses while
+  the settings are open, and the sound rests while the app is in the background. Settings are kept in the browser
+  (`emberwood-settings`), separate from the save.
 
 ## Install as an app (PWA)
 
@@ -89,7 +103,7 @@ Variants: `?size=192`, `?size=512&maskable` (Android adaptive icon), `?size=180&
 | Slimes | Generated in code (`enemies.js`) |
 | Inventory icons and portrait | Rendered at startup from the same 3D models (`assets.js`) |
 | Fire, sparks, slash arcs, glow | Particles, shaders and bloom (`fx.js`) |
-| Sound | Synthesized with WebAudio (`audio.js`) |
+| Sound effects, music and ambience | Synthesized with WebAudio (`audio.js`, `music.js`, `ambience.js`) |
 
 ## Code map
 
@@ -101,6 +115,8 @@ Variants: `?size=192`, `?size=512&maskable` (Android adaptive icon), `?size=180&
 - `src/gear.js`: procedural glove/boot/ring models
 - `src/town.js`: the camp: merchant, stall, stash chest, notice board, shop stock, buyback, stash transfers
 - `src/dungeon.js`: the crypt: map, walls and paths around them, torch lights, chests, the way in and out
+- `src/audio.js`, `src/music.js`, `src/ambience.js`: sound effects, generative music, ambience (mixer and volumes in `audio.js`)
+- `src/settings.js`: saved player settings
 - `src/quests.js`: the story quests, bounty templates, progress and rewards
 - `src/combat.js`: projectiles and ground loot
 - `src/ui.js`, `style.css`: HUD, action bar, minimap, inventory, tooltips

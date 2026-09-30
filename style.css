@@ -232,7 +232,7 @@ html, body {
   user-select: none;
   -webkit-tap-highlight-color: transparent;
 }
-#inventory, #help { touch-action: pan-y; }
+#inventory, #help, #settings { touch-action: pan-y; }
 button { touch-action: manipulation; }
 
 body:not(.touch) .touch-only { display: none !important; }
@@ -466,3 +466,41 @@ body.touch #tracker { top: calc(106px + var(--sat)); width: 200px; gap: 5px; }
 @media (max-width: 900px) {
   body:not(.touch) #ui:has(#boss:not(.hidden)) #tracker { display: none; }
 }
+
+/* ------------------------------------------------------------------ settings */
+#settings {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 25;
+  width: min(400px, calc(100vw - 24px)); max-height: calc(100vh - 24px); overflow-y: auto; padding: 0 18px 16px;
+  box-shadow: 0 0 0 100vmax rgba(5, 4, 3, 0.45), 0 8px 30px rgba(0, 0, 0, 0.45); /* dims the paused game */
+}
+#settings header { display: flex; justify-content: space-between; align-items: center; padding: 10px 0 8px; font: 800 16px Cinzel, serif; color: var(--gold); border-bottom: 1px solid rgba(201, 162, 90, .25); margin-bottom: 2px; }
+#settings header small { font: 500 11px Inter, sans-serif; color: var(--muted); margin-left: 8px; letter-spacing: 0; }
+.set-sec { font: 800 12.5px Cinzel, serif; color: var(--gold); letter-spacing: .5px; margin: 14px 0 4px; }
+.set-row { display: grid; grid-template-columns: 120px 1fr 36px; align-items: center; gap: 10px; min-height: 36px; font: 600 13px Inter, sans-serif; color: var(--text); }
+.set-row output { font: 700 12px Inter, sans-serif; color: var(--muted); text-align: right; }
+.set-row.check { grid-template-columns: 1fr auto; cursor: pointer; }
+.set-row input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 6px; margin: 0; border-radius: 3px; background: #120d09; border: 1px solid #3b2d1d; outline: none; touch-action: none; }
+.set-row input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 18px; height: 18px; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #f6e2b0, #c9a25a 60%, #7a5f36); border: 1px solid #3a2a14; cursor: pointer; }
+.set-row input[type=range]::-moz-range-thumb { width: 18px; height: 18px; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #f6e2b0, #c9a25a 60%, #7a5f36); border: 1px solid #3a2a14; cursor: pointer; }
+.set-row input[type=checkbox] { width: 20px; height: 20px; margin: 0; accent-color: #c9a25a; }
+.seg { grid-column: 2 / 4; display: flex; gap: 6px; }
+.seg button { flex: 1; padding: 6px 0; }
+.seg button.on { color: #221606; font-weight: 800; background: linear-gradient(#ffe7a6, #d9a53a); border-color: #f5d27a; }
+.set-note { margin: 4px 0 2px; font: 500 11.5px/1.4 Inter, sans-serif; color: var(--muted); }
+#leave-game { margin: 4px 0 0; }
+body.touch .set-row { min-height: 46px; font-size: 14px; }
+body.touch .set-row input[type=range]::-webkit-slider-thumb { width: 26px; height: 26px; }
+body.touch .set-row input[type=range]::-moz-range-thumb { width: 26px; height: 26px; }
+body.touch .seg button { padding: 10px 0; font-size: 14px; }
+@media (max-height: 520px) and (orientation: landscape) {
+  /* short screens: sound on the left, graphics and the rest on the right */
+  #settings { width: min(720px, calc(100vw - 24px)); }
+  .set-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 0 26px; }
+  .set-sec { margin-top: 8px; }
+  body.touch .set-row { min-height: 40px; }
+  .set-note { margin-top: 2px; }
+}
+
+/* the title screen again, after "Leave game" */
+#loading.away { display: none; }
+#loading.returned .load-bar { display: none; }
