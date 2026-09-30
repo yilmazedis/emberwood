@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Emberwood</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<div id="game"></div>
+
+<div id="ui">
+  <div id="plates"></div>
+  <div id="floaters"></div>
+  <div id="vignette"></div>
+
+  <div id="hud-player" class="panel">
+    <div class="portrait"><img id="portrait" alt=""><span id="lvl">1</span></div>
+    <div class="bars">
+      <div class="pname">Sir Ember <small>Knight</small></div>
+      <div class="bar hp"><div class="fill" id="hp-fill"></div><span id="hp-text"></span></div>
+      <div class="bar mp"><div class="fill" id="mp-fill"></div><span id="mp-text"></span></div>
+    </div>
+  </div>
+
+  <div id="boss" class="hidden">
+    <div id="boss-name"></div>
+    <div class="bar bossbar"><div class="fill" id="boss-fill"></div></div>
+  </div>
+
+  <div id="zone-toast"></div>
+  <div id="center-msg"></div>
+
+  <div id="minimap-wrap" class="panel"><canvas id="minimap" width="180" height="180"></canvas><div id="zone-name"></div></div>
+
+  <div id="log"></div>
+
+  <div id="actionbar">
+    <div id="xpbar"><div id="xp-fill"></div><span id="xp-text"></span></div>
+    <div id="slots"></div>
+  </div>
+
+  <div id="menu-buttons">
+    <button id="btn-bag" title="Inventory (I)">Bag <kbd>I</kbd></button>
+    <button id="btn-help" title="Controls (H)">Help <kbd>H</kbd></button>
+    <button id="btn-sound" title="Sound (M)">Sound <kbd>M</kbd></button>
+  </div>
+
+  <div id="inventory" class="panel hidden">
+    <header><span>Character</span><button class="close" data-close="inventory">×</button></header>
+    <div class="doll">
+      <div class="eq-col">
+        <div class="eq-slot" data-slot="head"><span>Head</span></div>
+        <div class="eq-slot" data-slot="weapon"><span>Weapon</span></div>
+      </div>
+      <canvas id="doll-canvas" width="180" height="220"></canvas>
+      <div class="eq-col">
+        <div class="eq-slot" data-slot="back"><span>Back</span></div>
+        <div class="eq-slot" data-slot="offhand"><span>Off-hand</span></div>
+      </div>
+    </div>
+    <div id="stats"></div>
+    <div class="bag-title">Bag <small>click to equip · right-click to sell</small></div>
+    <div id="bag"></div>
+    <footer><span class="gold"><i class="coin"></i><b id="gold">0</b></span><button id="buy-ale">Buy Ale · 25g</button></footer>
+  </div>
+
+  <div id="tooltip" class="hidden"></div>
+
+  <div id="help" class="panel hidden">
+    <header><span>Controls</span><button class="close" data-close="help">×</button></header>
+    <ul>
+      <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Move</li>
+      <li><kbd>Left click</kbd> Attack toward cursor (hold to keep swinging)</li>
+      <li><kbd>1</kbd>–<kbd>4</kbd> Skills, aimed at the cursor</li>
+      <li><kbd>Q</kbd> Drink ale (heal)</li>
+      <li><kbd>I</kbd> / <kbd>B</kbd> Character &amp; bag</li>
+      <li><kbd>Mouse wheel</kbd> Zoom</li>
+      <li>Walk over loot to pick it up. The camp is safe and heals you fast.</li>
+    </ul>
+  </div>
+
+  <div id="death" class="hidden">
+    <h1>You have fallen</h1>
+    <p>Your gold pouch feels lighter…</p>
+    <button id="respawn">Rise again at camp</button>
+  </div>
+
+  <div id="loading">
+    <div class="title">Emberwood</div>
+    <div class="subtitle">a tiny action RPG</div>
+    <div class="load-bar"><div id="load-fill"></div></div>
+    <div id="load-text">Loading…</div>
+    <button id="start" class="hidden">Enter the woods</button>
+    <div class="load-help">WASD move · Click attack · 1–4 skills · Q ale · I bag</div>
+  </div>
+</div>
+
+<script type="module" src="src/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,26 @@
+# Emberwood: static hosting settings for Apache / LiteSpeed.
+
+# Never serve git metadata (the site is deployed with `git pull` into the web root).
+RedirectMatch 404 /\.git
+
+<IfModule mod_mime.c>
+  AddType text/javascript .js
+  AddType model/gltf-binary .glb
+  AddType model/gltf+json .gltf
+  AddType application/octet-stream .bin
+</IfModule>
+
+<IfModule mod_headers.c>
+  # Code changes on every deploy: make browsers re-check it so players get updates.
+  <FilesMatch "\.(html|js|css)$">
+    Header set Cache-Control "no-cache"
+  </FilesMatch>
+  # Models and textures rarely change.
+  <FilesMatch "\.(glb|gltf|bin|png)$">
+    Header set Cache-Control "public, max-age=604800"
+  </FilesMatch>
+</IfModule>
+
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE text/html text/css text/javascript application/javascript model/gltf+json application/octet-stream
+</IfModule>
