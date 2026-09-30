@@ -27,6 +27,9 @@ server would, answers pings, and reports its CPU speed, memory and process. `cli
 node tools/hosting-test/client.mjs https://gameserver.<your domain> 10
 ```
 
+Careful on shared hosting: opening dozens of connections from one address can get that address blocked
+by the host's web server for a few minutes (hyperion does this somewhere between 50 and 80).
+
 It reports request and round-trip times, whether the 20-per-second updates arrive on time, how many
 connections the host allows at once, whether they are all served by one process (a game world needs
 exactly one), and whether they stay open for the given number of minutes.

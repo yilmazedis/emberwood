@@ -4,7 +4,7 @@
 //   node tools/hosting-test/client.mjs https://gameserver.example.com [minutes to hold connections]
 const BASE = (process.argv[2] || 'http://localhost:3000').replace(/\/$/, '');
 const HOLD_MIN = Number(process.argv[3] ?? 10);
-const WS_URL = BASE.replace(/^http/, 'ws');
+const WS_URL = `${BASE.replace(/^http/, 'ws')}/ws`; // not "/": a host may serve its own index page there
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const stats = (xs) => {
   if (!xs.length) return 'none';
@@ -65,7 +65,7 @@ console.log(`\nHosting test against ${BASE}\n`);
 // 1) plain requests
 const reqMs = [];
 let st = null;
-for (let i = 0; i < 5; i++) { const r = await getJSON('/'); reqMs.push(r.ms); st = r.body; }
+for (let i = 0; i < 5; i++) { const r = await getJSON('/status'); reqMs.push(r.ms); st = r.body; }
 log(`requests: ${stats(reqMs)}`);
 log(`server: Node ${st.node}, pid ${st.pid}, up ${st.uptimeS}s, ${st.cpus} CPUs visible, load ${st.load.join(' / ')}, memory ${st.rssMB} MB used, ${st.freeMB} of ${st.totalMB} MB free`);
 
@@ -99,7 +99,12 @@ for (const target of [5, 10, 20, 30, 50, 80, 120]) {
   const open = alive(conns);
   const pr = (await Promise.all(open.map((c) => ping(c)))).filter((x) => x !== null);
   const failed = batch.filter((c) => !c.open).length;
-  const status = (await getJSON('/')).body;
+  let status;
+  try { status = (await getJSON('/status')).body; } catch (err) {
+    // shared hosts often cut off an address that opens too many connections (for a few minutes)
+    log(`${target} connections: the host started refusing new requests from this address (${err.cause?.code || err.message}); stopping here`);
+    break;
+  }
   log(`${target} connections: ${open.length} open, ${failed} refused, server sees ${status.clients}; round trips ${stats(pr)}`);
   if (open.length < target * 0.9 || pr.length < open.length * 0.9) { log(`limit reached around ${maxOK} connections`); break; }
   maxOK = target;
@@ -117,7 +122,7 @@ for (let m = 1; m <= HOLD_MIN; m++) {
   const open = alive(keep);
   const pr = (await Promise.all(open.map((c) => ping(c)))).filter((x) => x !== null);
   const rate = open.length ? open.reduce((s, c) => s + c.gaps.length, 0) / open.length / 60 : 0;
-  const s = (await getJSON('/').catch(() => ({ body: {} }))).body;
+  const s = (await getJSON('/status').catch(() => ({ body: {} }))).body;
   log(`minute ${m}: ${open.length}/${keep.length} still open, ${rate.toFixed(1)} updates/s each, round trips ${stats(pr)}; server pid ${s.pid}, up ${s.uptimeS}s`);
 }
 for (const c of conns) try { c.ws.close(); } catch { /* */ }
