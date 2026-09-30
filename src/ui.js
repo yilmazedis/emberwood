@@ -4,7 +4,8 @@ import { Assets } from './assets.js';
 import { RARITY, itemLines, COMPARE_STATS } from './items.js';
 import { SKILLS, xpForLevel, STASH_SIZE } from './player.js';
 import { ALE_PRICE } from './town.js';
-import { ZONES, TOWN } from './world.js';
+import { ZONES, TOWN, CRYPT } from './world.js';
+import { ROOMS } from './dungeon.js';
 import { rand } from './util.js';
 
 const $ = (id) => document.getElementById(id);
@@ -29,7 +30,7 @@ export class UI {
       death: $('death'), vignette: $('vignette'), help: $('help'),
       shop: $('shop'), buyback: $('buyback'), stash: $('stash'), stashCount: $('stash-count'),
       restock: $('restock'), sellCommons: $('sell-commons'), bagHint: $('bag-hint'),
-      questList: $('quest-list'), tracker: $('tracker'),
+      questList: $('quest-list'), tracker: $('tracker'), fade: $('fade'),
     };
     this.plates = [];
     this.floaters = [];
@@ -663,27 +664,35 @@ export class UI {
   }
 
   // ---------------------------------------------------------------- minimap
+  // Where a quest's dashed ring goes on the current map (the crypt quest points at its door from outside).
+  questRing(zoneId, inside) {
+    if (zoneId === 'crypt') return inside ? { x: ROOMS.B.cx, z: ROOMS.B.cz, r: 11 } : { x: CRYPT.x - 2, z: CRYPT.z, r: 3.5 };
+    return inside ? null : ZONES.find((z) => z.id === zoneId) || null;
+  }
+
   drawMinimap() {
-    const g = this.game, ctx = this.mm, S = 180;
-    const base = g.world.minimap, R = base.range;
-    const m = (x, z) => [((x + R) / (2 * R)) * S, ((z + R) / (2 * R)) * S];
+    const g = this.game, ctx = this.mm, S = 180, inside = g.dungeon.inside;
+    const base = inside ? g.dungeon.minimap : g.world.minimap, R = base.range, ox = base.cx || 0, oz = base.cz || 0;
+    const m = (x, z) => [((x - ox + R) / (2 * R)) * S, ((z - oz + R) / (2 * R)) * S];
+    const onMap = ([x, y]) => x > -8 && x < S + 8 && y > -8 && y < S + 8;
     ctx.clearRect(0, 0, S, S);
     ctx.drawImage(base.canvas, 0, 0, S, S);
-    // camp marker
-    const [cx, cy] = m(0, 0);
-    ctx.fillStyle = '#ffcf6a';
-    ctx.strokeStyle = '#3a2a14';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(cx, cy - 5); ctx.lineTo(cx + 5, cy); ctx.lineTo(cx, cy + 5); ctx.lineTo(cx - 5, cy); ctx.closePath();
-    ctx.fill(); ctx.stroke();
+    if (!inside) { // camp marker
+      const [cx, cy] = m(0, 0);
+      ctx.fillStyle = '#ffcf6a';
+      ctx.strokeStyle = '#3a2a14';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - 5); ctx.lineTo(cx + 5, cy); ctx.lineTo(cx, cy + 5); ctx.lineTo(cx - 5, cy); ctx.closePath();
+      ctx.fill(); ctx.stroke();
+    }
     // quest targets: a dashed gold ring on the zone; a gold "!" on the board when it has news
     ctx.save();
     ctx.setLineDash([4, 3]);
     ctx.strokeStyle = 'rgba(255, 210, 90, 0.95)';
     ctx.lineWidth = 1.6;
     for (const { q } of g.quests.tracked()) {
-      const zone = q.state === 'active' && ZONES.find((z) => z.id === q.def.zone);
+      const zone = q.state === 'active' && this.questRing(q.def.zone, inside);
       if (!zone) continue;
       const [zx, zy] = m(zone.x, zone.z);
       ctx.beginPath();
@@ -691,7 +700,7 @@ export class UI {
       ctx.stroke();
     }
     ctx.restore();
-    if (g.quests.markerVisible()) {
+    if (g.quests.markerVisible() && !inside) {
       const [bx, by] = m(TOWN.board.x, TOWN.board.z);
       ctx.font = '900 12px Inter, sans-serif';
       ctx.textAlign = 'center';
@@ -703,13 +712,15 @@ export class UI {
     }
     for (const l of g.loot.list) {
       if (l.kind !== 'item') continue;
-      const [x, y] = m(l.group.position.x, l.group.position.z);
+      const pt = m(l.group.position.x, l.group.position.z);
+      if (!onMap(pt)) continue;
       ctx.fillStyle = RARITY[l.data.rarity].color;
-      ctx.fillRect(x - 2, y - 2, 4, 4);
+      ctx.fillRect(pt[0] - 2, pt[1] - 2, 4, 4);
     }
     for (const e of g.enemies.list) {
       if (!e.alive) continue;
       const [x, y] = m(e.pos.x, e.pos.z);
+      if (!onMap([x, y])) continue;
       ctx.beginPath();
       ctx.arc(x, y, e.def.boss ? 4.5 : 2.3, 0, Math.PI * 2);
       ctx.fillStyle = e.def.boss ? '#ff8a2b' : '#ff4a3a';
@@ -730,6 +741,12 @@ export class UI {
     ctx.lineWidth = 1.5;
     ctx.fill();
     ctx.stroke();
+  }
+
+  // Black screen with a line of text while going down to (or up from) the crypt.
+  fade(on, text = '') {
+    if (text) this.el.fade.querySelector('span').textContent = text;
+    this.el.fade.classList.toggle('on', on);
   }
 
   // ---------------------------------------------------------------- per frame

@@ -1,8 +1,11 @@
-// Monsters: procedural slimes + KayKit humanoids (bandits, cultists, the boss), their AI and respawning.
+// Monsters: procedural slimes + KayKit humanoids (bandits, cultists, the bosses), their AI and respawning.
 import * as THREE from 'three';
 import { Humanoid } from './character.js';
-import { heightAt, resolveCollision, randomWalkablePoint, zoneAt } from './world.js';
+import { heightAt, resolveCollision, randomWalkablePoint, isWalkable, zoneAt } from './world.js';
+import { inDungeon, steer, lineClear, CRYPT_SPAWNS, ROOMS } from './dungeon.js';
 import { rand, randInt, chance, angleDiff, dampAngle, yawTo, clamp, TAU } from './util.js';
+
+const UP = new THREE.Vector3(0, 1, 0);
 
 export const ENEMY_TYPES = {
   slime: { name: 'Slime', kind: 'slime', color: 0x7ed957, size: 0.9, hp: 26, dmg: 5, speed: 3.0, range: 1.35, atkCd: 1.4, aggro: 8.5, xp: 12, radius: 0.55, gold: [1, 4], drop: 0.12 },
@@ -16,6 +19,8 @@ export const ENEMY_TYPES = {
   skeleton_rogue: { name: 'Skeleton Rogue', kind: 'humanoid', model: 'Skeleton_Rogue', weapon: 'Skeleton_Blade', offhand: 'Skeleton_Shield_Small_A', undead: true, eyes: 0xff4a6a, hp: 62, dmg: 11, speed: 5.4, range: 1.8, atkCd: 0.95, atkDur: 0.45, aggro: 12, xp: 38, radius: 0.5, gold: [4, 10], drop: 0.3, loot: 'bone' },
   skeleton_mage: { name: 'Skeleton Mage', kind: 'caster', model: 'Skeleton_Mage', weapon: 'Skeleton_Staff', undead: true, eyes: 0x7dff6a, bolt: 0x5dff8a, hp: 58, dmg: 14, speed: 3.4, range: 12, keep: 8, atkCd: 2.2, aggro: 15, xp: 50, radius: 0.5, gold: [5, 12], drop: 0.35, loot: 'bone' },
   brute: { name: 'Grok the Brute', kind: 'humanoid', model: 'Barbarian', weapon: 'axe_2handed', scale: 1.5, boss: true, hp: 270, dmg: 24, speed: 4.0, range: 2.9, atkCd: 1.7, atkDur: 1.0, aggro: 13, xp: 320, radius: 0.95, gold: [60, 110], drop: 1, respawn: 75 },
+  // the crypt's boss: bolt volleys, erupting grave circles, raises the dead, blinks away when crowded
+  lich: { name: 'Morvain the Lich', kind: 'caster', model: 'Skeleton_Mage', weapon: 'Skeleton_Staff', weaponGlow: 0x8a4dff, tint: 0xd6ccf2, scale: 1.7, boss: true, lich: true, undead: true, eyes: 0xb57dff, bolt: 0xb57dff, hp: 450, dmg: 22, speed: 3.3, range: 15, keep: 7, atkCd: 2.0, aggro: 16, xp: 720, radius: 0.85, gold: [140, 220], drop: 1, respawn: 150 },
 };
 
 export const SPAWNS = [
@@ -35,6 +40,7 @@ export const SPAWNS = [
   { type: 'skeleton_rogue', x: 3, z: 45, r: 9, n: 2, lvl: 6 },
   { type: 'skeleton_warrior', x: 3, z: 47, r: 7, n: 2, lvl: 6 },
   { type: 'skeleton_mage', x: 3, z: 49, r: 6, n: 2, lvl: 7 },
+  ...CRYPT_SPAWNS, // the Forgotten Crypt (dungeon.js); they only rise once someone goes down
 ];
 
 function buildSlime(def) {
@@ -77,6 +83,7 @@ export class Enemy {
     this.dmg = d.dmg * (1 + 0.22 * (this.level - 1));
     this.radius = d.radius * (d.scale || 1);
     this.home = slot.ring ? this.ringPoint(slot) : randomWalkablePoint(slot.x, slot.z, slot.r);
+    this.crypt = inDungeon(slot.x, slot.z); // walls: path around them, and no seeing through them
     this.pos = this.home.clone();
     this.yaw = rand(0, TAU);
     this.state = 'spawn';
@@ -99,7 +106,7 @@ export class Enemy {
       this.obj.scale.setScalar(0.01);
     } else {
       this.h = new Humanoid(d.model, { scale: d.scale || 1, tint: d.tint ?? null });
-      this.h.equip('r', d.weapon);
+      this.h.equip('r', d.weapon, d.weaponGlow ?? null);
       if (d.offhand) this.h.equip('l', d.offhand);
       else if (this.type === 'bandit' && chance(0.5)) this.h.equip('l', 'shield_round');
       if (d.eyes) this.h.setGlow('Glow', d.eyes, 2.6);
@@ -111,6 +118,13 @@ export class Enemy {
     this.obj.rotation.y = this.yaw;
     game.scene.add(this.obj);
     this.plate = game.ui.createPlate(this);
+    if (d.lich) {
+      this.circleT = 5;
+      this.blinkCd = 6;
+      this.closeT = 0;
+      this.raised = [];
+      this.enraged = false;
+    }
   }
 
   ringPoint(slot) {
@@ -138,7 +152,26 @@ export class Enemy {
     this.yaw = dampAngle(this.yaw, yawTo(x - this.pos.x, z - this.pos.z), rate, dt);
   }
 
+  // Can this monster see the player? Always, outside; in the crypt, not through walls (re-checked 5×/s).
+  sees(p) {
+    if (!this.crypt) return true;
+    const t = this.game.time;
+    if (t >= (this.seeAt || 0)) {
+      this.seeAt = t + 0.2;
+      this.canSee = lineClear(this.pos.x, this.pos.z, p.pos.x, p.pos.z, 0.15);
+    }
+    return this.canSee;
+  }
+
   moveToward(x, z, speed, dt) {
+    if (this.crypt) { // head for the next corner of the path instead of into the wall
+      const t = this.game.time;
+      if (t >= (this.navAt || 0) || (this.nav && Math.hypot(this.nav.x - this.pos.x, this.nav.z - this.pos.z) < 0.6)) {
+        this.navAt = t + 0.25;
+        this.nav = steer(this.pos.x, this.pos.z, x, z, this.radius);
+      }
+      if (this.nav) { x = this.nav.x; z = this.nav.z; }
+    }
     const dx = x - this.pos.x, dz = z - this.pos.z;
     const d = Math.hypot(dx, dz);
     if (d < 0.05) return 0;
@@ -228,7 +261,10 @@ export class Enemy {
         const t = Math.min(1, this.stateT / 0.5);
         this.obj.scale.setScalar(d.size * (t < 1 ? 1 + Math.sin(t * Math.PI) * 0.35 : 1) * t);
       }
-      if (this.stateT > (this.h ? 1.0 : 0.5)) this.state = 'idle';
+      if (this.stateT > (this.h ? 1.0 : 0.5)) {
+        this.state = 'idle';
+        if (this.slot.summoned) this.aggro(false); // raised by the Lich: straight into the fight
+      }
       this.sync(dt, 0);
       return;
     }
@@ -249,21 +285,26 @@ export class Enemy {
       if (this.wanderT <= 0) {
         this.wanderTarget = randomWalkablePoint(this.home.x, this.home.z, 4);
         this.wanderT = rand(3, 7);
+        const w = this.wanderTarget; // in the crypt, stay in your own room
+        if (this.crypt && !lineClear(this.home.x, this.home.z, w.x, w.z, this.radius)) this.wanderTarget = null;
       }
       if (this.wanderTarget) {
         speed = this.moveToward(this.wanderTarget.x, this.wanderTarget.z, d.speed * 0.35, dt);
         if (this.pos.distanceTo(this.wanderTarget) < 0.3) this.wanderTarget = null;
       }
-      if (targetable && dist < d.aggro) this.aggro(true);
+      if (targetable && dist < d.aggro && this.sees(p)) this.aggro(true);
     } else if (this.state === 'chase') {
       if (!targetable || distHome > d.aggro * 2.4) {
         this.state = 'return';
+      } else if (d.lich) {
+        speed = this.lichChase(dt, dist, dx, dz);
       } else if (d.kind === 'caster') {
-        if (dist < d.keep * 0.55) {
+        const sees = this.sees(p);
+        if (dist < d.keep * 0.55 && sees) {
           speed = this.moveToward(this.pos.x - dx, this.pos.z - dz, d.speed * 0.8, dt);
-        } else if (dist <= d.range && this.atkCd <= 0) {
+        } else if (dist <= d.range && this.atkCd <= 0 && sees) {
           this.startCast();
-        } else if (dist > d.range * 0.85) {
+        } else if (dist > d.range * 0.85 || !sees) {
           speed = this.moveToward(p.pos.x, p.pos.z, d.speed, dt);
         } else {
           this.faceTo(p.pos.x, p.pos.z, dt);
@@ -279,7 +320,7 @@ export class Enemy {
       speed = this.moveToward(this.home.x, this.home.z, d.speed * 1.2, dt);
       this.hp = Math.min(this.maxHp, this.hp + this.maxHp * 0.4 * dt);
       if (distHome < 0.6) this.state = 'idle';
-      if (targetable && dist < d.aggro * 0.6 && distHome < d.aggro) this.aggro(false);
+      if (targetable && dist < d.aggro * 0.6 && distHome < d.aggro && this.sees(p)) this.aggro(false);
     }
 
     // separation from other enemies and the player
@@ -303,6 +344,94 @@ export class Enemy {
     resolveCollision(this.pos, this.radius);
     this.pos.y = heightAt(this.pos.x, this.pos.z);
     this.sync(dt, speed);
+    if (d.lich && Math.random() < dt * 14) { // a cold violet haze around him
+      const a = rand(0, TAU), r = rand(0.3, 1.1);
+      g.fx.add.emit({ pos: { x: this.pos.x + Math.cos(a) * r, y: this.pos.y + rand(0.2, 2.6), z: this.pos.z + Math.sin(a) * r }, count: 1, spread: 0.1, velSpread: 0.2, vel: { x: 0, y: 0.9, z: 0 }, color: new THREE.Color(this.enraged ? 0xff5ad8 : 0xb57dff).multiplyScalar(2.2), size: 0.2, sizeEnd: 0.02, life: 1.1, drag: 1 });
+    }
+  }
+
+  // ---------------------------------------------------------------- Morvain the Lich
+  lichChase(dt, dist, dx, dz) {
+    const p = this.game.player, d = this.def;
+    const frac = this.hp / this.maxHp;
+    for (const th of [0.7, 0.4]) { // raises the dead at 70% and 40% life
+      if (frac < th && !this.raised.includes(th)) { this.raised.push(th); this.startSummon(); return 0; }
+    }
+    if (frac < 0.3 && !this.enraged) this.enrage();
+    this.circleT -= dt;
+    this.blinkCd -= dt;
+    this.closeT = dist < 3.6 ? this.closeT + dt : Math.max(0, this.closeT - dt);
+    if (this.closeT > 1.8 && this.blinkCd <= 0) { this.blink(); return 0; }
+    const sees = this.sees(p);
+    if (sees && this.circleT <= 0 && dist < 20) { this.startCircles(); return 0; }
+    if (sees && dist <= d.range && this.atkCd <= 0) { this.startCast(); return 0; }
+    if (dist < d.keep * 0.5) return this.moveToward(this.pos.x - dx, this.pos.z - dz, d.speed * 0.8, dt);
+    if (!sees || dist > d.range * 0.85) return this.moveToward(p.pos.x, p.pos.z, d.speed, dt);
+    this.faceTo(p.pos.x, p.pos.z, dt);
+    return 0;
+  }
+
+  startSummon() {
+    const g = this.game;
+    this.attack = { t: 0, dur: 1.5, hitAt: 0.8, hit: false, summon: true };
+    this.h.anim.play('Use_Item', { timeScale: 0.9 });
+    g.dungeon.pulse(1.6);
+    g.sfx.play('summon');
+    g.ui.log('<b>Morvain</b> calls the dead to rise!', 'bad');
+  }
+
+  startCircles() {
+    this.attack = { t: 0, dur: 1.1, hitAt: 0.5, hit: false, circles: true };
+    this.h.anim.play('Interact', { timeScale: 1.2 });
+    this.circleT = this.enraged ? 5.5 : 8;
+    this.game.dungeon.pulse(0.8);
+  }
+
+  // A grave circle bursts: bones and violet fire, and it hurts if you're still standing in it.
+  erupt(at) {
+    const g = this.game, p = g.player;
+    g.fx.ring(at, 0.4, 2.6, 0xb57dff, 0.5);
+    g.fx.burst(new THREE.Vector3(at.x, at.y + 0.3, at.z), 0xb57dff, 26, 5);
+    g.fx.soft.emit({ pos: { x: at.x, y: at.y + 0.3, z: at.z }, count: 10, spread: 0.8, velSpread: 1.5, vel: { x: 0, y: 3, z: 0 }, color: new THREE.Color(0xe8e0d0), size: 0.18, sizeEnd: 0.1, life: 0.8, gravity: 12, drag: 0.6 });
+    g.sfx.play('nova', 0.7);
+    if (this.alive && p.alive && Math.hypot(p.pos.x - at.x, p.pos.z - at.z) < 2.2 + p.radius * 0.5) {
+      g.damagePlayer(this.dmg * 1.3, this);
+      g.shake(0.3);
+    }
+  }
+
+  // Too close for comfort: vanish and reappear across the sanctum.
+  blink() {
+    const g = this.game, p = g.player, B = ROOMS.B;
+    let to = null;
+    for (let i = 0; i < 12 && !to; i++) {
+      const c = randomWalkablePoint(B.cx, B.cz, 8, 1.2);
+      if (Math.hypot(c.x - p.pos.x, c.z - p.pos.z) > 8) to = c;
+    }
+    if (!to) return;
+    const puff = (v) => {
+      g.fx.burst(new THREE.Vector3(v.x, v.y + 1.4, v.z), 0xb57dff, 30, 4);
+      g.fx.soft.emit({ pos: { x: v.x, y: v.y + 1.2, z: v.z }, count: 14, spread: 0.6, velSpread: 1.2, vel: { x: 0, y: 1, z: 0 }, color: new THREE.Color(0x2e2438), alpha: 0.5, size: 1.2, sizeEnd: 2.4, life: 1.2, drag: 2 });
+    };
+    puff(this.pos);
+    this.pos.copy(to);
+    puff(this.pos);
+    this.blinkCd = this.enraged ? 5 : 7;
+    this.closeT = 0;
+    this.atkCd = Math.min(this.atkCd, 0.5);
+    this.nav = null;
+    g.sfx.play('blink');
+  }
+
+  enrage() {
+    const g = this.game;
+    this.enraged = true;
+    this.h.setGlow('Glow', 0xff5ad8, 4);
+    g.ui.log('<b>Morvain</b> is enraged!', 'bad');
+    g.sfx.play('enrage');
+    g.fx.ring(this.pos, 0.5, 6, 0xff5ad8, 0.7);
+    g.dungeon.pulse(2);
+    g.shake(0.4);
   }
 
   startAttack() {
@@ -336,6 +465,29 @@ export class Enemy {
     const a = this.attack, g = this.game, p = g.player, d = this.def;
     a.t += dt;
     if (a.t < a.hitAt) this.faceTo(p.pos.x, p.pos.z, dt, a.slam ? 3 : 8);
+    if (!a.hit && a.t >= a.hitAt && (a.summon || a.circles)) { // the Lich's spells
+      a.hit = true;
+      if (a.summon) {
+        const n = this.enraged ? 4 : 3;
+        for (let i = 0; i < n; i++) {
+          const ang = this.yaw + (i / n) * TAU;
+          g.enemies.summon(i === 0 && this.raised.length > 1 ? 'skeleton_warrior' : 'skeleton_minion', this.level - 1,
+            this.pos.x + Math.sin(ang) * 3.2, this.pos.z + Math.cos(ang) * 3.2, this);
+        }
+      } else {
+        const spots = [{ x: p.pos.x, z: p.pos.z }];
+        for (let i = 1, tries = 0; i < (this.enraged ? 5 : 3) && tries < 30; tries++) {
+          const ang = rand(0, TAU), r = rand(2.5, 5); // on open floor, clear of the walls
+          const x = p.pos.x + Math.cos(ang) * r, z = p.pos.z + Math.sin(ang) * r;
+          if (isWalkable(x, z, 2)) { spots.push({ x, z }); i++; }
+        }
+        for (const s of spots) {
+          const at = new THREE.Vector3(s.x, heightAt(s.x, s.z), s.z);
+          g.fx.telegraph(at, 2.2, 1.25, () => this.erupt(at), 0xb05cff);
+        }
+        g.sfx.play('cast');
+      }
+    }
     if (a.lunge && a.t > 0.2 && a.t < 0.5) {
       const f = Math.min(1, dist / 1.2);
       this.pos.x += Math.sin(this.yaw) * 4 * f * dt;
@@ -347,7 +499,12 @@ export class Enemy {
         const hand = new THREE.Vector3();
         this.h.bones.handslotr.getWorldPosition(hand);
         const target = p.pos.clone().setY(p.pos.y + 1.1);
-        g.projectiles.spawn({ from: hand, to: target, owner: 'enemy', dmg: this.dmg, speed: 11, color: d.bolt || 0xb070ff, radius: 0.35, range: 16, size: 0.3 });
+        const aim = target.clone().sub(hand);
+        const n = d.lich ? (this.enraged ? 5 : 3) : 1; // the Lich fans out a volley
+        for (let i = 0; i < n; i++) {
+          const dir = aim.clone().applyAxisAngle(UP, (i - (n - 1) / 2) * 0.2);
+          g.projectiles.spawn({ from: hand.clone(), dir, owner: 'enemy', dmg: this.dmg, speed: d.lich ? 12 : 11, color: d.bolt || 0xb070ff, radius: 0.35, range: d.lich ? 20 : 16, size: 0.3 });
+        }
       } else if (a.slam) {
         const r = Math.hypot(p.pos.x - a.at.x, p.pos.z - a.at.z);
         g.fx.ring(a.at, 0.5, 4.2, 0xff8a3a, 0.5);
@@ -364,8 +521,8 @@ export class Enemy {
     }
     if (a.t >= a.dur) {
       this.attack = null;
-      this.atkCd = d.atkCd * rand(0.85, 1.15);
-      if (a.cast) this.h.anim.stopOne();
+      if (!a.summon && !a.circles) this.atkCd = d.atkCd * (this.enraged ? 0.7 : 1) * rand(0.85, 1.15);
+      if (a.cast || a.summon || a.circles) this.h.anim.stopOne();
     }
   }
 
@@ -417,9 +574,9 @@ export class EnemyManager {
   }
 
   update(dt) {
-    const p = this.game.player;
+    const p = this.game.player, inside = this.game.dungeon.inside;
     for (const s of this.slots) {
-      if (s.enemy) continue;
+      if (s.enemy || (s.crypt && !inside)) continue;
       s.timer -= dt;
       const far = Math.hypot(p.pos.x - s.x, p.pos.z - s.z) > s.r + 6 || s.timer < -20;
       if (s.timer <= 0 && far) {
@@ -427,7 +584,13 @@ export class EnemyManager {
         this.list.push(s.enemy);
       }
     }
-    for (const e of this.list) e.update(dt);
+    for (const e of this.list) {
+      // nobody near (the other side of the crypt door): don't draw them, and let idle ones rest
+      const far = Math.abs(e.pos.x - p.pos.x) > 90 || Math.abs(e.pos.z - p.pos.z) > 90;
+      if (e.alive) e.obj.visible = !far;
+      if (far && (e.state === 'idle' || e.state === 'spawn')) continue;
+      e.update(dt);
+    }
     for (let i = this.list.length - 1; i >= 0; i--) {
       const e = this.list[i];
       if (e.removed) {
@@ -436,6 +599,16 @@ export class EnemyManager {
         e.slot.timer = e.def.respawn || rand(18, 28);
       }
     }
+  }
+
+  // A monster raised mid-fight (by the Lich): no spawn slot, so it never comes back.
+  summon(type, lvl, x, z, master) {
+    const slot = { type, x, z, r: 1, n: 1, lvl, summoned: true };
+    const e = new Enemy(this.game, slot);
+    e.summoner = master;
+    slot.enemy = e;
+    this.list.push(e);
+    return e;
   }
 
   get boss() {

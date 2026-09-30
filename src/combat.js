@@ -1,7 +1,8 @@
 // Projectiles (player fireballs, cultist orbs) and ground loot.
 import * as THREE from 'three';
 import { cloneItem } from './assets.js';
-import { heightAt } from './world.js';
+import { heightAt, resolveCollision } from './world.js';
+import { inDungeon, wallAt } from './dungeon.js';
 import { RARITY, BASES } from './items.js';
 import { buildGearModel } from './gear.js';
 import { hdr } from './fx.js';
@@ -12,6 +13,15 @@ export class Projectiles {
     this.game = game;
     this.list = [];
     this.geo = new THREE.IcosahedronGeometry(1, 2);
+  }
+
+  clear() {
+    for (const p of this.list) {
+      this.game.scene.remove(p.mesh);
+      p.mesh.material.dispose();
+      this.game.fx.releaseLight(p.light);
+    }
+    this.list = [];
   }
 
   spawn(o) {
@@ -50,6 +60,7 @@ export class Projectiles {
         if (Math.hypot(pl.pos.x - p.pos.x, pl.pos.z - p.pos.z) < pl.radius + p.radius && p.pos.y < pl.pos.y + 2.4) hit = pl;
       }
       if (!hit && p.pos.y < heightAt(p.pos.x, p.pos.z) + 0.05) hit = 'ground';
+      if (!hit && inDungeon(p.pos.x, p.pos.z) && wallAt(p.pos.x, p.pos.z)) hit = 'ground'; // crypt walls stop bolts
       if (hit || p.traveled > p.range) {
         this.explode(p, hit);
         g.scene.remove(p.mesh);
@@ -191,6 +202,7 @@ export class LootManager {
       if (!l.landed) {
         l.vel.y -= 16 * dt;
         gp.addScaledVector(l.vel, dt);
+        if (inDungeon(gp.x, gp.z)) resolveCollision(gp, 0.35); // don't land inside a crypt wall
         l.obj.rotation.y += dt * 8;
         if (gp.y <= ground && l.vel.y < 0) {
           gp.y = ground;

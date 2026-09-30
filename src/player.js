@@ -423,7 +423,9 @@ export class Player {
 
   respawn() {
     this.alive = true;
+    if (this.game.dungeon.inside) this.game.dungeon.setInside(false); // back to camp from the crypt
     this.pos.set(0, heightAt(0, 3.5), 3.5);
+    this.game.camFocus.copy(this.pos);
     this.hp = this.stats.maxHp;
     this.mp = this.stats.maxMp;
     this.yaw = this.targetYaw = Math.PI;

@@ -17,6 +17,7 @@ import { randomItem } from './items.js';
 import { Input } from './input.js';
 import { Town } from './town.js';
 import { Quests } from './quests.js';
+import { Dungeon } from './dungeon.js';
 import { angleDiff, yawTo, randInt, rand, chance, clamp } from './util.js';
 
 const SAVE_KEY = 'emberwood-save-v1';
@@ -35,6 +36,7 @@ export class Game {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    this.renderer.localClippingEnabled = true; // the crypt's camera-side walls are clipped (dungeon.js)
     container.appendChild(this.renderer.domElement);
 
     this.scene = new THREE.Scene();
@@ -119,6 +121,12 @@ export class Game {
     this.spiritLight.position.copy(this.world.spiritLight);
     this.scene.add(this.spiritLight);
     this.fireAcc = 0;
+    // these four become the nearest torches in the crypt; remember how they were set up
+    this.staticLights = [...this.fireLights, cl, this.spiritLight].map((light) => ({
+      light, pos: light.position.clone(), color: light.color.clone(), distance: light.distance, decay: light.decay, intensity: light.intensity,
+    }));
+    this.dungeon = new Dungeon(this); // the crypt under the graveyard
+    this.traveling = false;
 
     this.bindInput();
     onProgress(1, 'Ready');
@@ -164,7 +172,7 @@ export class Game {
         case 'KeyQ': p.drinkAle(); break;
         case 'KeyI': case 'KeyB': case 'Tab': this.ui.toggleInventory(); e.preventDefault(); break;
         case 'KeyH': this.ui.togglePanel('help'); break;
-        case 'KeyE': this.town.interact(); break;
+        case 'KeyE': this.interact(); break;
         case 'KeyM': this.ui.toggleSound(); break;
         case 'Escape': this.ui.togglePanel('inventory', false); this.ui.togglePanel('help', false); break;
         default: break;
@@ -177,6 +185,47 @@ export class Game {
     input.onModeChange = (touch) => this.ui.setTouchMode(touch);
     window.addEventListener('pointerdown', () => this.sfx.init(), { once: true });
     this.ui.setTouchMode(input.touchMode);
+  }
+
+  // E / the action button: whatever is in reach (camp stalls, the crypt door and stairs, chests)
+  interact() {
+    if (this.town.near) this.town.interact();
+    else this.dungeon.interact();
+  }
+
+  // Down into the crypt (inside = true) or back up to the graveyard, behind a quick fade.
+  async travel(inside) {
+    if (this.traveling || !this.player.alive) return;
+    this.traveling = true;
+    const ui = this.ui, p = this.player;
+    ui.closeInventory();
+    ui.fade(true, inside ? 'Descending into the crypt…' : 'Climbing back to the graveyard…');
+    this.sfx.play('portal');
+    await new Promise((r) => setTimeout(r, 420));
+    try {
+      if (inside) await this.dungeon.load();
+    } catch (err) {
+      console.warn('crypt failed to load', err);
+      ui.fade(false);
+      ui.centerMsg('The crypt door will not open (could not load the dungeon)');
+      this.traveling = false;
+      return;
+    }
+    const to = inside ? this.dungeon.arrival : this.dungeon.exitPoint;
+    p.pos.set(to.x, heightAt(to.x, to.z), to.z);
+    p.yaw = p.targetYaw = to.yaw;
+    p.group.position.copy(p.pos);
+    this.camFocus.copy(p.pos);
+    this.projectiles.clear();
+    this.dungeon.setInside(inside);
+    this.updateCamera(0);
+    // warm up new shaders while the screen is black (in parallel where the GPU driver allows it)
+    try {
+      if (this.renderer.extensions.has('KHR_parallel_shader_compile')) await this.renderer.compileAsync(this.scene, this.camera);
+      else this.renderer.compile(this.scene, this.camera);
+    } catch { /* they compile on first draw instead */ }
+    ui.fade(false);
+    this.traveling = false;
   }
 
   updateAim() {
@@ -283,6 +332,7 @@ export class Game {
     const at = e.pos.clone();
     if (chance(0.75)) this.loot.dropGold(Math.round(randInt(d.gold[0], d.gold[1]) * (1 + 0.2 * (e.level - 1))), at);
     if (chance(d.boss ? 1 : 0.07)) this.loot.dropPotion(at);
+    if (d.lich) this.dungeon.onLichDefeated(e);
     if (d.boss) {
       this.loot.dropItem(randomItem(e.level + 1, { boost: 3, minRarity: 'rare' }), at);
       this.loot.dropItem(randomItem(e.level, { boost: 2, minRarity: 'magic' }), at);
@@ -378,20 +428,27 @@ export class Game {
     this.updateAim();
     this.player.update(dt);
     this.town.update(dt);
+    this.dungeon.update(dt);
     this.enemies.update(dt);
     this.projectiles.update(dt);
     this.loot.update(dt);
 
     // ambience: campfires, torches, crystal
     this.fireAcc += dt * 34;
-    const pp = this.player.pos;
+    const pp = this.player.pos, inside = this.dungeon.inside;
     while (this.fireAcc >= 1) {
       this.fireAcc -= 1;
+      if (inside) {
+        for (const f of this.dungeon.flames) if (f.distanceTo(pp) < 32) this.fx.fire(f, 0.28);
+        continue;
+      }
       for (const f of this.world.fires) if (f.distanceTo(pp) < 45) this.fx.fire(f, f.y > heightAt(f.x, f.z) + 1 ? 0.55 : 1);
       for (const f of this.world.spiritFires) if (f.distanceTo(pp) < 45) this.fx.fire(f, 0.6, true);
     }
-    this.fireLights.forEach((l, i) => { l.intensity = 11 + Math.sin(this.time * 13 + i) * 1.5 + Math.sin(this.time * 7.3 + i * 2) * 1.5; });
-    this.spiritLight.intensity = 9 + Math.sin(this.time * 3.1) * 2 + Math.sin(this.time * 8.7) * 0.8;
+    if (!inside) { // in the crypt these lights belong to the torches (dungeon.js)
+      this.fireLights.forEach((l, i) => { l.intensity = 11 + Math.sin(this.time * 13 + i) * 1.5 + Math.sin(this.time * 7.3 + i * 2) * 1.5; });
+      this.spiritLight.intensity = 9 + Math.sin(this.time * 3.1) * 2 + Math.sin(this.time * 8.7) * 0.8;
+    }
     const cr = this.world.crystal;
     cr.rotation.y += dt * 0.9;
     cr.position.y = heightAt(cr.position.x, cr.position.z) + 2.3 + Math.sin(this.time * 1.6) * 0.18;

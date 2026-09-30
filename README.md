@@ -1,7 +1,7 @@
 # Emberwood
 
 A small 3D action RPG in the browser: a knight with skills and gear, monsters to farm, and loot to collect.
-It uses Three.js with the free **KayKit Adventurers** and **KayKit Skeletons** packs (CC0, by Kay Lousberg).
+It uses Three.js with the free **KayKit Adventurers**, **Skeletons** and **Dungeon** packs (CC0, by Kay Lousberg).
 
 ## Run it
 
@@ -25,7 +25,7 @@ Live at https://emberwood.kerimcaglar.com. Two ways to host it:
 
 ## Controls
 
-**Desktop:** WASD to move · left click to attack (hold to keep swinging) · 1–4 skills · Q ale (heal) · I bag · E trade / stash / notice board (in camp) · mouse wheel to zoom
+**Desktop:** WASD to move · left click to attack (hold to keep swinging) · 1–4 skills · Q ale (heal) · I bag · E use what's in reach (merchant, stash, notice board, the crypt door, chests) · mouse wheel to zoom
 
 **Phones and tablets** (switches automatically on the first touch): a floating joystick on the left half of the screen
 (push a little to walk, fully to run), a hold-to-attack sword button and skill buttons on the right. On touch screens,
@@ -40,6 +40,13 @@ the cultists at the stones, the graveyard, then Grok) and three bounties that ar
 (slay monsters, pick up gold, find magic items). Accepted quests show under your portrait with their progress, and
 their zone gets a dashed gold ring on the minimap. When one is done, go back to the board to claim gold, XP, ale or
 an item; a golden "!" over the board means there's a new story quest or a reward waiting.
+
+**The Forgotten Crypt:** the crypt door at the east end of the graveyard leads down to a dungeon (level 7 – 9):
+a hall of bones, a chapel, an ossuary and a vault full of skeletons, two chests that refill every few minutes, and
+the sanctum of **Morvain the Lich**. He fires bolt volleys, drops violet grave circles that erupt a moment later
+(step out!), raises skeletons at 70% and 40% life, blinks away when you stand on top of him, and is enraged below
+30%. When he falls, his minions crumble and the hoard behind him opens. The stairs in the first room lead back up.
+The story's last quest sends you down there.
 
 ## Install as an app (PWA)
 
@@ -77,6 +84,8 @@ Variants: `?size=192`, `?size=512&maskable` (Android adaptive icon), `?size=180&
 | Sword swings | Generated in code (`character.js`); the free pack has no attack clips |
 | Terrain, trees, rocks, grass, water, camps, graveyard | Generated in code (`world.js`), flat-shaded to match KayKit |
 | Market stall, stash chest and notice board | Generated in code (`town.js`), with the pack's items as wares on the counter |
+| The crypt: walls, floors, pillars, stairs, torches, banners, chests, props | KayKit Dungeon models (`assets/dungeon`), placed on a 4 m grid and merged into two meshes (`dungeon.js`); walls on the camera side are clipped low |
+| Morvain the Lich | The Skeleton Mage, scaled up and tinted violet, with a glowing staff; his rune circle is a shader (`dungeon.js`) |
 | Slimes | Generated in code (`enemies.js`) |
 | Inventory icons and portrait | Rendered at startup from the same 3D models (`assets.js`) |
 | Fire, sparks, slash arcs, glow | Particles, shaders and bloom (`fx.js`) |
@@ -91,6 +100,7 @@ Variants: `?size=192`, `?size=512&maskable` (Android adaptive icon), `?size=180&
 - `src/items.js`: item bases (weapons, shields, helmets, capes, gloves, boots, rings), rarities, affixes, loot rolls
 - `src/gear.js`: procedural glove/boot/ring models
 - `src/town.js`: the camp: merchant, stall, stash chest, notice board, shop stock, buyback, stash transfers
+- `src/dungeon.js`: the crypt: map, walls and paths around them, torch lights, chests, the way in and out
 - `src/quests.js`: the story quests, bounty templates, progress and rewards
 - `src/combat.js`: projectiles and ground loot
 - `src/ui.js`, `style.css`: HUD, action bar, minimap, inventory, tooltips
@@ -98,7 +108,8 @@ Variants: `?size=192`, `?size=512&maskable` (Android adaptive icon), `?size=180&
 
 ## Adding more art
 
-KayKit's other free packs (Dungeon, Forest, Halloween…) use the same rig and style. The Skeletons pack was added this way:
+KayKit's other free packs (Forest, Halloween…) use the same rig and style. The Skeletons pack was added this way
+(the Dungeon pack's pieces are listed by name in `dungeon.js` and loaded from `assets/dungeon`):
 
 - **New monster:** copy the `.glb` into `assets/characters/`, add its name to `CHARACTERS` in `assets.js`, and add an entry to `ENEMY_TYPES` and `SPAWNS` in `enemies.js`. The skeleton entries show the options: `offhand` (shield), `style: 'chop'`, `eyes` (glow color), `bolt` (caster projectile color), `loot: 'bone'` (loot table).
 - **New weapon or shield:** copy the `.gltf`, `.bin` and texture into `assets/items/`, add the model name to `ITEM_MODELS`, and add a base to `BASES` in `items.js`.

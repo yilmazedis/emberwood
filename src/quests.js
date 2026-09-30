@@ -37,6 +37,12 @@ export const MAIN_QUESTS = [
     goal: { kind: 'kill', type: 'brute', count: 1 },
     reward: { gold: 350, xp: 900, item: { minRarity: 'legendary' } },
   },
+  {
+    id: 'm6', title: 'The Crypt Below', level: 9, zone: 'crypt',
+    text: 'The dead keep rising. Go down through the crypt door in the graveyard and destroy Morvain the Lich.',
+    goal: { kind: 'kill', type: 'lich', count: 1 },
+    reward: { gold: 500, xp: 1500, item: { minRarity: 'legendary', boost: 2 } },
+  },
 ];
 
 // Bounty templates: {n} is rolled from `n` (for gold: about n kills' worth). Rewards scale with the
@@ -48,10 +54,11 @@ const BOUNTIES = [
   { key: 'skeleton', minLevel: 4, title: 'Bone Breaker', text: 'Shatter {n} skeletons in the Forgotten Graveyard.', goal: { kind: 'kill', family: 'skeleton' }, n: [6, 10], zone: 'graveyard', value: 2, item: { minRarity: 'magic' } },
   { key: 'gold', minLevel: 1, title: 'Coin Collector', text: 'Wren wants proof you can turn a profit. Pick up {n} gold from monsters.', goal: { kind: 'gold' }, n: [12, 18], value: 1.2 },
   { key: 'loot', minLevel: 1, title: 'Treasure Hunter', text: 'Find {n} magic or better items out in the wilds.', goal: { kind: 'loot', minRarity: 'magic' }, n: [1, 3], value: 1.5 },
+  { key: 'lich', minLevel: 7, title: 'Lich Bane', text: 'Morvain has risen again in the crypt. Destroy him once more.', goal: { kind: 'kill', type: 'lich' }, n: [1, 1], zone: 'crypt', value: 2.5, item: { minRarity: 'rare' } },
   { key: 'brute', minLevel: 5, title: 'Brute Force', text: 'Grok is back in his lair. Take him down again.', goal: { kind: 'kill', type: 'brute' }, n: [1, 1], zone: 'lair', value: 2, item: { minRarity: 'rare' } },
 ];
 
-const ZONE_LEVEL = { meadow: 1, bandits: 3, stones: 4, graveyard: 5, lair: 6 };
+const ZONE_LEVEL = { meadow: 1, bandits: 3, stones: 4, graveyard: 5, lair: 6, crypt: 8 };
 const RARITY_RANK = { common: 0, magic: 1, rare: 2, legendary: 3 };
 const FAMILY_LABEL = { slime: 'Slimes', bandit: 'Bandits', cultist: 'Cultists', skeleton: 'Skeletons' };
 const familyOf = (type) => (type.startsWith('slime') ? 'slime' : type.startsWith('skeleton') ? 'skeleton' : type);
@@ -208,7 +215,7 @@ export class Quests {
 
   goalLabel(q) {
     const goal = q.def.goal;
-    if (goal.kind === 'kill') return goal.type === 'brute' ? 'Grok defeated' : `${FAMILY_LABEL[goal.family]} slain`;
+    if (goal.kind === 'kill') return goal.type === 'brute' ? 'Grok defeated' : goal.type === 'lich' ? 'Morvain destroyed' : `${FAMILY_LABEL[goal.family]} slain`;
     if (goal.kind === 'gold') return 'Gold picked up';
     return 'Magic+ items found';
   }

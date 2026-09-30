@@ -348,6 +348,7 @@ body.touch #boss-name { font-size: 13px; }
 #inventory, #help { z-index: 20; }
 #tooltip { z-index: 30; }
 #death { z-index: 40; }
+#fade { z-index: 45; }
 #loading { z-index: 50; }
 
 /* item comparison lines in tooltips */
@@ -452,4 +453,16 @@ body.touch #tracker { top: calc(106px + var(--sat)); width: 200px; gap: 5px; }
 @media (max-height: 520px) and (orientation: landscape) {
   body.touch #tracker { gap: 3px; }
   body.touch .trk-bar { display: none; }
+}
+
+/* ------------------------------------------------------------------ the crypt */
+#fade {
+  position: absolute; inset: 0; display: grid; place-items: center; background: #050407;
+  opacity: 0; pointer-events: none; transition: opacity 0.4s;
+}
+#fade.on { opacity: 1; pointer-events: auto; }
+#fade span { font: 700 16px Cinzel, serif; letter-spacing: 1px; color: #b9a6e0; text-shadow: 0 0 18px rgba(150, 90, 255, 0.5); }
+/* narrow desktop windows: the boss bar drops below the portrait, where the quest tracker sits */
+@media (max-width: 900px) {
+  body:not(.touch) #ui:has(#boss:not(.hidden)) #tracker { display: none; }
 }

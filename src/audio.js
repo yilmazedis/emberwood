@@ -92,6 +92,11 @@ export class Sfx {
       case 'heal': [523, 659, 784].forEach((f, i) => this._tone(now + i * 0.06, 0.35, 'sine', f, f * 1.01, 0.12 * v, 0.02)); break;
       case 'quest': [392, 523, 659, 784].forEach((f, i) => this._tone(now + i * 0.08, i === 3 ? 0.7 : 0.25, 'triangle', f, f, 0.18 * v, 0.01)); this._tone(now + 0.24, 0.7, 'sine', 1568, 1568, 0.05 * v, 0.02); break;
       case 'page': this._noise(now, 0.14, 'bandpass', 2600, 1200, 0.22 * v, 1.2); this._noise(now + 0.09, 0.1, 'bandpass', 3400, 1800, 0.14 * v, 1.2); break;
+      case 'portal': this._noise(now, 0.9, 'lowpass', 1400, 160, 0.5 * v, 2); this._tone(now, 0.9, 'sine', 180, 55, 0.35 * v, 0.05); break;
+      case 'nova': this._noise(now, 0.45, 'bandpass', 900, 240, 0.7 * v, 2); this._tone(now, 0.3, 'triangle', 420, 120, 0.18 * v); break;
+      case 'summon': this._tone(now, 1.2, 'sawtooth', 70, 140, 0.12 * v, 0.2); this._tone(now + 0.1, 1.1, 'triangle', 220, 440, 0.12 * v, 0.2); this._noise(now, 1.2, 'bandpass', 300, 900, 0.3 * v, 3); break;
+      case 'blink': this._tone(now, 0.25, 'sine', 1100, 260, 0.2 * v); this._noise(now, 0.2, 'highpass', 3000, 1200, 0.25 * v); break;
+      case 'enrage': this._tone(now, 0.8, 'sawtooth', 130, 65, 0.22 * v, 0.03); this._noise(now, 0.7, 'lowpass', 800, 120, 0.5 * v); break;
       case 'levelup': [523, 659, 784, 1047].forEach((f, i) => this._tone(now + i * 0.1, 0.5, 'triangle', f, f, 0.2 * v, 0.02)); break;
       default: break;
     }

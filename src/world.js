@@ -22,6 +22,8 @@ export const ZONES = [
 ];
 
 export const GRAVEYARD = { x: 3, z: 46, r: 13.5 };
+// The crypt at the east end of the graveyard; its door (facing west) leads down to the dungeon.
+export const CRYPT = { x: GRAVEYARD.x + 8.5, z: GRAVEYARD.z + 1 };
 
 // The north end of camp (facing south toward the fire and the camera): the merchant's stall
 // counter and the stash chest on the west side, the quest notice board on the east. Built in town.js.
@@ -57,7 +59,15 @@ export function pathDist(x, z) {
   return d;
 }
 
+// A walled-off area elsewhere in the scene (the crypt dungeon, see dungeon.js) brings its own
+// floor, walls and zones; the functions below ask it first.
+let region = null;
+export function registerRegion(r) {
+  region = r;
+}
+
 export function heightAt(x, z) {
+  if (region && region.contains(x, z)) return region.floorY;
   let h = 1.35 + fbm(x * 0.028, z * 0.028, 4) * 2.3 + noise2(x * 0.13, z * 0.13) * 0.18;
   h = 0.8 + Math.log1p(Math.exp((h - 0.8) * 3)) / 3; // soft floor → flat meadows in lowlands
   const dc = Math.hypot(x, z);
@@ -70,6 +80,7 @@ export function heightAt(x, z) {
 }
 
 export function zoneAt(x, z) {
+  if (region && region.contains(x, z)) return region.zoneAt(x, z);
   for (const zn of ZONES) if (Math.hypot(x - zn.x, z - zn.z) < zn.r) return zn;
   return null;
 }
@@ -89,12 +100,16 @@ export function addCollider(x, z, r) {
 }
 
 export function resolveCollision(pos, radius) {
-  const d = Math.hypot(pos.x, pos.z);
-  const maxR = WORLD_RADIUS - 2;
-  if (d > maxR) { pos.x *= maxR / d; pos.z *= maxR / d; }
-  const px = pos.x - POND.x, pz = pos.z - POND.z;
-  const dp = Math.hypot(px, pz), pr = POND.r - 0.4 + radius;
-  if (dp < pr && dp > 1e-4) { pos.x = POND.x + (px / dp) * pr; pos.z = POND.z + (pz / dp) * pr; }
+  if (region && region.contains(pos.x, pos.z)) {
+    region.resolve(pos, radius);
+  } else {
+    const d = Math.hypot(pos.x, pos.z);
+    const maxR = WORLD_RADIUS - 2;
+    if (d > maxR) { pos.x *= maxR / d; pos.z *= maxR / d; }
+    const px = pos.x - POND.x, pz = pos.z - POND.z;
+    const dp = Math.hypot(px, pz), pr = POND.r - 0.4 + radius;
+    if (dp < pr && dp > 1e-4) { pos.x = POND.x + (px / dp) * pr; pos.z = POND.z + (pz / dp) * pr; }
+  }
   const ix = Math.floor(pos.x / GRID), iz = Math.floor(pos.z / GRID);
   for (let a = -1; a <= 1; a++) {
     for (let b = -1; b <= 1; b++) {
@@ -114,8 +129,12 @@ export function resolveCollision(pos, radius) {
 }
 
 export function isWalkable(x, z, radius = 0.6) {
-  if (Math.hypot(x, z) > WORLD_RADIUS - 3) return false;
-  if (Math.hypot(x - POND.x, z - POND.z) < POND.r + radius) return false;
+  if (region && region.contains(x, z)) {
+    if (!region.clear(x, z, radius)) return false;
+  } else {
+    if (Math.hypot(x, z) > WORLD_RADIUS - 3) return false;
+    if (Math.hypot(x - POND.x, z - POND.z) < POND.r + radius) return false;
+  }
   const ix = Math.floor(x / GRID), iz = Math.floor(z / GRID);
   for (let a = -1; a <= 1; a++) {
     for (let b = -1; b <= 1; b++) {
@@ -629,7 +648,7 @@ function buildProps(scene, rng) {
 
   // --- Forgotten Graveyard (home of the KayKit skeletons)
   const gv = GRAVEYARD;
-  const crypt = { x: gv.x + 8.5, z: gv.z + 1 };
+  const crypt = CRYPT;
   const spiritFires = [];
   const STONE = 0x979ba0;
   const headstone = (x, z, rotY, kind) => {
@@ -812,7 +831,7 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
   const mapDots = [];
   const props = buildProps(scene, rng);
   buildVegetation(scene, rng, mapDots, lowSpec);
-  buildSky(scene);
+  const sky = buildSky(scene);
   const minimap = buildMinimapBase(mapDots);
-  return { water, fires: props.fires, crystal: props.crystal, spiritFires: props.spiritFires, spiritLight: props.spiritLight, minimap };
+  return { water, sky, fires: props.fires, crystal: props.crystal, spiritFires: props.spiritFires, spiritLight: props.spiritLight, minimap };
 }
