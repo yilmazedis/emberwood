@@ -1,6 +1,7 @@
 // Ambience: wind and birdsong in the woods, crows over the graveyard, water by the pond, crackling
 // near fires; in the crypt a low rumble, a cold draft and dripping water. The steady sounds are looped
-// noise through filters; the rest are little one-off events. Game.frame says what's around you.
+// noise through filters, kept low and moving (steady noise reads as a rushing river and tires the
+// ear); the rest are little one-off events. Game.frame says what's around you.
 export class Ambience {
   constructor(ctx, out, noise) {
     this.ctx = ctx;
@@ -11,21 +12,32 @@ export class Ambience {
     this.gust = 1;
   }
 
-  bed(type, freq, q) {
+  // swell: an optional slow wobble in loudness (hz, depth), e.g. water lapping
+  bed(type, freq, q, swell = null) {
     const c = this.ctx, src = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain();
     src.buffer = this.noise;
     src.loop = true;
     src.playbackRate.value = 0.7 + Math.random() * 0.2;
     f.type = type; f.frequency.value = freq; f.Q.value = q;
     g.gain.value = 0;
-    src.connect(f).connect(g).connect(this.out);
+    let tail = src.connect(f);
+    if (swell) {
+      const amp = c.createGain(), lfo = c.createOscillator(), depth = c.createGain();
+      amp.gain.value = 1 - swell[1];
+      lfo.frequency.value = swell[0];
+      depth.gain.value = swell[1];
+      lfo.connect(depth).connect(amp.gain);
+      lfo.start();
+      tail = tail.connect(amp);
+    }
+    tail.connect(g).connect(this.out);
     src.start(0, Math.random() * 1.5);
     return { f, g, level: 0 };
   }
 
   set(name, level, lag = 0.8) {
     const b = this.beds[name];
-    if (Math.abs(b.level - level) < 0.001) return;
+    if (Math.abs(b.level - level) < 0.002) return;
     b.level = level;
     b.g.gain.setTargetAtTime(level, this.ctx.currentTime, lag);
   }
@@ -33,21 +45,27 @@ export class Ambience {
   // env: { inside, zone, fire (m to the nearest flame), pond (m to the pond) }
   update(dt, env) {
     if (!this.beds) {
-      this.beds = { wind: this.bed('bandpass', 500, 0.8), rumble: this.bed('lowpass', 140, 0.7), water: this.bed('bandpass', 900, 1.2), fire: this.bed('lowpass', 600, 0.5) };
+      this.beds = {
+        wind: this.bed('lowpass', 400, 0.6),
+        rumble: this.bed('lowpass', 120, 0.7),
+        water: this.bed('bandpass', 650, 0.7, [0.23, 0.6]),
+        fire: this.bed('lowpass', 320, 0.6),
+      };
     }
     const { inside, zone, fire, pond } = env, t = this.ctx.currentTime;
     const spooky = zone === 'graveyard' || zone === 'stones';
-    if ((this.timers.wind -= dt) <= 0) { // the wind rises and falls
-      this.timers.wind = 2 + Math.random() * 3;
-      this.beds.wind.f.frequency.setTargetAtTime(inside ? 200 + Math.random() * 250 : 300 + Math.random() * 600, t, 1.5);
-      this.gust = 0.55 + Math.random() * 0.9;
+    if ((this.timers.wind -= dt) <= 0) { // mostly a soft breath; now and then a gust swells and fades
+      const gusting = Math.random() < 0.3;
+      this.timers.wind = gusting ? 2.5 + Math.random() * 2 : 4 + Math.random() * 6;
+      this.gust = gusting ? 0.9 + Math.random() * 0.6 : 0.3 + Math.random() * 0.3;
+      this.beds.wind.f.frequency.setTargetAtTime((inside ? 160 : 260) + this.gust * (inside ? 200 : 380), t, 1.8);
     }
-    this.set('wind', (inside ? 0.22 : spooky ? 0.45 : 0.3) * this.gust, 1.2);
-    this.set('rumble', inside ? 0.5 : 0);
-    this.set('water', !inside && pond < 20 ? 0.35 * (1 - pond / 20) : 0);
-    const near = Math.max(0, 1 - fire / 9);
-    this.set('fire', 0.3 * near, 0.3);
-    if (near > 0 && Math.random() < dt * 16 * near) this.crackle(near);
+    this.set('wind', (inside ? 0.07 : spooky ? 0.13 : 0.1) * this.gust, 1.6);
+    this.set('rumble', inside ? 0.28 : 0, 1.5);
+    this.set('water', !inside && pond < 18 ? 0.1 * (1 - pond / 18) : 0);
+    const near = Math.max(0, 1 - fire / 8);
+    this.set('fire', 0.05 * near, 0.3); // a faint roar: the crackles carry the fire
+    if (near > 0 && Math.random() < dt * 10 * near) this.crackle(near);
     if (!inside && !spooky && (this.timers.bird -= dt) <= 0) { this.timers.bird = 2.5 + Math.random() * 7; this.bird(); }
     if (!inside && zone === 'graveyard' && (this.timers.crow -= dt) <= 0) { this.timers.crow = 9 + Math.random() * 14; this.crow(); }
     if (inside && (this.timers.drip -= dt) <= 0) { this.timers.drip = 1 + Math.random() * 3.5; this.drip(); }
@@ -73,7 +91,7 @@ export class Ambience {
       o.frequency.exponentialRampToValueAtTime(base * (1.25 + Math.random() * 0.4), at + 0.05);
       o.frequency.exponentialRampToValueAtTime(base * 0.8, at + 0.08);
       g.gain.setValueAtTime(0.0001, at);
-      g.gain.exponentialRampToValueAtTime(0.1, at + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.08, at + 0.01);
       g.gain.exponentialRampToValueAtTime(0.0001, at + 0.085);
       o.connect(g).connect(pan);
       o.start(at); o.stop(at + 0.1);
@@ -90,7 +108,7 @@ export class Ambience {
       o.frequency.linearRampToValueAtTime(420, at + 0.2);
       f.type = 'bandpass'; f.frequency.value = 1300; f.Q.value = 3;
       g.gain.setValueAtTime(0.0001, at);
-      g.gain.exponentialRampToValueAtTime(0.1, at + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.08, at + 0.02);
       g.gain.exponentialRampToValueAtTime(0.0001, at + 0.22);
       o.connect(f).connect(g).connect(pan);
       o.start(at); o.stop(at + 0.25);
@@ -104,7 +122,7 @@ export class Ambience {
     o.frequency.setValueAtTime(f0, t);
     o.frequency.exponentialRampToValueAtTime(f0 * 1.9, t + 0.05); // a drop's "plip" rises
     g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(0.14, t + 0.004);
+    g.gain.exponentialRampToValueAtTime(0.1, t + 0.004);
     g.gain.exponentialRampToValueAtTime(0.0001, t + 0.12);
     o.connect(g).connect(pan);
     o.start(t); o.stop(t + 0.15);
@@ -114,9 +132,9 @@ export class Ambience {
     const c = this.ctx, t = c.currentTime + Math.random() * 0.05;
     const src = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain();
     src.buffer = this.noise;
-    f.type = 'bandpass'; f.frequency.value = 1500 + Math.random() * 3500; f.Q.value = 2;
+    f.type = 'bandpass'; f.frequency.value = 900 + Math.random() * 2200; f.Q.value = 1.5; // woody, not sharp
     g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(0.06 + 0.2 * near * Math.random(), t + 0.002);
+    g.gain.exponentialRampToValueAtTime(0.03 + 0.09 * near * Math.random(), t + 0.002);
     g.gain.exponentialRampToValueAtTime(0.0001, t + 0.02 + Math.random() * 0.04);
     src.connect(f).connect(g).connect(this.out);
     src.start(t, Math.random() * 1.8);

@@ -552,7 +552,7 @@ export class Game {
     sfx.ambience.update(dt, { inside, zone: zone?.id, fire, pond: Math.hypot(p.x - POND.x, p.z - POND.z) });
     if (inside !== this.soundInside) { // the crypt echoes
       this.soundInside = inside;
-      sfx.setReverb('ambience', inside ? 0.55 : 0.2);
+      sfx.setReverb('ambience', inside ? 0.45 : 0.06);
     }
   }
 

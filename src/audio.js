@@ -24,7 +24,7 @@ export class Sfx {
     this.ctx = null;
     this.muted = false;
     this.last = {};
-    this.vol = { sfx: 0.8, music: 0.6, ambience: 0.6 }; // replaced by the saved settings (game.js)
+    this.vol = { sfx: 0.8, music: 0.6, ambience: 0.5 }; // replaced by the saved settings (game.js)
     this.music = null;
     this.ambience = null;
   }
@@ -53,7 +53,7 @@ export class Sfx {
         this.bus[k].gain.value = LEVEL[k] * this.vol[k];
         this.bus[k].connect(this.master);
       }
-      for (const [k, amount] of [['music', 0.45], ['ambience', 0.2]]) {
+      for (const [k, amount] of [['music', 0.45], ['ambience', 0.06]]) {
         this.sends[k] = ctx.createGain();
         this.sends[k].gain.value = amount;
         this.bus[k].connect(this.sends[k]).connect(this.reverb);
