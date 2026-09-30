@@ -1,7 +1,8 @@
 # Emberwood: static hosting settings for Apache / LiteSpeed.
 
-# Never serve git metadata (the site is deployed with `git pull` into the web root).
+# Never serve git metadata (the site is deployed with `git pull` into the web root) or logs.
 RedirectMatch 404 /\.git
+RedirectMatch 404 \.log$
 
 <IfModule mod_mime.c>
   AddType text/javascript .js
