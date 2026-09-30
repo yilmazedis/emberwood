@@ -14,6 +14,7 @@ import { UI } from './ui.js';
 import { Doll } from './doll.js';
 import { Sfx } from './audio.js';
 import { randomItem } from './items.js';
+import { Input } from './input.js';
 import { angleDiff, yawTo, randInt, rand, chance, clamp } from './util.js';
 
 const SAVE_KEY = 'emberwood-save-v1';
@@ -22,8 +23,10 @@ export class Game {
   constructor() {
     const container = document.getElementById('game');
     const w = Math.max(1, window.innerWidth), h = Math.max(1, window.innerHeight);
+    // phones and tablets: fewer pixels, smaller shadow map, less grass
+    this.lowSpec = window.matchMedia('(pointer: coarse)').matches;
     this.renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, this.lowSpec ? 1.5 : 1.75));
     this.renderer.setSize(w, h);
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -40,14 +43,14 @@ export class Game {
     this.scene.add(this.hemi);
     this.sun = new THREE.DirectionalLight(0xfff0d6, 2.6);
     this.sun.castShadow = true;
-    this.sun.shadow.mapSize.set(2048, 2048);
+    this.sun.shadow.mapSize.setScalar(this.lowSpec ? 1024 : 2048);
     const sc = this.sun.shadow.camera;
     sc.left = -30; sc.right = 30; sc.top = 30; sc.bottom = -30; sc.near = 1; sc.far = 140;
     this.sun.shadow.bias = -0.0004;
     this.sun.shadow.normalBias = 0.04;
     this.scene.add(this.sun, this.sun.target);
 
-    const rt = new THREE.WebGLRenderTarget(w, h, { type: THREE.HalfFloatType, samples: 4 });
+    const rt = new THREE.WebGLRenderTarget(w, h, { type: THREE.HalfFloatType, samples: this.lowSpec ? 2 : 4 });
     this.composer = new EffectComposer(this.renderer, rt);
     this.composer.setPixelRatio(this.renderer.getPixelRatio());
     this.composer.setSize(w, h);
@@ -56,7 +59,7 @@ export class Game {
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
 
-    this.input = { keys: new Set(), mouse: new THREE.Vector2(), mouseDown: false };
+    this.input = new Input();
     this.raycaster = new THREE.Raycaster();
     this.aimPoint = new THREE.Vector3();
     this.hover = null;
@@ -76,7 +79,7 @@ export class Game {
     await loadAssets((f) => onProgress(f * 0.8, 'Loading models'));
     onProgress(0.85, 'Growing the forest');
     await new Promise((r) => setTimeout(r, 20));
-    this.world = buildWorld(this.scene);
+    this.world = buildWorld(this.scene, { lowSpec: this.lowSpec });
     onProgress(0.92, 'Painting icons');
     await new Promise((r) => setTimeout(r, 20));
     buildIcons();
@@ -126,7 +129,9 @@ export class Game {
     this.sfx.init();
     this.player.h.anim.play('Spawn_Ground', { timeScale: 1.1 });
     this.ui.log('Welcome to <b>Emberwood</b>. Slimes roam the meadow to the north.');
-    this.ui.log('WASD to move · Click to attack · 1–4 skills · Q ale · I bag');
+    this.ui.log(this.input.touchMode
+      ? 'Left thumb moves · hold the sword to attack · skills aim for you'
+      : 'WASD to move · Click to attack · 1–4 skills · Q ale · I bag');
     this.last = performance.now();
     this.ui.zoneToast({ name: 'Emberwood', sub: 'A tiny action RPG' });
     setInterval(() => this.save(), 10000);
@@ -142,41 +147,38 @@ export class Game {
 
   // ---------------------------------------------------------------- input
   bindInput() {
-    const canvas = this.renderer.domElement;
-    window.addEventListener('keydown', (e) => {
-      if (!this.started || e.repeat && !e.code.startsWith('Key') && !e.code.startsWith('Arrow')) return;
-      this.input.keys.add(e.code);
+    const input = this.input;
+    input.onKey = (code, e) => {
+      if (!this.started || e.repeat) return;
       const p = this.player;
-      switch (e.code) {
+      switch (code) {
         case 'Digit1': case 'Digit2': case 'Digit3': case 'Digit4':
-          if (!e.repeat) p.useSkill(Number(e.code.slice(-1)) - 1);
+          p.useSkill(Number(code.slice(-1)) - 1);
           break;
-        case 'KeyQ': if (!e.repeat) p.drinkAle(); break;
-        case 'KeyI': case 'KeyB': case 'Tab': if (!e.repeat) this.ui.toggleInventory(); e.preventDefault(); break;
-        case 'KeyH': if (!e.repeat) this.ui.togglePanel('help'); break;
-        case 'KeyM': if (!e.repeat) this.ui.toggleSound(); break;
+        case 'KeyQ': p.drinkAle(); break;
+        case 'KeyI': case 'KeyB': case 'Tab': this.ui.toggleInventory(); e.preventDefault(); break;
+        case 'KeyH': this.ui.togglePanel('help'); break;
+        case 'KeyM': this.ui.toggleSound(); break;
         case 'Escape': this.ui.togglePanel('inventory', false); this.ui.togglePanel('help', false); break;
         default: break;
       }
+    };
+    input.bindCanvas(this.renderer.domElement, (dir) => {
+      this.zoomTarget = clamp(this.zoomTarget + dir * 0.1, 0.6, 1.5);
     });
-    window.addEventListener('keyup', (e) => this.input.keys.delete(e.code));
-    window.addEventListener('blur', () => { this.input.keys.clear(); this.input.mouseDown = false; });
-    canvas.addEventListener('pointerdown', (e) => {
-      if (e.button === 0) this.input.mouseDown = true;
-      this.sfx.init();
-    });
-    window.addEventListener('pointerup', (e) => { if (e.button === 0) this.input.mouseDown = false; });
-    window.addEventListener('pointermove', (e) => {
-      this.input.mouse.set((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1);
-    });
-    canvas.addEventListener('contextmenu', (e) => e.preventDefault());
-    canvas.addEventListener('wheel', (e) => {
-      this.zoomTarget = clamp(this.zoomTarget + Math.sign(e.deltaY) * 0.1, 0.6, 1.5);
-      e.preventDefault();
-    }, { passive: false });
+    input.bindStick(document.getElementById('stick-zone'), document.getElementById('stick'), document.getElementById('stick-knob'));
+    input.onModeChange = (touch) => this.ui.setTouchMode(touch);
+    window.addEventListener('pointerdown', () => this.sfx.init(), { once: true });
+    this.ui.setTouchMode(input.touchMode);
   }
 
   updateAim() {
+    if (this.input.touchMode) {
+      // no cursor on touch screens: attacks and skills aim themselves (see aim())
+      if (this.hover) this.hover.hover = false;
+      this.hover = null;
+      return;
+    }
     this.raycaster.setFromCamera(this.input.mouse, this.camera);
     const ray = this.raycaster.ray;
     const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -this.player.pos.y);
@@ -198,8 +200,10 @@ export class Game {
   }
 
   // Resolve where an attack should go: hovered enemy, else nearest enemy roughly toward the cursor.
+  // On touch screens: the closest enemy in reach (favouring the one you face), else straight ahead.
   aim(assist) {
     const p = this.player.pos;
+    if (this.input.touchMode) return this.autoAim(assist + 1.5);
     if (this.hover && this.hover.alive) return { target: this.hover, point: this.hover.pos.clone() };
     const dirYaw = yawTo(this.aimPoint.x - p.x, this.aimPoint.z - p.z);
     let best = null, bd = Infinity;
@@ -211,6 +215,22 @@ export class Game {
       if (d < bd) { bd = d; best = e; }
     }
     return { target: best, point: best ? best.pos.clone() : this.aimPoint.clone() };
+  }
+
+  autoAim(range) {
+    const pl = this.player, p = pl.pos;
+    const stick = this.input.stick;
+    const facing = stick.lengthSq() > 0.04 ? yawTo(stick.x, stick.y) : pl.yaw;
+    let best = null, bestScore = Infinity;
+    for (const e of this.enemies.list) {
+      if (!e.alive || e.state === 'spawn') continue;
+      const dx = e.pos.x - p.x, dz = e.pos.z - p.z, d = Math.hypot(dx, dz) - e.radius;
+      if (d > range) continue;
+      const score = d + Math.abs(angleDiff(facing, yawTo(dx, dz))) * 1.5;
+      if (score < bestScore) { bestScore = score; best = e; }
+    }
+    if (best) return { target: best, point: best.pos.clone() };
+    return { target: null, point: new THREE.Vector3(p.x + Math.sin(facing) * 4, p.y, p.z + Math.cos(facing) * 4) };
   }
 
   // ---------------------------------------------------------------- combat
@@ -320,7 +340,9 @@ export class Game {
     const k = dt ? 1 - Math.exp(-9 * dt) : 1;
     this.camFocus.lerp(p, k);
     this.zoom += (this.zoomTarget - this.zoom) * (dt ? 1 - Math.exp(-8 * dt) : 1);
-    const z = this.zoom;
+    // tall (portrait) screens see very little sideways: pull the camera back
+    const aspectZoom = this.camera.aspect < 1 ? Math.min(1.7, 1 / Math.sqrt(this.camera.aspect)) : 1;
+    const z = this.zoom * aspectZoom;
     this.camera.position.set(this.camFocus.x, this.camFocus.y + 12.5 * z, this.camFocus.z + 13 * z);
     if (this.shakeAmt > 0) {
       const s = this.shakeAmt * 0.35;

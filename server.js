@@ -25,9 +25,10 @@ const TYPES = {
   '.glb': 'model/gltf-binary',
   '.gltf': 'model/gltf+json',
   '.bin': 'application/octet-stream',
+  '.webmanifest': 'application/manifest+json',
 };
 const COMPRESSIBLE = new Set(['.html', '.js', '.css', '.json', '.md', '.txt', '.svg', '.gltf', '.bin']);
-const NO_CACHE = new Set(['.html', '.js', '.css']); // code changes on every deploy
+const NO_CACHE = new Set(['.html', '.js', '.css', '.webmanifest']); // code changes on every deploy
 const PRIVATE = new Set(['server.js', 'package.json']);
 
 function send(res, status, body) {

@@ -387,7 +387,7 @@ function openGround(x, z, margin = 0) {
   return true;
 }
 
-function buildVegetation(scene, rng, mapDots) {
+function buildVegetation(scene, rng, mapDots, lowSpec) {
   const pine = makePine(rng);
   const oak = makeOak(rng, 0x5ea542, 0x6cb34b, 0x559c3e);
   const ember = makeOak(rng, 0xe07a2c, 0xf0a13c, 0xc8582a);
@@ -437,7 +437,8 @@ function buildVegetation(scene, rng, mapDots) {
   }
 
   // grass tufts & flowers
-  for (let i = 0; i < 11000; i++) {
+  const TUFTS = lowSpec ? 5500 : 11000, FLOWERS = lowSpec ? 1500 : 2600;
+  for (let i = 0; i < TUFTS; i++) {
     const x = (rng() - 0.5) * 2 * (WORLD_RADIUS + 6), z = (rng() - 0.5) * 2 * (WORLD_RADIUS + 6);
     if (Math.hypot(x, z) > WORLD_RADIUS + 6) continue;
     const h = heightAt(x, z);
@@ -446,7 +447,7 @@ function buildVegetation(scene, rng, mapDots) {
     lists.tuft.push({ x, y: h - 0.05, z, s: 0.7 + rng() * 0.8, rotY: rng() * 6.28, tint: 0.8 + rng() * 0.35 });
   }
   const FLOWER_COLORS = [0xffffff, 0xffe14d, 0xff8fb8, 0xb58cff, 0xff7043, 0x8fd3ff];
-  for (let i = 0; i < 2600; i++) {
+  for (let i = 0; i < FLOWERS; i++) {
     const x = (rng() - 0.5) * 2 * WORLD_RADIUS, z = (rng() - 0.5) * 2 * WORLD_RADIUS;
     if (Math.hypot(x, z) > WORLD_RADIUS || pathDist(x, z) < 2 || Math.hypot(x, z) < 7) continue;
     const n = fbm(x * 0.07 + 5, z * 0.07 - 5, 2);
@@ -798,13 +799,13 @@ function buildMinimapBase(mapDots) {
   return { canvas: c, range: R };
 }
 
-export function buildWorld(scene) {
+export function buildWorld(scene, { lowSpec = false } = {}) {
   const rng = mulberry32(20260930);
   scene.add(buildTerrain(rng));
   const water = buildWater(scene, rng);
   const mapDots = [];
   const props = buildProps(scene, rng);
-  buildVegetation(scene, rng, mapDots);
+  buildVegetation(scene, rng, mapDots, lowSpec);
   buildSky(scene);
   const minimap = buildMinimapBase(mapDots);
   return { water, fires: props.fires, crystal: props.crystal, spiritFires: props.spiritFires, spiritLight: props.spiritLight, minimap };

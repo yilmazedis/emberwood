@@ -37,22 +37,27 @@ export class UI {
 
     // bag slots
     this.bagSlots = [];
+    // Mouse: hover shows the tooltip, click equips, right-click sells.
+    // Touch: tap selects an item and opens a small menu (Equip / Sell), so nothing happens by accident.
     for (let i = 0; i < 20; i++) {
       const d = document.createElement('div');
       d.className = 'bag-slot';
-      d.addEventListener('click', () => { this.game.player.equipFromBag(i); this.hideTip(); this.maybeTip(d); });
-      d.addEventListener('contextmenu', (e) => { e.preventDefault(); this.game.player.sell(i); this.hideTip(); });
-      d.addEventListener('mouseenter', () => this.showTip(d, () => this.game.player.bag[i] && this.itemTip(this.game.player.bag[i], true)));
-      d.addEventListener('mouseleave', () => this.hideTip());
+      d.addEventListener('click', () => this.bagClick(i, d));
+      d.addEventListener('contextmenu', (e) => { e.preventDefault(); if (!this.touch) { this.game.player.sell(i); this.hideTip(); } });
+      d.addEventListener('mouseenter', () => { if (!this.touch) this.showTip(d, () => this.game.player.bag[i] && this.itemTip(this.game.player.bag[i], true)); });
+      d.addEventListener('mouseleave', () => { if (!this.touch) this.hideTip(); });
       this.el.bag.appendChild(d);
       this.bagSlots.push(d);
     }
     for (const d of document.querySelectorAll('.eq-slot')) {
       const slot = d.dataset.slot;
-      d.addEventListener('click', () => { this.game.player.unequip(slot); this.hideTip(); });
-      d.addEventListener('mouseenter', () => this.showTip(d, () => this.game.player.equipment[slot] && this.itemTip(this.game.player.equipment[slot], false)));
-      d.addEventListener('mouseleave', () => this.hideTip());
+      d.addEventListener('click', () => this.equipClick(slot, d));
+      d.addEventListener('mouseenter', () => { if (!this.touch) this.showTip(d, () => this.game.player.equipment[slot] && this.itemTip(this.game.player.equipment[slot], false)); });
+      d.addEventListener('mouseleave', () => { if (!this.touch) this.hideTip(); });
     }
+    document.addEventListener('pointerdown', (e) => {
+      if (this.menuAnchor && !this.el.tooltip.contains(e.target) && !this.menuAnchor.contains(e.target)) this.closeMenu();
+    }, true);
     window.addEventListener('mousemove', (e) => {
       this.mouse.x = e.clientX;
       this.mouse.y = e.clientY;
@@ -67,28 +72,99 @@ export class UI {
     this.buildActionBar();
   }
 
+  setTouchMode(on) {
+    this.touch = on;
+    document.body.classList.toggle('touch', on);
+    this.closeMenu();
+  }
+
+  bagClick(i, d) {
+    const p = this.game.player, item = p.bag[i];
+    if (!this.touch) {
+      p.equipFromBag(i);
+      this.hideTip();
+      this.maybeTip(d);
+      return;
+    }
+    if (!item) return this.closeMenu();
+    this.openMenu(d, this.itemTip(item, true, true), [
+      ['Equip', () => p.equipFromBag(i)],
+      [`Sell · ${item.value}g`, () => p.sell(i)],
+    ]);
+  }
+
+  equipClick(slot, d) {
+    const p = this.game.player, item = p.equipment[slot];
+    if (!this.touch) {
+      p.unequip(slot);
+      this.hideTip();
+      return;
+    }
+    if (!item) return this.closeMenu();
+    this.openMenu(d, this.itemTip(item, false, true), [['Unequip', () => p.unequip(slot)]]);
+  }
+
+  // Tooltip with action buttons, anchored under (or above) a slot. Used on touch screens.
+  openMenu(anchor, html, actions) {
+    this.closeMenu();
+    const t = this.el.tooltip;
+    t.innerHTML = `${html}<div class="tt-actions"></div>`;
+    const row = t.querySelector('.tt-actions');
+    for (const [label, fn] of actions) {
+      const b = document.createElement('button');
+      b.textContent = label;
+      b.addEventListener('click', () => { fn(); this.closeMenu(); });
+      row.appendChild(b);
+    }
+    t.classList.remove('hidden');
+    t.classList.add('menu');
+    this.menuAnchor = anchor;
+    anchor.classList.add('selected');
+    const r = anchor.getBoundingClientRect();
+    const w = t.offsetWidth, h = t.offsetHeight;
+    const x = Math.min(window.innerWidth - w - 8, Math.max(8, r.left + r.width / 2 - w / 2));
+    let y = r.bottom + 8;
+    if (y + h > window.innerHeight - 8) y = Math.max(8, r.top - h - 8);
+    t.style.left = `${x}px`;
+    t.style.top = `${y}px`;
+  }
+
+  closeMenu() {
+    if (!this.menuAnchor) return;
+    this.menuAnchor.classList.remove('selected');
+    this.menuAnchor = null;
+    this.el.tooltip.classList.remove('menu');
+    this.hideTip();
+  }
+
   // ---------------------------------------------------------------- action bar
   buildActionBar() {
     const p = this.game.player;
     const defs = [
-      { key: 'LMB', icon: SKILL_SVG.attack, tip: () => `<div class="tt-name">Attack</div><div class="tt-type">Left mouse · hold to keep swinging</div>Swing your weapon at the cursor. Hits everything in a short arc.` },
+      { key: 'LMB', attack: true, cls: 'slot-attack', icon: SKILL_SVG.attack, tip: () => `<div class="tt-name">Attack</div><div class="tt-type">Left mouse · hold to keep swinging</div>Swing your weapon at the cursor. Hits everything in a short arc.` },
       ...SKILLS.map((s, i) => ({
-        key: s.key, skill: s, icon: SKILL_SVG[s.id], sep: i === 0,
+        key: s.key, skill: s, cls: `slot-s${i + 1}`, icon: SKILL_SVG[s.id], sep: i === 0,
         tip: () => `<div class="tt-name">${s.name}</div><div class="tt-type">${s.mp} mana · ${s.cd}s cooldown${p.level < s.level ? ` · unlocks at level ${s.level}` : ''}</div>${s.desc}`,
       })),
-      { key: 'Q', potion: true, icon: `<img src="${Assets.icons.mug_full}" alt="">`, sep: true, tip: () => `<div class="tt-name">Hearty Ale</div><div class="tt-type">Q · ${p.potions} left</div>Restores 40% of your maximum Life. Buy more in your bag for 25 gold, or find them on monsters.` },
+      { key: 'Q', potion: true, cls: 'slot-potion', icon: `<img src="${Assets.icons.mug_full}" alt="">`, sep: true, tip: () => `<div class="tt-name">Hearty Ale</div><div class="tt-type">Q · ${p.potions} left</div>Restores 40% of your maximum Life. Buy more in your bag for 25 gold, or find them on monsters.` },
     ];
     this.el.slots.innerHTML = '';
     this.slotEls = defs.map((d) => {
       const el = document.createElement('div');
-      el.className = `slot${d.sep ? ' sep' : ''}`;
+      el.className = `slot ${d.cls}${d.sep ? ' sep' : ''}`;
       el.innerHTML = `<div class="icon">${d.icon}</div><div class="cd"></div><div class="cdnum"></div><span class="key">${d.key}</span><span class="count"></span><span class="lock"></span>`;
-      el.addEventListener('mouseenter', () => this.showTip(el, d.tip));
+      el.addEventListener('mouseenter', () => { if (!this.touch) this.showTip(el, d.tip); });
       el.addEventListener('mouseleave', () => this.hideTip());
-      el.addEventListener('click', () => {
-        if (d.skill) p.useSkill(SKILLS.indexOf(d.skill));
-        else if (d.potion) p.drinkAle();
-      });
+      if (d.attack) {
+        this.game.input.bindAttackButton(el);
+      } else {
+        // pointerdown, not click: buttons react the instant a thumb lands
+        el.addEventListener('pointerdown', (e) => {
+          e.preventDefault();
+          if (d.skill) p.useSkill(SKILLS.indexOf(d.skill));
+          else if (d.potion) p.drinkAle();
+        });
+      }
       this.el.slots.appendChild(el);
       return { el, d, cd: el.querySelector('.cd'), cdnum: el.querySelector('.cdnum'), count: el.querySelector('.count'), lock: el.querySelector('.lock'), wasCd: false };
     });
@@ -272,7 +348,7 @@ export class UI {
       this.invOpen = open;
       this.game.doll.visible = open;
       if (open) this.refreshInventory();
-      else this.hideTip();
+      else { this.closeMenu(); this.hideTip(); }
     }
   }
 
@@ -317,7 +393,7 @@ export class UI {
     this.el.stats.innerHTML = rows.map(([k, v]) => `<div><span>${k}</span><b>${v}</b></div>`).join('');
   }
 
-  itemTip(item, fromBag) {
+  itemTip(item, fromBag, noHint = false) {
     const r = RARITY[item.rarity];
     const { main, implicit, aff } = itemLines(item);
     let cmp = '';
@@ -339,7 +415,7 @@ export class UI {
       ${main.map((l) => `<div class="tt-main">${l}</div>`).join('')}
       ${implicit.map((l) => `<div>${l}</div>`).join('')}
       ${aff.map((l) => `<div class="tt-aff">${l}</div>`).join('')}
-      ${cmp}<div class="tt-hint">${hint}</div>`;
+      ${cmp}${noHint ? '' : `<div class="tt-hint">${hint}</div>`}`;
   }
 
   showTip(target, htmlFn) {

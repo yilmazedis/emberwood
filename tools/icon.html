@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<base href="../">
+<title>Emberwood icon</title>
+<!-- Renders the app icon from the game's own Knight model.
+     tools/icon.html?size=512            rounded icon ("any")
+     tools/icon.html?size=512&full       full-bleed square (apple-touch-icon)
+     tools/icon.html?size=512&maskable   full-bleed with a safe-zone margin (Android adaptive icons)
+     Captured with headless Chrome — see README "App icons". -->
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/" } }
+</script>
+<style>
+  html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; }
+  #frame { position: fixed; inset: 0; overflow: hidden;
+    background: radial-gradient(circle at 50% 70%, #ffb44d 0%, #e8672b 20%, #8a2e14 45%, #2b130a 74%, #150a05 100%); }
+  #frame.round { border-radius: 22%; }
+  #frame::after { content: ''; position: absolute; inset: 0; background: radial-gradient(circle at 50% 45%, transparent 55%, rgba(0, 0, 0, 0.35) 100%); }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+</style>
+</head>
+<body>
+<div id="frame"><canvas id="embers"></canvas></div>
+<script type="module">
+import * as THREE from 'three';
+import { loadAssets, cloneCharacter, Assets } from './src/assets.js';
+
+const q = new URLSearchParams(location.search);
+const S = Number(q.get('size') || 512);
+const maskable = q.has('maskable');
+const frame = document.getElementById('frame');
+if (!maskable && !q.has('full')) frame.classList.add('round');
+
+// drifting embers behind the knight
+const ec = document.getElementById('embers');
+ec.width = ec.height = S;
+const ctx = ec.getContext('2d');
+let seed = 7;
+const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+for (let i = 0; i < 26; i++) {
+  const x = rnd() * S, y = S * (0.25 + rnd() * 0.7), r = S * (0.004 + rnd() * 0.01);
+  const g = ctx.createRadialGradient(x, y, 0, x, y, r * 4);
+  g.addColorStop(0, 'rgba(255,230,160,0.95)');
+  g.addColorStop(0.3, 'rgba(255,150,60,0.5)');
+  g.addColorStop(1, 'rgba(255,120,40,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(x, y, r * 4, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+await loadAssets(() => {});
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(1);
+renderer.setSize(S, S);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.1;
+frame.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.add(new THREE.HemisphereLight(0xf2f0ff, 0x4a2010, 1.5));
+const key = new THREE.DirectionalLight(0xffd9a8, 2.6);
+key.position.set(-2, 1.2, 3);
+scene.add(key);
+const rim = new THREE.DirectionalLight(0x9fc4ff, 2.4);
+rim.position.set(3, 2.5, -2.5);
+scene.add(rim);
+const under = new THREE.PointLight(0xff7a2a, 6, 6, 1.5);
+under.position.set(0, 0.6, 1.6);
+scene.add(under);
+
+// the Knight in his idle pose, helmet on
+const k = cloneCharacter('Knight');
+k.meshes.Knight_HelmetVisor.visible = false;
+k.meshes.Knight_Cape.visible = false;
+const mixer = new THREE.AnimationMixer(k.root);
+mixer.clipAction(Assets.clips.Idle_A).play();
+mixer.update(0.3);
+k.root.rotation.y = -0.35;
+scene.add(k.root);
+k.root.updateMatrixWorld(true);
+
+// frame the head and helmet
+const box = new THREE.Box3();
+for (const n of ['Knight_Head', 'Knight_Helmet']) box.expandByObject(k.meshes[n], true);
+const center = box.getCenter(new THREE.Vector3());
+const size = box.getSize(new THREE.Vector3());
+const fill = maskable ? 0.52 : 0.66; // how much of the icon the head fills
+const cam = new THREE.PerspectiveCamera(28, 1, 0.05, 50);
+const dist = (Math.max(size.x, size.y) / fill) / (2 * Math.tan(THREE.MathUtils.degToRad(14)));
+center.y -= size.y * 0.02; // a little room above the helmet, a hint of shoulders below
+cam.position.set(center.x + dist * 0.12, center.y + dist * 0.1, center.z + dist);
+cam.lookAt(center);
+renderer.render(scene, cam);
+document.title = 'ready';
+</script>
+</body>
+</html>

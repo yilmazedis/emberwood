@@ -25,7 +25,32 @@ Live at https://emberwood.kerimcaglar.com. Two ways to host it:
 
 ## Controls
 
-WASD to move · left click to attack (hold to keep swinging) · 1–4 skills · Q ale (heal) · I bag · mouse wheel to zoom
+**Desktop:** WASD to move · left click to attack (hold to keep swinging) · 1–4 skills · Q ale (heal) · I bag · mouse wheel to zoom
+
+**Phones and tablets** (switches automatically on the first touch): a floating joystick on the left half of the screen
+(push a little to walk, fully to run), a hold-to-attack sword button and skill buttons on the right. On touch screens,
+attacks and skills aim at the nearest enemy. In the bag, tap an item to see it, then Equip or Sell.
+
+## Install as an app (PWA)
+
+The site is a Progressive Web App: `manifest.webmanifest` + `sw.js`.
+- **Android / desktop Chrome:** the title screen shows an **Install as app** button (or use the browser menu).
+- **iPhone / iPad:** Safari → Share → **Add to Home Screen** (the title screen explains this on iOS).
+
+Installed, it opens fullscreen in landscape with its own icon. The service worker keeps code network-first,
+so a `git pull` on the server reaches players right away. Models and libraries are cache-first, so after the first
+visit the game also works offline.
+
+## App icons
+
+`icons/` is rendered from the game's own Knight model by `tools/icon.html`. To regenerate after a change,
+serve the folder on port 8766 and run headless Chrome, e.g.:
+
+```bash
+"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --enable-unsafe-swiftshader --use-angle=swiftshader --default-background-color=00000000 --window-size=512,512 --virtual-time-budget=20000 --screenshot=icons/icon-512.png "http://localhost:8766/tools/icon.html?size=512"
+```
+
+Variants: `?size=192`, `?size=512&maskable` (Android adaptive icon), `?size=180&full` (apple-touch-icon), `?size=32` (favicon).
 
 ## Where the graphics come from
 
@@ -46,7 +71,8 @@ WASD to move · left click to attack (hold to keep swinging) · 1–4 skills · 
 
 ## Code map
 
-- `src/game.js`: renderer, camera, input, damage, rewards, save
+- `src/game.js`: renderer, camera, aim, damage, rewards, save
+- `src/input.js`: keyboard, mouse, joystick and touch buttons (also clears keys the browser never "releases")
 - `src/player.js`: stats, leveling, inventory, skills
 - `src/enemies.js`: monster types, spawn table, AI
 - `src/items.js`: item bases, rarities, affixes, loot rolls

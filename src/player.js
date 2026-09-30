@@ -14,6 +14,7 @@ export const SKILLS = [
 ];
 
 export const xpForLevel = (lvl) => Math.round(60 * Math.pow(lvl, 1.55));
+const _axis = new THREE.Vector2();
 
 export function applyEquipmentVisuals(h, eq) {
   const glow = (it) => (it && it.rarity === 'legendary' ? 0xff6a10 : null);
@@ -425,15 +426,13 @@ export class Player {
       }
     }
 
-    const k = g.input.keys;
-    let mx = (k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0);
-    let mz = (k.has('KeyS') || k.has('ArrowDown') ? 1 : 0) - (k.has('KeyW') || k.has('ArrowUp') ? 1 : 0);
-    const len = Math.hypot(mx, mz);
+    const ax = g.input.axis(_axis); // keyboard (0 or 1) or joystick (analog 0..1)
+    const len = Math.min(1, ax.length());
     let speed = 0;
     const spawning = this.h.anim.oneName === 'Spawn_Ground';
-    if (len > 0 && (!this.action || this.action.canMove) && !spawning) {
-      mx /= len; mz /= len;
-      speed = s.moveSpeed * (this.action?.moveMult ?? 1);
+    if (len > 0.01 && (!this.action || this.action.canMove) && !spawning) {
+      const mx = ax.x / len, mz = ax.y / len;
+      speed = s.moveSpeed * (this.action?.moveMult ?? 1) * Math.max(0.35, len);
       this.pos.x += mx * speed * dt;
       this.pos.z += mz * speed * dt;
       if (!this.action?.lockFacing) this.targetYaw = yawTo(mx, mz);
@@ -443,7 +442,8 @@ export class Player {
     this.yaw = dampAngle(this.yaw, this.targetYaw, 16, dt);
     this.group.rotation.y = this.yaw;
 
-    if (speed > 0) this.h.anim.setBase('Running_A', speed / 5.4);
+    if (speed > s.moveSpeed * 0.55) this.h.anim.setBase('Running_A', speed / 5.4);
+    else if (speed > 0) this.h.anim.setBase('Walking_A', Math.max(0.7, speed / 2.2));
     else this.h.anim.setBase('Idle_A');
     if (speed > 0 && this.h.anim.oneName === 'Hit_A') this.h.anim.stopOne();
 
@@ -456,7 +456,7 @@ export class Player {
         const q = this.queued;
         this.queued = null;
         q.fn();
-      } else if (g.input.mouseDown && this.cd.attack <= 0) {
+      } else if (g.input.attacking && this.cd.attack <= 0) {
         this.basicAttack();
       }
     }

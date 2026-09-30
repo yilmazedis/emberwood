@@ -183,13 +183,13 @@ header .close { padding: 0 9px; font-size: 18px; line-height: 24px; }
 /* Loading */
 #loading { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 12px; background: radial-gradient(ellipse at 50% 40%, #2c2114, #0b0806 70%); pointer-events: auto; transition: opacity .8s; }
 #loading.gone { opacity: 0; pointer-events: none; }
-#loading .title { font: 800 72px Cinzel, serif; color: var(--gold); text-shadow: 0 0 40px rgba(255, 140, 40, .35), 0 4px 10px #000; letter-spacing: 3px; }
+#loading .title { font: 800 clamp(38px, 12vw, 72px) Cinzel, serif; color: var(--gold); text-shadow: 0 0 40px rgba(255, 140, 40, .35), 0 4px 10px #000; letter-spacing: 3px; }
 #loading .subtitle { font: 600 14px Inter, sans-serif; color: var(--muted); letter-spacing: 4px; text-transform: uppercase; margin-top: -10px; }
 .load-bar { width: 320px; height: 8px; border-radius: 4px; background: #1a130d; border: 1px solid #3b2d1d; overflow: hidden; margin-top: 18px; }
 #load-fill { height: 100%; width: 0; background: linear-gradient(90deg, #c8421d, var(--gold)); transition: width .2s; }
 #load-text { font-size: 12px; color: var(--muted); }
 #start { font: 800 17px Cinzel, serif; padding: 12px 28px; color: var(--gold); border-color: var(--edge-hi); }
-.load-help { font-size: 12px; color: var(--muted); margin-top: 10px; }
+.load-help { font-size: 12px; color: var(--muted); margin-top: 10px; padding: 0 16px; text-align: center; }
 
 @media (max-width: 900px) {
   .bars { width: 150px; }
@@ -201,3 +201,131 @@ header .close { padding: 0 9px; font-size: 18px; line-height: 24px; }
   .slot { width: 46px; height: 46px; }
   #log { display: none; }
 }
+
+/* ------------------------------------------------------------------ touch screens & installed app */
+:root {
+  --sat: env(safe-area-inset-top, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+}
+html, body {
+  overscroll-behavior: none;
+  touch-action: none;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+#inventory, #help { touch-action: pan-y; }
+button { touch-action: manipulation; }
+
+body:not(.touch) .touch-only { display: none !important; }
+body.touch .desk-only { display: none !important; }
+
+/* keep HUD clear of notches and rounded corners */
+#hud-player { left: calc(16px + var(--sal)); top: calc(16px + var(--sat)); }
+#minimap-wrap { right: calc(16px + var(--sar)); top: calc(16px + var(--sat)); }
+#menu-buttons { right: calc(16px + var(--sar)); bottom: calc(16px + var(--sab)); }
+
+/* floating joystick */
+#stick-zone { position: absolute; left: 0; bottom: 0; width: 46%; height: 70%; display: none; pointer-events: auto; touch-action: none; }
+#stick {
+  position: absolute; left: calc(96px + var(--sal)); top: calc(100% - 108px - var(--sab));
+  width: 124px; height: 124px; margin: -62px 0 0 -62px; border-radius: 50%;
+  border: 2px solid rgba(255, 235, 200, 0.35);
+  background: radial-gradient(circle, rgba(20, 14, 8, 0.4), rgba(20, 14, 8, 0.12));
+  display: none; opacity: 0.4; transition: opacity 0.15s; pointer-events: none;
+}
+#stick.on { opacity: 1; }
+#stick-knob {
+  position: absolute; left: 50%; top: 50%; width: 56px; height: 56px; margin: -28px 0 0 -28px; border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, #f6e2b0, #c9a25a 60%, #7a5f36);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+body.touch #stick-zone, body.touch #stick { display: block; }
+
+/* action buttons: a thumb cluster in the bottom-right corner */
+body.touch #actionbar { display: contents; }
+body.touch #xpbar { position: absolute; left: calc(16px + var(--sal)); top: calc(92px + var(--sat)); width: 230px; height: 7px; }
+body.touch #slots {
+  position: absolute; display: block; right: calc(10px + var(--sar)); bottom: calc(10px + var(--sab));
+  width: 262px; height: 222px; padding: 0; background: none; border: 0; box-shadow: none;
+}
+body.touch .slot {
+  position: absolute; width: 62px; height: 62px; border-radius: 50%; margin: 0;
+  background: radial-gradient(circle at 50% 30%, rgba(60, 46, 31, 0.9), rgba(26, 19, 13, 0.85));
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+}
+body.touch .slot .icon { inset: 13px; }
+body.touch .slot .key { display: none; }
+body.touch .slot .count { right: 50%; transform: translateX(50%); bottom: -1px; font-size: 11px; }
+body.touch .slot .lock { font-size: 10px; }
+body.touch .slot-attack { right: 12px; bottom: 14px; width: 96px; height: 96px; border: 2px solid var(--edge-hi); }
+body.touch .slot-attack .icon { inset: 22px; }
+body.touch .slot-s1 { right: 124px; bottom: 6px; }
+body.touch .slot-s2 { right: 134px; bottom: 82px; }
+body.touch .slot-s3 { right: 86px; bottom: 150px; }
+body.touch .slot-s4 { right: 10px; bottom: 124px; }
+body.touch .slot-potion { right: 200px; bottom: 14px; width: 54px; height: 54px; }
+body.touch .slot.pressed { transform: scale(0.93); box-shadow: 0 0 0 3px rgba(255, 215, 120, 0.5); }
+
+body.touch #menu-buttons { top: calc(150px + var(--sat)); bottom: auto; right: calc(12px + var(--sar)); flex-direction: column; align-items: flex-end; }
+body.touch #menu-buttons button { padding: 9px 14px; }
+body.touch #menu-buttons kbd { display: none; }
+body.touch #minimap-wrap { transform: scale(0.72); transform-origin: top right; }
+body.touch #hud-player { transform: scale(0.85); transform-origin: top left; }
+body.touch #log { display: none; }
+body.touch #center-msg { bottom: auto; top: 30%; }
+body.touch #boss { top: calc(10px + var(--sat)); width: min(240px, 34vw); }
+body.touch #boss-name { font-size: 13px; }
+
+/* touch item menu (tap an item: Equip / Sell) */
+#tooltip.menu { pointer-events: auto; }
+.tt-actions { display: flex; gap: 8px; margin-top: 10px; }
+.tt-actions button { flex: 1; padding: 9px 10px; font-size: 14px; }
+.bag-slot.selected, .eq-slot.selected { outline: 2px solid var(--gold); outline-offset: 1px; }
+
+/* landscape phones: bag in two columns so it fits the short screen */
+@media (max-height: 520px) and (orientation: landscape) {
+  #inventory {
+    top: calc(8px + var(--sat)); bottom: calc(8px + var(--sab)); right: calc(8px + var(--sar)); left: auto;
+    width: min(700px, calc(100vw - 16px)); max-height: none;
+    display: grid; grid-template-columns: 300px 1fr; grid-template-rows: auto 1fr; column-gap: 18px; align-content: start;
+  }
+  #inventory header { grid-column: 1 / -1; }
+  #inventory #stats { margin: 8px 0 0; }
+  #inventory #bag { grid-template-columns: repeat(5, 52px); gap: 6px; justify-content: start; }
+  #inventory .bag-slot { width: 52px; height: 52px; }
+  #inventory .eq-slot { width: 54px; height: 54px; }
+  #doll-canvas { width: 150px; height: 183px; }
+}
+body.touch #inventory { background: rgba(22, 17, 12, 0.96); }
+
+/* install prompt on the title screen */
+#install { font: 700 14px Inter, sans-serif; color: var(--gold); border-color: var(--edge-hi); margin-top: 4px; }
+#ios-install { font-size: 13px; color: var(--text); background: rgba(40, 31, 22, 0.8); border: 1px solid var(--edge); border-radius: 8px; padding: 8px 12px; max-width: 320px; text-align: center; }
+.share-glyph { width: 16px; height: 16px; vertical-align: -3px; color: #6aa9ff; }
+
+/* narrow portrait phones: smaller HUD so the player frame and minimap don't collide */
+@media (max-width: 480px) {
+  body.touch #hud-player { transform: scale(0.72); }
+  body.touch .bars { width: 130px; }
+  body.touch #minimap-wrap { transform: scale(0.52); }
+  body.touch #xpbar { top: calc(74px + var(--sat)); width: 180px; }
+  body.touch #menu-buttons { top: calc(118px + var(--sat)); }
+  #stick { top: calc(100% - 210px - var(--sab)); }
+}
+
+/* landscape phones: menu buttons in a row at the top, clear of the skill cluster */
+@media (max-height: 520px) and (orientation: landscape) {
+  body.touch #menu-buttons { top: calc(14px + var(--sat)); right: auto; left: calc(238px + var(--sal)); flex-direction: row; }
+  body.touch #menu-buttons button { padding: 7px 12px; }
+  body.touch #boss { top: calc(56px + var(--sat)); }
+}
+
+/* overlays stack above the HUD (slot labels use z-index 2–3) */
+#inventory, #help { z-index: 20; }
+#tooltip { z-index: 30; }
+#death { z-index: 40; }
+#loading { z-index: 50; }
