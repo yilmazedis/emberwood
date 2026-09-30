@@ -1,0 +1,10 @@
+{
+  "name": "emberwood-hosting-test",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Can this host run the Emberwood game server? A tiny WebSocket test, not the game.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  }
+}
