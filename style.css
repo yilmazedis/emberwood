@@ -296,9 +296,9 @@ body.touch #boss { top: calc(10px + var(--sat)); width: min(240px, 34vw); }
 body.touch #boss-name { font-size: 13px; }
 
 /* touch item menu (tap an item: Equip / Sell) */
-#tooltip.menu { pointer-events: auto; }
+#tooltip.menu { pointer-events: auto; max-width: min(340px, calc(100vw - 16px)); }
 .tt-actions { display: flex; gap: 8px; margin-top: 10px; }
-.tt-actions button { flex: 1; padding: 9px 10px; font-size: 14px; }
+.tt-actions button { flex: 1; padding: 9px 8px; font-size: 14px; white-space: nowrap; }
 .bag-slot.selected, .eq-slot.selected { outline: 2px solid var(--gold); outline-offset: 1px; }
 
 /* landscape phones: bag in two columns so it fits the short screen */
@@ -318,7 +318,7 @@ body.touch #boss-name { font-size: 13px; }
   #inventory .bag-slot { width: 52px; height: 52px; }
   #inventory .eq-slot { width: 50px; height: 50px; }
   #inventory .eq-col { gap: 10px; }
-  #inventory .eq-row { margin-top: 8px; }
+  #inventory .eq-row { margin-top: 6px; }
   #doll-canvas { width: 130px; height: 159px; }
 }
 
