@@ -1,13 +1,15 @@
-// Emberwood game server: accounts and characters over one WebSocket (/ws), plus a /status page.
-// Messages are JSON objects { t: type, rq?: request number, ... }; a reply carries re: that number.
+// Emberwood game server: accounts, characters and the shared world (src/sim/world.js: monsters, other
+// heroes) over one WebSocket (/ws), plus a /status page. Messages are JSON objects
+// { t: type, rq?: request number, ... }; a reply carries re: that number. The world sends each hero's
+// game an update ten times a second ({ t: 'w', ... }), and chat ({ t: 'chat', ... }) as it happens.
 import http from 'node:http';
 import { attachWebSocket } from './ws.mjs';
 import * as store from './store.mjs';
 import { hashPassword, checkPassword, makeToken, readToken } from './auth.mjs';
 import { CLASSES, MAX_CHARACTERS, NAME_RULE, USER_RULE } from '../src/classes.js';
+import { WorldSim, TICK, PROTOCOL } from '../src/sim/world.js';
 
 const PORT = Number(process.env.PORT) || 8787;
-const PROTOCOL = 1;
 const MAX_SAVE = 200 * 1024; // bytes of JSON per character save
 const secret = store.loadSecret();
 const started = Date.now();
@@ -36,6 +38,35 @@ const online = new Map(); // account (lower case) -> connection
 
 const charList = (acc) => acc.characters.map(({ id, name, cls, level }) => ({ id, name, cls, level }));
 
+// ---------------------------------------------------------------- the world
+const world = new WorldSim();
+const inWorld = new Map(); // hero id in the world (pid) -> connection
+let lastPid = 0;
+const chatLog = []; // the last things said, for heroes who just arrived
+
+// A line from the world itself (someone came or went), to everyone in it.
+function announce(text, except = null) {
+  const msg = { t: 'chat', s: 1, x: text, o: inWorld.size };
+  for (const c of inWorld.values()) if (c !== except) c.send(msg);
+}
+
+function leaveWorld(c, quiet = false) {
+  if (!c.pid) return;
+  world.leave(c.pid);
+  inWorld.delete(c.pid);
+  c.pid = null;
+  if (!quiet && c.char) announce(`${c.char.name} has left.`);
+}
+
+// Ten times a second: the world moves on and every hero's game hears about its surroundings.
+let lastTick = Date.now();
+setInterval(() => {
+  const now = Date.now();
+  const dt = Math.min(0.25, (now - lastTick) / 1000); // (after a stall, don't jump far ahead)
+  lastTick = now;
+  world.step(dt, (pid, msg) => inWorld.get(pid)?.send(msg));
+}, TICK * 1000);
+
 function signIn(c, acc) {
   const other = online.get(acc.lower);
   if (other && other !== c) { // one place at a time: the older session is closed
@@ -43,12 +74,13 @@ function signIn(c, acc) {
     other.acc = null;
     other.close(4001, 'signed in elsewhere');
   }
+  leaveWorld(c, true);
   c.acc = acc;
   c.char = null;
   online.set(acc.lower, c);
   acc.lastLogin = Date.now();
   store.markDirty(acc);
-  return { t: 'auth', user: acc.user, token: makeToken(secret, acc.lower), chars: charList(acc) };
+  return { t: 'auth', user: acc.user, token: makeToken(secret, acc.lower), chars: charList(acc), world: inWorld.size };
 }
 
 function needAccount(c) {
@@ -65,7 +97,7 @@ function checkSave(save) {
 
 // ---------------------------------------------------------------- messages
 const handlers = {
-  hello: () => ({ t: 'hello', v: PROTOCOL, online: online.size }),
+  hello: () => ({ t: 'hello', v: PROTOCOL, online: online.size, world: inWorld.size }),
 
   async register(c, m) {
     throttle(c.ip);
@@ -93,7 +125,7 @@ const handlers = {
   },
 
   chars(c) {
-    return { t: 'chars', chars: charList(needAccount(c)) };
+    return { t: 'chars', chars: charList(needAccount(c)), world: inWorld.size };
   },
 
   createChar(c, m) {
@@ -120,6 +152,7 @@ const handlers = {
     const acc = needAccount(c);
     const ch = acc.characters.find((x) => x.id === m.id);
     if (!ch) throw new Oops('No such character.');
+    leaveWorld(c);
     c.char = ch;
     return { t: 'char', char: { id: ch.id, name: ch.name, cls: ch.cls, save: ch.save } };
   },
@@ -131,7 +164,46 @@ const handlers = {
     return null;
   },
 
+  // The hero steps into the world (its game sends where it stands and how it looks).
+  enter(c, m) {
+    needAccount(c);
+    if (!c.char) throw new Oops('Pick a hero first.');
+    leaveWorld(c, true);
+    c.pid = ++lastPid;
+    world.join(c.pid, { name: c.char.name, cls: c.char.cls, p: m.p, k: m.k });
+    inWorld.set(c.pid, c);
+    announce(`${c.char.name} has entered Emberwood.`, c);
+    return { t: 'entered', pid: c.pid, chat: chatLog.slice(-20), online: inWorld.size };
+  },
+
+  // Where our hero is, what it hit and did (see WorldSim.input); no reply, the world's updates are it.
+  u(c, m) {
+    if (c.pid) world.input(c.pid, m);
+    return null;
+  },
+
+  exit(c) {
+    leaveWorld(c);
+    return { t: 'exited' };
+  },
+
+  chat(c, m) {
+    if (!c.pid) throw new Oops('Step into the world to chat.');
+    const text = String(m.text || '').replace(/[\p{Cc}\p{Cf}]/gu, '').replace(/\s+/g, ' ').trim().slice(0, 160);
+    if (!text) return null;
+    const now = Date.now();
+    c.said = (c.said || []).filter((t) => now - t < 10000);
+    if (c.said.length >= 6) throw new Oops('Slow down a little.');
+    c.said.push(now);
+    const msg = { t: 'chat', i: c.pid, n: c.char.name, c: c.char.cls, x: text, ts: now };
+    chatLog.push(msg);
+    if (chatLog.length > 50) chatLog.shift();
+    for (const o of inWorld.values()) o.send(msg);
+    return { t: 'said' };
+  },
+
   logout(c) {
+    leaveWorld(c);
     if (c.acc && online.get(c.acc.lower) === c) online.delete(c.acc.lower);
     c.acc = null;
     c.char = null;
@@ -145,10 +217,10 @@ async function handle(c, text) {
   let m;
   try { m = JSON.parse(text); } catch { return; }
   if (!m || typeof m.t !== 'string' || !Object.hasOwn(handlers, m.t)) return;
-  // a little flood protection: at most 40 messages a second
+  // a little flood protection: at most 60 messages a second (the game sends up to 20)
   const now = Date.now();
   if (now - c.windowStart > 1000) { c.windowStart = now; c.count = 0; }
-  if (++c.count > 40) return;
+  if (++c.count > 60) return;
   try {
     if (!OPEN_TO_ALL.has(m.t) && !c.acc) throw new Oops('Please sign in first.');
     const reply = await handlers[m.t](c, m);
@@ -164,7 +236,7 @@ const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://local');
   if (url.pathname === '/status' || url.pathname === '/') {
     res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' });
-    res.end(JSON.stringify({ ok: true, game: 'Emberwood', protocol: PROTOCOL, online: online.size, uptimeS: Math.round((Date.now() - started) / 1000) }));
+    res.end(JSON.stringify({ ok: true, game: 'Emberwood', protocol: PROTOCOL, online: online.size, world: inWorld.size, uptimeS: Math.round((Date.now() - started) / 1000) }));
     return;
   }
   res.writeHead(404, { 'Content-Type': 'text/plain' });
@@ -178,10 +250,12 @@ attachWebSocket(server, {
   onConnection(c) {
     c.acc = null;
     c.char = null;
+    c.pid = null;
     c.windowStart = 0;
     c.count = 0;
     c.onmessage = (text) => handle(c, text);
     c.onclose = () => {
+      leaveWorld(c);
       if (c.acc && online.get(c.acc.lower) === c) online.delete(c.acc.lower);
     };
   },

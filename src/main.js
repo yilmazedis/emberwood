@@ -1,5 +1,6 @@
 import { Game } from './game.js';
 import { Net } from './net.js';
+import { LocalWorld } from './local.js';
 import { AccountScreen } from './account.js';
 
 const fill = document.getElementById('load-fill');
@@ -76,6 +77,17 @@ function enter(char) {
     game.start();
     cacheForOffline();
   }
+  game.link.enter().catch((err) => { // into the shared world (it shows the monsters and the others)
+    console.warn('could not enter the world', err);
+    game.ui.centerMsg('Could not reach the game server: reconnecting…');
+  });
+}
+
+// The messages every world sends (the server's, or the one running here offline).
+function attachWorld(net) {
+  game.net = net;
+  game.link.attach(net);
+  net.on('chat', (m) => game.chat.receive(m));
 }
 
 game.onLeave = (why) => {
@@ -98,6 +110,8 @@ game.init((f, label) => {
   if (label) text.textContent = label;
 }).then(() => {
   if (offline) {
+    game.offline = true;
+    attachWorld(new LocalWorld());
     text.textContent = 'Ready';
     startBtn.classList.remove('hidden');
     const go = () => {
@@ -105,6 +119,7 @@ game.init((f, label) => {
       goFullscreen();
       hideTitle();
       game.resume();
+      game.link.enter();
     };
     startBtn.addEventListener('click', go);
     go();
@@ -113,11 +128,15 @@ game.init((f, label) => {
   loading.classList.add('returned'); // the loading bar has done its job
   text.textContent = '';
   const net = new Net();
-  game.net = net;
+  attachWorld(net);
   accounts = new AccountScreen(net, { onPlay: enter });
   net.on('kicked', (m) => game.kicked(m.msg));
   net.on('signedOut', (m) => game.kicked(m.msg));
-  net.on('connection', ({ online }) => game.ui.connection(online));
+  net.on('connection', ({ online }) => {
+    game.ui.connection(online);
+    // back after a dropped line: step into the world again (net.js already picked the hero again)
+    if (online && game.character && !game.onTitle) game.link.enter().catch(() => { /* the next drop retries */ });
+  });
   accounts.start();
 }).catch((err) => {
   console.error(err);

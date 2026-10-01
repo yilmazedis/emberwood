@@ -1,47 +1,19 @@
-// Monsters: procedural slimes + KayKit humanoids (bandits, cultists, the bosses), their AI and respawning.
+// Monsters as the shared world (sim/world.js) reports them: procedural slimes and KayKit humanoids
+// (bandits, cultists, skeletons, the bosses), drawn, animated and moved smoothly between updates, with
+// their attacks played out here. A blow, bolt, slam or grave circle that reaches our hero hurts it
+// here (we know best where our hero stands); the damage we deal goes to the world, which keeps score.
 import * as THREE from 'three';
 import { Humanoid } from './character.js';
-import { heightAt, resolveCollision, randomWalkablePoint, isWalkable, zoneAt } from './world.js';
-import { inDungeon, steer, lineClear, CRYPT_SPAWNS, ROOMS } from './dungeon.js';
-import { rand, randInt, chance, angleDiff, dampAngle, yawTo, clamp, TAU } from './util.js';
+import { heightAt } from './world.js';
+import { ENEMY_TYPES } from './monsters.js';
+import { STATES } from './sim/world.js';
+import { rand, angleDiff, yawTo, lerp, clamp, TAU } from './util.js';
+
+export { ENEMY_TYPES, SPAWNS } from './monsters.js';
 
 const UP = new THREE.Vector3(0, 1, 0);
-
-export const ENEMY_TYPES = {
-  slime: { name: 'Slime', kind: 'slime', color: 0x7ed957, size: 0.9, hp: 26, dmg: 5, speed: 3.0, range: 1.35, atkCd: 1.4, aggro: 8.5, xp: 12, radius: 0.55, gold: [1, 4], drop: 0.12 },
-  slime_blue: { name: 'Bog Slime', kind: 'slime', color: 0x57c7ff, size: 1.0, hp: 36, dmg: 7, speed: 3.1, range: 1.45, atkCd: 1.3, aggro: 9, xp: 18, radius: 0.6, gold: [2, 6], drop: 0.16 },
-  slime_red: { name: 'Magma Slime', kind: 'slime', color: 0xff5a24, glow: 0.55, size: 1.2, hp: 60, dmg: 11, speed: 3.3, range: 1.6, atkCd: 1.3, aggro: 10, xp: 30, radius: 0.72, gold: [4, 9], drop: 0.22 },
-  bandit: { name: 'Bandit', kind: 'humanoid', model: 'Rogue_Hooded', weapon: 'dagger', hp: 70, dmg: 10, speed: 4.3, range: 1.9, atkCd: 1.35, atkDur: 0.6, aggro: 11, xp: 34, radius: 0.5, gold: [4, 12], drop: 0.3 },
-  cultist: { name: 'Cultist', kind: 'caster', model: 'Mage', weapon: 'wand', tint: 0xc9a8ff, hp: 52, dmg: 12, speed: 3.6, range: 11, keep: 7, atkCd: 2.3, aggro: 14, xp: 40, radius: 0.5, gold: [5, 12], drop: 0.3 },
-  // KayKit Skeletons pack — same rig, so they share every animation with the adventurers
-  skeleton_minion: { name: 'Skeleton Minion', kind: 'humanoid', model: 'Skeleton_Minion', weapon: 'Skeleton_Blade', undead: true, eyes: 0x6dffd8, hp: 55, dmg: 10, speed: 4.1, range: 1.9, atkCd: 1.3, atkDur: 0.6, aggro: 11, xp: 30, radius: 0.5, gold: [3, 9], drop: 0.25, loot: 'bone' },
-  skeleton_warrior: { name: 'Skeleton Warrior', kind: 'humanoid', model: 'Skeleton_Warrior', weapon: 'Skeleton_Axe', offhand: 'Skeleton_Shield_Large_A', style: 'chop', scale: 1.1, undead: true, eyes: 0xff8a3a, hp: 120, dmg: 16, speed: 3.4, range: 2.2, atkCd: 1.8, atkDur: 0.85, aggro: 11, xp: 55, radius: 0.6, gold: [6, 14], drop: 0.35, loot: 'bone' },
-  skeleton_rogue: { name: 'Skeleton Rogue', kind: 'humanoid', model: 'Skeleton_Rogue', weapon: 'Skeleton_Blade', offhand: 'Skeleton_Shield_Small_A', undead: true, eyes: 0xff4a6a, hp: 62, dmg: 11, speed: 5.4, range: 1.8, atkCd: 0.95, atkDur: 0.45, aggro: 12, xp: 38, radius: 0.5, gold: [4, 10], drop: 0.3, loot: 'bone' },
-  skeleton_mage: { name: 'Skeleton Mage', kind: 'caster', model: 'Skeleton_Mage', weapon: 'Skeleton_Staff', undead: true, eyes: 0x7dff6a, bolt: 0x5dff8a, hp: 58, dmg: 14, speed: 3.4, range: 12, keep: 8, atkCd: 2.2, aggro: 15, xp: 50, radius: 0.5, gold: [5, 12], drop: 0.35, loot: 'bone' },
-  brute: { name: 'Grok the Brute', kind: 'humanoid', model: 'Barbarian', weapon: 'axe_2handed', scale: 1.5, boss: true, hp: 270, dmg: 24, speed: 4.0, range: 2.9, atkCd: 1.7, atkDur: 1.0, aggro: 13, xp: 320, radius: 0.95, gold: [60, 110], drop: 1, respawn: 75 },
-  // the crypt's boss: bolt volleys, erupting grave circles, raises the dead, blinks away when crowded
-  lich: { name: 'Morvain the Lich', kind: 'caster', model: 'Skeleton_Mage', weapon: 'Skeleton_Staff', weaponGlow: 0x8a4dff, tint: 0xd6ccf2, scale: 1.7, boss: true, lich: true, undead: true, eyes: 0xb57dff, bolt: 0xb57dff, hp: 450, dmg: 22, speed: 3.3, range: 15, keep: 7, atkCd: 2.0, aggro: 16, xp: 720, radius: 0.85, gold: [140, 220], drop: 1, respawn: 150 },
-};
-
-export const SPAWNS = [
-  { type: 'slime', x: 0, z: -30, r: 10, n: 6, lvl: 1 },
-  { type: 'slime', x: 26, z: 12, r: 7, n: 4, lvl: 1 },
-  { type: 'slime_blue', x: -27, z: 20, r: 13, n: 5, lvl: 2, ring: true },
-  { type: 'slime', x: 14, z: -14, r: 5, n: 2, lvl: 1 },
-  { type: 'bandit', x: 38, z: -46, r: 8, n: 4, lvl: 3 },
-  { type: 'cultist', x: 38, z: -46, r: 5, n: 1, lvl: 3 },
-  { type: 'slime_red', x: -38, z: -44, r: 9, n: 3, lvl: 4 },
-  { type: 'cultist', x: -38, z: -44, r: 5, n: 3, lvl: 5 },
-  { type: 'bandit', x: 22, z: -58, r: 6, n: 2, lvl: 4 },
-  { type: 'brute', x: 0, z: -71, r: 1, n: 1, lvl: 6 },
-  { type: 'bandit', x: 0, z: -66, r: 6, n: 2, lvl: 5 },
-  // Forgotten Graveyard
-  { type: 'skeleton_minion', x: 3, z: 45, r: 10, n: 4, lvl: 5 },
-  { type: 'skeleton_rogue', x: 3, z: 45, r: 9, n: 2, lvl: 6 },
-  { type: 'skeleton_warrior', x: 3, z: 47, r: 7, n: 2, lvl: 6 },
-  { type: 'skeleton_mage', x: 3, z: 49, r: 6, n: 2, lvl: 7 },
-  ...CRYPT_SPAWNS, // the Forgotten Crypt (dungeon.js); they only rise once someone goes down
-];
+const JUMP = 5; // m between two updates: a blink, not a walk (no sliding across)
+const lerpAngle = (a, b, t) => a + angleDiff(a, b) * t;
 
 function buildSlime(def) {
   const group = new THREE.Group();
@@ -71,69 +43,56 @@ function buildSlime(def) {
 }
 
 export class Enemy {
-  constructor(game, slot) {
+  // r: the world's full record { i, t, l, x, z, y, h, mh, s, st, sp, e } (see WorldSim.snapshot)
+  constructor(game, r, ts) {
+    const d = ENEMY_TYPES[r.t];
     this.game = game;
-    this.slot = slot;
-    this.type = slot.type;
-    this.def = ENEMY_TYPES[slot.type];
-    this.level = slot.lvl;
-    const d = this.def;
-    this.maxHp = Math.round(d.hp * (1 + 0.32 * (this.level - 1)));
-    this.hp = this.maxHp;
+    this.id = r.i;
+    this.type = r.t;
+    this.def = d;
+    this.level = r.l;
+    this.maxHp = r.mh;
+    this.hp = r.h;
     this.dmg = d.dmg * (1 + 0.22 * (this.level - 1));
     this.radius = d.radius * (d.scale || 1);
-    this.home = slot.ring ? this.ringPoint(slot) : randomWalkablePoint(slot.x, slot.z, slot.r);
-    this.crypt = inDungeon(slot.x, slot.z); // walls: path around them, and no seeing through them
-    this.pos = this.home.clone();
-    this.yaw = rand(0, TAU);
-    this.state = 'spawn';
-    this.stateT = 0;
-    this.atkCd = rand(0.5, d.atkCd);
+    this.height = d.kind === 'slime' ? 1.05 * d.size : 2.45 * (d.scale || 1);
+    this.pos = new THREE.Vector3(r.x, heightAt(r.x, r.z), r.z);
+    this.yaw = r.y;
+    this.state = STATES[r.s] || 'idle';
+    this.speed = r.sp || 0;
+    this.samples = [{ t: ts, x: r.x, z: r.z, yaw: r.y, sp: r.sp || 0, hp: r.h, s: r.s }];
     this.attack = null;
-    this.stagger = 0;
-    this.wanderT = rand(1, 4);
-    this.wanderTarget = null;
+    this.hover = false;
     this.hopT = rand(0, 1);
     this.deadT = 0;
-    this.hover = false;
-    this.swingCount = 0;
-    this.height = d.kind === 'slime' ? 1.05 * d.size : 2.45 * (d.scale || 1);
+    this.predictUntil = 0; // our own hits show before the world confirms them
+    this.predicted = 0; // when our hit looked deadly (the world confirms the kill, or it gets up again)
+    this.enraged = false;
 
+    const rising = this.state === 'spawn' && (r.st || 0) < 0.4;
     if (d.kind === 'slime') {
       const s = buildSlime(d);
       this.slime = s;
       this.obj = s.group;
-      this.obj.scale.setScalar(0.01);
+      this.grow = rising ? 0 : 1;
+      this.obj.scale.setScalar(rising ? 0.01 : d.size);
     } else {
       this.h = new Humanoid(d.model, { scale: d.scale || 1, tint: d.tint ?? null });
       this.h.equip('r', d.weapon, d.weaponGlow ?? null);
       if (d.offhand) this.h.equip('l', d.offhand);
-      else if (this.type === 'bandit' && chance(0.5)) this.h.equip('l', 'shield_round');
+      else if (this.type === 'bandit' && this.id % 2) this.h.equip('l', 'shield_round'); // (the same for everyone)
       if (d.eyes) this.h.setGlow('Glow', d.eyes, 2.6);
       this.obj = this.h.group;
-      this.h.anim.play('Spawn_Ground', { timeScale: d.undead ? 0.9 : 1.2 });
-      if (d.undead) game.fx.dust(new THREE.Vector3(this.pos.x, this.pos.y + 0.1, this.pos.z), 16);
+      if (rising) {
+        this.h.anim.play('Spawn_Ground', { timeScale: d.undead ? 0.9 : 1.2 });
+        if (d.undead) game.fx.dust(new THREE.Vector3(this.pos.x, this.pos.y + 0.1, this.pos.z), 16);
+      }
     }
     this.obj.position.copy(this.pos);
     this.obj.rotation.y = this.yaw;
     game.scene.add(this.obj);
     this.plate = game.ui.createPlate(this);
-    if (d.lich) {
-      this.circleT = 5;
-      this.blinkCd = 6;
-      this.closeT = 0;
-      this.raised = [];
-      this.enraged = false;
-    }
-  }
-
-  ringPoint(slot) {
-    for (let i = 0; i < 30; i++) {
-      const a = rand(0, TAU), r = rand(slot.r * 0.72, slot.r);
-      const p = randomWalkablePoint(slot.x + Math.cos(a) * r, slot.z + Math.sin(a) * r, 1.5);
-      if (p) return p;
-    }
-    return randomWalkablePoint(slot.x, slot.z, slot.r);
+    if (r.e) this.enrage(true);
   }
 
   get alive() {
@@ -148,100 +107,267 @@ export class Enemy {
     return out.set(this.pos.x, this.pos.y + this.height + 0.35, this.pos.z);
   }
 
-  faceTo(x, z, dt, rate = 10) {
-    this.yaw = dampAngle(this.yaw, yawTo(x - this.pos.x, z - this.pos.z), rate, dt);
+  // How loud its sounds are for us: full up close, nothing from 28 m.
+  vol() {
+    const p = this.game.player.pos;
+    return clamp(1 - Math.hypot(p.x - this.pos.x, p.z - this.pos.z) / 28, 0, 1);
   }
 
-  // Can this monster see the player? Always, outside; in the crypt, not through walls (re-checked 5×/s).
-  sees(p) {
-    if (!this.crypt) return true;
-    const t = this.game.time;
-    if (t >= (this.seeAt || 0)) {
-      this.seeAt = t + 0.2;
-      this.canSee = lineClear(this.pos.x, this.pos.z, p.pos.x, p.pos.z, 0.15);
-    }
-    return this.canSee;
+  sample(ts, x, z, yaw, sp, hp, s) {
+    this.samples.push({ t: ts, x, z, yaw, sp, hp, s });
   }
 
-  moveToward(x, z, speed, dt) {
-    if (this.crypt) { // head for the next corner of the path instead of into the wall
-      const t = this.game.time;
-      if (t >= (this.navAt || 0) || (this.nav && Math.hypot(this.nav.x - this.pos.x, this.nav.z - this.pos.z) < 0.6)) {
-        this.navAt = t + 0.25;
-        this.nav = steer(this.pos.x, this.pos.z, x, z, this.radius);
-      }
-      if (this.nav) { x = this.nav.x; z = this.nav.z; }
-    }
-    const dx = x - this.pos.x, dz = z - this.pos.z;
-    const d = Math.hypot(dx, dz);
-    if (d < 0.05) return 0;
-    const step = Math.min(d, speed * dt);
-    this.pos.x += (dx / d) * step;
-    this.pos.z += (dz / d) * step;
-    this.yaw = dampAngle(this.yaw, yawTo(dx, dz), 10, dt);
-    return speed;
+  dispose() {
+    this.game.scene.remove(this.obj);
+    this.game.ui.removePlate(this.plate);
+    this.plate = null;
   }
 
-  takeDamage(amount, fromPos, knock = 0.4) {
+  // ---------------------------------------------------------------- hits
+  // Our own hit: shown straight away (the world confirms it a moment later).
+  hurt(amount) {
     if (!this.alive) return;
     this.hp -= amount;
-    if (this.state === 'idle' || this.state === 'return') this.aggro(true);
-    if (this.h) this.h.hitFlash(0xffffff, 1);
-    else { this.slimeFlash = 1; this.squash = 0.35; }
-    if (fromPos && !this.def.boss) {
-      const dx = this.pos.x - fromPos.x, dz = this.pos.z - fromPos.z;
-      const d = Math.hypot(dx, dz) || 1;
-      this.pos.x += (dx / d) * knock;
-      this.pos.z += (dz / d) * knock;
-    }
-    if (this.hp > 0 && !this.def.boss) {
-      // interrupt wind-ups: rewards aggressive play
-      if (this.attack && this.attack.t < this.attack.hitAt) {
-        this.attack = null;
-        if (this.h) this.h.swing = null;
-        this.atkCd = Math.max(this.atkCd, 0.6);
-      }
-      this.stagger = 0.28;
-      if (this.h && this.h.anim.oneName !== 'Death_A') this.h.anim.play('Hit_A', { timeScale: 1.6 });
+    this.predictUntil = this.game.link.clock + 0.8;
+    this.flinch();
+    if (this.hp <= 0) {
+      this.predicted = this.game.link.clock;
+      this.die();
     }
   }
 
-  aggro(alertPack) {
-    if (this.state === 'dead' || this.state === 'spawn') return;
-    this.state = 'chase';
-    this.stateT = 0;
-    if (alertPack) {
-      for (const e of this.game.enemies.list) {
-        if (e !== this && e.alive && e.slot === this.slot && e.state === 'idle' && e.pos.distanceTo(this.pos) < 12) e.aggro(false);
-      }
-    }
+  // Someone else's hit (the world tells us).
+  struck(dmg, crit) {
+    if (!this.alive) return;
+    const g = this.game;
+    g.ui.floater(new THREE.Vector3(this.pos.x, this.pos.y + this.height + 0.1, this.pos.z), String(dmg), crit ? 'crit other' : 'other');
+    g.fx.sparks(this.center, crit ? 0xffe070 : 0xfff0c0, crit ? 14 : 6, crit ? 6 : 4);
+    if (this.slime) g.fx.goo(this.center, this.def.color, 4);
+    const vol = this.vol();
+    if (vol) g.sfx.play(crit ? 'crit' : 'hit', 0.6 * vol);
+    this.flinch();
+  }
+
+  flinch() {
+    if (this.h) this.h.hitFlash(0xffffff, 1);
+    else { this.slimeFlash = 1; this.squash = 0.35; }
+    if (this.def.boss) return;
+    if (this.attack && this.attack.t < this.attack.hitAt) this.cancelAttack(); // a hit interrupts the wind-up
+    if (this.h && this.h.anim.oneName !== 'Death_A') this.h.anim.play('Hit_A', { timeScale: 1.6 });
+  }
+
+  cancelAttack() {
+    this.attack = null;
+    if (!this.h) return;
+    this.h.swing = null;
+    if (['Throw', 'Use_Item', 'Interact'].includes(this.h.anim.oneName)) this.h.anim.stopOne();
   }
 
   die() {
+    if (this.state === 'dead') return;
+    const g = this.game;
     this.state = 'dead';
     this.deadT = 0;
     this.attack = null;
-    this.game.ui.removePlate(this.plate);
+    g.ui.removePlate(this.plate);
     this.plate = null;
+    const vol = this.vol();
     if (this.h) {
       this.h.swing = null;
       this.h.anim.play('Death_A', { hold: true, timeScale: 0.9 });
       if (this.def.undead) {
         this.h.setGlow('Glow', 0x000000, 0); // eyes go dark
-        this.game.fx.bones(this.center, this.def.eyes);
+        g.fx.bones(this.center, this.def.eyes);
       }
     } else {
-      this.game.fx.goo(this.center, this.def.color, 34);
-      this.game.fx.burst(this.center, this.def.color, 16, 3, 0.3, 0.5);
+      g.fx.goo(this.center, this.def.color, 34);
+      g.fx.burst(this.center, this.def.color, 16, 3, 0.3, 0.5);
       this.obj.visible = false;
+      if (vol) g.sfx.play('slime', vol);
     }
   }
 
+  // Our hit looked deadly, but the world says it lives on (it healed, or the hit didn't count).
+  revive() {
+    this.predicted = 0;
+    this.state = 'idle';
+    this.plate = this.game.ui.createPlate(this);
+    if (this.h) {
+      this.h.anim.stopOne();
+      if (this.def.eyes) this.h.setGlow('Glow', this.def.eyes, 2.6);
+    } else {
+      this.obj.visible = true;
+    }
+  }
+
+  // ---------------------------------------------------------------- what the world says it does
+  event(ev) {
+    const g = this.game;
+    if (!this.alive) return;
+    switch (ev[0]) {
+      case 'a': // a swing (style, duration)
+        this.attack = { kind: 'melee', t: 0, dur: ev[3], hitAt: 0.45 * ev[3], hit: false };
+        this.h?.startSwing(ev[3], ev[2]);
+        break;
+      case 'l': // a slime's lunge
+        this.attack = { kind: 'melee', lunge: true, t: 0, dur: 0.75, hitAt: 0.45, hit: false };
+        break;
+      case 's': { // a boss's ground slam at (x, z)
+        const at = new THREE.Vector3(ev[2], heightAt(ev[2], ev[3]), ev[3]);
+        this.attack = { kind: 'slam', t: 0, dur: ev[4], hitAt: ev[5], hit: false, at };
+        g.fx.telegraph(at, 3.6, ev[5]);
+        this.h?.startSwing(ev[4], 'chop');
+        break;
+      }
+      case 'c': // a spell at hero ev[2], ev[3] bolts
+        this.attack = { kind: 'cast', t: 0, dur: 1, hitAt: 0.5, hit: false, target: ev[2], n: ev[3] };
+        this.h?.anim.play('Throw', { timeScale: 1.4 });
+        break;
+      case 'u': // the Lich raises the dead (the world spawns them)
+        this.attack = { kind: 'summon', t: 0, dur: 1.5, hitAt: 0.8, hit: false };
+        this.h?.anim.play('Use_Item', { timeScale: 0.9 });
+        g.dungeon.pulse(1.6);
+        g.sfx.play('summon', this.vol());
+        g.ui.log('<b>Morvain</b> calls the dead to rise!', 'bad');
+        break;
+      case 'o': // the Lich draws grave circles…
+        this.attack = { kind: 'circles', t: 0, dur: 1.1, hitAt: 0.5, hit: false };
+        this.h?.anim.play('Interact', { timeScale: 1.2 });
+        g.dungeon.pulse(0.8);
+        break;
+      case 'O': { // …here (x, z pairs); they erupt a moment later
+        const s = ev[2] || [];
+        for (let i = 0; i + 1 < s.length; i += 2) {
+          const at = new THREE.Vector3(s[i], heightAt(s[i], s[i + 1]), s[i + 1]);
+          g.fx.telegraph(at, 2.2, 1.25, () => this.erupt(at), 0xb05cff);
+        }
+        g.sfx.play('cast', this.vol());
+        break;
+      }
+      case 'b': this.blinkFx(ev[2], ev[3]); break; // the Lich vanished from (x, z)
+      case 'e': this.enrage(); break;
+      case 'x': this.cancelAttack(); break; // someone interrupted it
+      case 'h': if (ev[4] !== g.link.pid) this.struck(ev[2], ev[3]); break;
+      default: break;
+    }
+  }
+
+  updateAttack(dt) {
+    const a = this.attack, g = this.game, p = g.player, d = this.def;
+    a.t += dt;
+    if (!a.hit && a.t >= a.hitAt) {
+      a.hit = true;
+      const vol = this.vol();
+      if (a.kind === 'melee') {
+        const dist = Math.hypot(p.pos.x - this.pos.x, p.pos.z - this.pos.z);
+        const ang = Math.abs(angleDiff(this.yaw, yawTo(p.pos.x - this.pos.x, p.pos.z - this.pos.z)));
+        if (p.alive && dist <= d.range + p.radius + 0.5 && ang < 1.3) g.damagePlayer(this.dmg, this);
+        if (this.h && vol) g.sfx.play('swing', 0.5 * vol);
+      } else if (a.kind === 'cast') {
+        this.castBolts(a);
+      } else if (a.kind === 'slam') {
+        const at = a.at;
+        g.fx.ring(at, 0.5, 4.2, 0xff8a3a, 0.5);
+        g.fx.dust(new THREE.Vector3(at.x, at.y + 0.2, at.z), 30);
+        g.fx.burst(new THREE.Vector3(at.x, at.y + 0.3, at.z), 0xff9a4a, 30, 5);
+        if (vol) { g.shake(0.6 * vol); g.sfx.play('slam', vol); }
+        if (p.alive && Math.hypot(p.pos.x - at.x, p.pos.z - at.z) < 3.6 + p.radius) g.damagePlayer(this.dmg * 1.8, this);
+      }
+    }
+    if (a.t >= a.dur) {
+      this.attack = null;
+      if (a.kind === 'cast' || a.kind === 'summon' || a.kind === 'circles') this.h?.anim.stopOne();
+    }
+  }
+
+  // Bolts from the staff hand at the hero it targets (where we see that hero).
+  castBolts(a) {
+    const g = this.game, d = this.def;
+    const hand = new THREE.Vector3();
+    this.h.bones.handslotr.getWorldPosition(hand);
+    const who = a.target === g.link.pid ? g.player : g.others.byId.get(a.target);
+    const tp = who ? who.pos : new THREE.Vector3(this.pos.x + Math.sin(this.yaw) * 6, this.pos.y, this.pos.z + Math.cos(this.yaw) * 6);
+    const aim = new THREE.Vector3(tp.x, tp.y + 1.1, tp.z).sub(hand);
+    const n = Math.max(1, Math.min(7, a.n | 0));
+    for (let i = 0; i < n; i++) {
+      const dir = aim.clone().applyAxisAngle(UP, (i - (n - 1) / 2) * 0.2); // the Lich fans out a volley
+      g.projectiles.spawn({ from: hand.clone(), dir, owner: 'enemy', dmg: this.dmg, speed: d.lich ? 12 : 11, color: d.bolt || 0xb070ff, radius: 0.35, range: d.lich ? 20 : 16, size: 0.3 });
+    }
+  }
+
+  // A grave circle bursts: bones and violet fire, and it hurts if our hero is still standing in it.
+  erupt(at) {
+    const g = this.game, p = g.player;
+    g.fx.ring(at, 0.4, 2.6, 0xb57dff, 0.5);
+    g.fx.burst(new THREE.Vector3(at.x, at.y + 0.3, at.z), 0xb57dff, 26, 5);
+    g.fx.soft.emit({ pos: { x: at.x, y: at.y + 0.3, z: at.z }, count: 10, spread: 0.8, velSpread: 1.5, vel: { x: 0, y: 3, z: 0 }, color: new THREE.Color(0xe8e0d0), size: 0.18, sizeEnd: 0.1, life: 0.8, gravity: 12, drag: 0.6 });
+    g.sfx.play('nova', 0.7 * this.vol());
+    if (this.alive && p.alive && Math.hypot(p.pos.x - at.x, p.pos.z - at.z) < 2.2 + p.radius * 0.5) {
+      g.damagePlayer(this.dmg * 1.3, this);
+      g.shake(0.3);
+    }
+  }
+
+  blinkFx(fromX, fromZ) {
+    const g = this.game, to = this.samples[this.samples.length - 1];
+    const puff = (x, z) => {
+      const y = heightAt(x, z);
+      g.fx.burst(new THREE.Vector3(x, y + 1.4, z), 0xb57dff, 30, 4);
+      g.fx.soft.emit({ pos: { x, y: y + 1.2, z }, count: 14, spread: 0.6, velSpread: 1.2, vel: { x: 0, y: 1, z: 0 }, color: new THREE.Color(0x2e2438), alpha: 0.5, size: 1.2, sizeEnd: 2.4, life: 1.2, drag: 2 });
+    };
+    puff(fromX, fromZ);
+    puff(to.x, to.z);
+    g.sfx.play('blink', this.vol());
+  }
+
+  enrage(quiet = false) {
+    const g = this.game;
+    this.enraged = true;
+    this.h?.setGlow('Glow', 0xff5ad8, 4);
+    if (quiet) return;
+    const vol = this.vol();
+    g.ui.log('<b>Morvain</b> is enraged!', 'bad');
+    g.sfx.play('enrage', vol);
+    g.fx.ring(this.pos, 0.5, 6, 0xff5ad8, 0.7);
+    g.dungeon.pulse(2);
+    g.shake(0.4 * vol);
+  }
+
+  // ---------------------------------------------------------------- per frame
   update(dt) {
-    const g = this.game, d = this.def, p = g.player;
-    this.stateT += dt;
-    this.atkCd -= dt;
-    this.stagger -= dt;
+    const g = this.game, d = this.def, T = g.link.renderT;
+    // where the world says it was at T: between the two updates around it, or a little past the newest
+    const S = this.samples;
+    while (S.length > 2 && S[1].t <= T) S.shift();
+    const a = S[0], b = S[1];
+    let x = a.x, z = a.z, yaw = a.yaw, cur = a;
+    if (b) {
+      const jump = Math.hypot(b.x - a.x, b.z - a.z) > JUMP;
+      if (T >= b.t) {
+        cur = b;
+        x = b.x; z = b.z; yaw = b.yaw;
+        if (b.sp > 0 && !jump) { // a late update: carry on the way it was going, briefly
+          const k = Math.min(T - b.t, 200) / Math.max(1, b.t - a.t);
+          x += (b.x - a.x) * k;
+          z += (b.z - a.z) * k;
+        }
+      } else if (T > a.t && !jump) {
+        const k = (T - a.t) / (b.t - a.t);
+        x = lerp(a.x, b.x, k);
+        z = lerp(a.z, b.z, k);
+        yaw = lerpAngle(a.yaw, b.yaw, k);
+      }
+    }
+    // life: the world's word, unless our own hit is still on its way there
+    this.hp = g.link.clock > this.predictUntil ? cur.hp : Math.min(this.hp, cur.hp);
+    const st = STATES[cur.s];
+    if (this.predicted) {
+      if (st !== 'dead' && cur.hp > 0 && g.link.clock - this.predicted > 1.5) this.revive();
+    } else if (st === 'dead') {
+      this.die(); // (normally the world's death message did that already)
+    } else if (this.state !== 'dead') {
+      this.state = st;
+    }
 
     if (this.state === 'dead') {
       this.deadT += dt;
@@ -249,299 +375,42 @@ export class Enemy {
         this.h.update(dt);
         if (this.deadT > 2.4) this.obj.position.y -= dt * 0.9;
       }
-      if (this.deadT > 3.6) {
-        g.scene.remove(this.obj);
-        this.removed = true;
-      }
+      if (this.deadT > 3.6) this.removed = true;
       return;
     }
 
-    if (this.state === 'spawn') {
-      if (this.slime) {
-        const t = Math.min(1, this.stateT / 0.5);
-        this.obj.scale.setScalar(d.size * (t < 1 ? 1 + Math.sin(t * Math.PI) * 0.35 : 1) * t);
-      }
-      if (this.stateT > (this.h ? 1.0 : 0.5)) {
-        this.state = 'idle';
-        if (this.slot.summoned) this.aggro(false); // raised by the Lich: straight into the fight
-      }
-      this.sync(dt, 0);
-      return;
-    }
-
-    const dx = p.pos.x - this.pos.x, dz = p.pos.z - this.pos.z;
-    const dist = Math.hypot(dx, dz);
-    const playerZone = zoneAt(p.pos.x, p.pos.z);
-    // (not in camp, and on the same side of the crypt door)
-    const targetable = p.alive && !(playerZone && playerZone.safe) && this.crypt === inDungeon(p.pos.x, p.pos.z);
-    const distHome = this.pos.distanceTo(this.home);
-    let speed = 0;
-
-    if (this.attack) {
-      this.updateAttack(dt, dist);
-    } else if (this.stagger > 0) {
-      // stunned
-    } else if (this.state === 'idle') {
-      this.wanderT -= dt;
-      if (this.wanderT <= 0) {
-        this.wanderTarget = randomWalkablePoint(this.home.x, this.home.z, 4);
-        this.wanderT = rand(3, 7);
-        const w = this.wanderTarget; // in the crypt, stay in your own room
-        if (this.crypt && !lineClear(this.home.x, this.home.z, w.x, w.z, this.radius)) this.wanderTarget = null;
-      }
-      if (this.wanderTarget) {
-        speed = this.moveToward(this.wanderTarget.x, this.wanderTarget.z, d.speed * 0.35, dt);
-        if (this.pos.distanceTo(this.wanderTarget) < 0.3) this.wanderTarget = null;
-      }
-      if (targetable && dist < d.aggro && this.sees(p)) this.aggro(true);
-    } else if (this.state === 'chase') {
-      if (!targetable || distHome > d.aggro * 2.4) {
-        this.state = 'return';
-      } else if (d.lich) {
-        speed = this.lichChase(dt, dist, dx, dz);
-      } else if (d.kind === 'caster') {
-        const sees = this.sees(p);
-        if (dist < d.keep * 0.55 && sees) {
-          speed = this.moveToward(this.pos.x - dx, this.pos.z - dz, d.speed * 0.8, dt);
-        } else if (dist <= d.range && this.atkCd <= 0 && sees) {
-          this.startCast();
-        } else if (dist > d.range * 0.85 || !sees) {
-          speed = this.moveToward(p.pos.x, p.pos.z, d.speed, dt);
-        } else {
-          this.faceTo(p.pos.x, p.pos.z, dt);
-        }
-      } else if (dist <= d.range + p.radius && this.atkCd <= 0) {
-        this.startAttack();
-      } else if (dist > d.range * 0.8) {
-        speed = this.moveToward(p.pos.x, p.pos.z, d.speed, dt);
-      } else {
-        this.faceTo(p.pos.x, p.pos.z, dt);
-      }
-    } else if (this.state === 'return') {
-      speed = this.moveToward(this.home.x, this.home.z, d.speed * 1.2, dt);
-      this.hp = Math.min(this.maxHp, this.hp + this.maxHp * 0.4 * dt);
-      if (distHome < 0.6) this.state = 'idle';
-      if (targetable && dist < d.aggro * 0.6 && distHome < d.aggro && this.sees(p)) this.aggro(false);
-    }
-
-    // separation from other enemies and the player
-    for (const o of g.enemies.list) {
-      if (o === this || !o.alive) continue;
-      const ex = this.pos.x - o.pos.x, ez = this.pos.z - o.pos.z;
-      const rr = this.radius + o.radius;
-      const dd = ex * ex + ez * ez;
-      if (dd < rr * rr && dd > 1e-6) {
-        const k = (rr - Math.sqrt(dd)) * 0.5 / Math.sqrt(dd);
-        this.pos.x += ex * k; this.pos.z += ez * k;
-      }
-    }
-    if (p.alive) {
-      const rr = this.radius + p.radius;
-      if (dist < rr && dist > 1e-4) {
-        this.pos.x -= (dx / dist) * (rr - dist);
-        this.pos.z -= (dz / dist) * (rr - dist);
-      }
-    }
-    resolveCollision(this.pos, this.radius);
-    this.pos.y = heightAt(this.pos.x, this.pos.z);
-    this.sync(dt, speed);
+    this.pos.set(x, heightAt(x, z), z);
+    this.yaw = yaw;
+    this.speed = cur.sp;
+    if (this.attack) this.updateAttack(dt);
+    this.sync(dt);
     if (d.lich && Math.random() < dt * 14) { // a cold violet haze around him
-      const a = rand(0, TAU), r = rand(0.3, 1.1);
-      g.fx.add.emit({ pos: { x: this.pos.x + Math.cos(a) * r, y: this.pos.y + rand(0.2, 2.6), z: this.pos.z + Math.sin(a) * r }, count: 1, spread: 0.1, velSpread: 0.2, vel: { x: 0, y: 0.9, z: 0 }, color: new THREE.Color(this.enraged ? 0xff5ad8 : 0xb57dff).multiplyScalar(2.2), size: 0.2, sizeEnd: 0.02, life: 1.1, drag: 1 });
+      const ang = rand(0, TAU), r = rand(0.3, 1.1);
+      g.fx.add.emit({ pos: { x: this.pos.x + Math.cos(ang) * r, y: this.pos.y + rand(0.2, 2.6), z: this.pos.z + Math.sin(ang) * r }, count: 1, spread: 0.1, velSpread: 0.2, vel: { x: 0, y: 0.9, z: 0 }, color: new THREE.Color(this.enraged ? 0xff5ad8 : 0xb57dff).multiplyScalar(2.2), size: 0.2, sizeEnd: 0.02, life: 1.1, drag: 1 });
     }
   }
 
-  // ---------------------------------------------------------------- Morvain the Lich
-  lichChase(dt, dist, dx, dz) {
-    const p = this.game.player, d = this.def;
-    const frac = this.hp / this.maxHp;
-    for (const th of [0.7, 0.4]) { // raises the dead at 70% and 40% life
-      if (frac < th && !this.raised.includes(th)) { this.raised.push(th); this.startSummon(); return 0; }
-    }
-    if (frac < 0.3 && !this.enraged) this.enrage();
-    this.circleT -= dt;
-    this.blinkCd -= dt;
-    this.closeT = dist < 3.6 ? this.closeT + dt : Math.max(0, this.closeT - dt);
-    if (this.closeT > 1.8 && this.blinkCd <= 0) { this.blink(); return 0; }
-    const sees = this.sees(p);
-    if (sees && this.circleT <= 0 && dist < 20) { this.startCircles(); return 0; }
-    if (sees && dist <= d.range && this.atkCd <= 0) { this.startCast(); return 0; }
-    if (dist < d.keep * 0.5) return this.moveToward(this.pos.x - dx, this.pos.z - dz, d.speed * 0.8, dt);
-    if (!sees || dist > d.range * 0.85) return this.moveToward(p.pos.x, p.pos.z, d.speed, dt);
-    this.faceTo(p.pos.x, p.pos.z, dt);
-    return 0;
-  }
-
-  startSummon() {
-    const g = this.game;
-    this.attack = { t: 0, dur: 1.5, hitAt: 0.8, hit: false, summon: true };
-    this.h.anim.play('Use_Item', { timeScale: 0.9 });
-    g.dungeon.pulse(1.6);
-    g.sfx.play('summon');
-    g.ui.log('<b>Morvain</b> calls the dead to rise!', 'bad');
-  }
-
-  startCircles() {
-    this.attack = { t: 0, dur: 1.1, hitAt: 0.5, hit: false, circles: true };
-    this.h.anim.play('Interact', { timeScale: 1.2 });
-    this.circleT = this.enraged ? 5.5 : 8;
-    this.game.dungeon.pulse(0.8);
-  }
-
-  // A grave circle bursts: bones and violet fire, and it hurts if you're still standing in it.
-  erupt(at) {
-    const g = this.game, p = g.player;
-    g.fx.ring(at, 0.4, 2.6, 0xb57dff, 0.5);
-    g.fx.burst(new THREE.Vector3(at.x, at.y + 0.3, at.z), 0xb57dff, 26, 5);
-    g.fx.soft.emit({ pos: { x: at.x, y: at.y + 0.3, z: at.z }, count: 10, spread: 0.8, velSpread: 1.5, vel: { x: 0, y: 3, z: 0 }, color: new THREE.Color(0xe8e0d0), size: 0.18, sizeEnd: 0.1, life: 0.8, gravity: 12, drag: 0.6 });
-    g.sfx.play('nova', 0.7);
-    if (this.alive && p.alive && Math.hypot(p.pos.x - at.x, p.pos.z - at.z) < 2.2 + p.radius * 0.5) {
-      g.damagePlayer(this.dmg * 1.3, this);
-      g.shake(0.3);
-    }
-  }
-
-  // Too close for comfort: vanish and reappear across the sanctum.
-  blink() {
-    const g = this.game, p = g.player, B = ROOMS.B;
-    let to = null;
-    for (let i = 0; i < 12 && !to; i++) {
-      const c = randomWalkablePoint(B.cx, B.cz, 8, 1.2);
-      if (Math.hypot(c.x - p.pos.x, c.z - p.pos.z) > 8) to = c;
-    }
-    if (!to) return;
-    const puff = (v) => {
-      g.fx.burst(new THREE.Vector3(v.x, v.y + 1.4, v.z), 0xb57dff, 30, 4);
-      g.fx.soft.emit({ pos: { x: v.x, y: v.y + 1.2, z: v.z }, count: 14, spread: 0.6, velSpread: 1.2, vel: { x: 0, y: 1, z: 0 }, color: new THREE.Color(0x2e2438), alpha: 0.5, size: 1.2, sizeEnd: 2.4, life: 1.2, drag: 2 });
-    };
-    puff(this.pos);
-    this.pos.copy(to);
-    puff(this.pos);
-    this.blinkCd = this.enraged ? 5 : 7;
-    this.closeT = 0;
-    this.atkCd = Math.min(this.atkCd, 0.5);
-    this.nav = null;
-    g.sfx.play('blink');
-  }
-
-  enrage() {
-    const g = this.game;
-    this.enraged = true;
-    this.h.setGlow('Glow', 0xff5ad8, 4);
-    g.ui.log('<b>Morvain</b> is enraged!', 'bad');
-    g.sfx.play('enrage');
-    g.fx.ring(this.pos, 0.5, 6, 0xff5ad8, 0.7);
-    g.dungeon.pulse(2);
-    g.shake(0.4);
-  }
-
-  startAttack() {
-    const d = this.def;
-    this.swingCount++;
-    if (d.boss && this.swingCount % 3 === 0) {
-      // telegraphed ground slam
-      const dur = 1.25;
-      this.attack = { t: 0, dur, hitAt: 0.62 * dur, hit: false, slam: true };
-      const f = { x: this.pos.x + Math.sin(this.yaw) * 2.2, y: this.pos.y, z: this.pos.z + Math.cos(this.yaw) * 2.2 };
-      this.attack.at = f;
-      this.game.fx.telegraph(f, 3.6, this.attack.hitAt);
-      this.h.startSwing(dur, 'chop');
-      return;
-    }
-    if (this.h) {
-      const dur = d.atkDur;
-      this.attack = { t: 0, dur, hitAt: 0.45 * dur, hit: false };
-      this.h.startSwing(dur, d.style || (d.boss ? 'chop' : this.swingCount % 2 ? 'slash' : 'backslash'));
-    } else {
-      this.attack = { t: 0, dur: 0.75, hitAt: 0.45, hit: false, lunge: true };
-    }
-  }
-
-  startCast() {
-    this.attack = { t: 0, dur: 1.0, hitAt: 0.5, hit: false, cast: true };
-    this.h.anim.play('Throw', { timeScale: 1.4 });
-  }
-
-  updateAttack(dt, dist) {
-    const a = this.attack, g = this.game, p = g.player, d = this.def;
-    a.t += dt;
-    if (a.t < a.hitAt) this.faceTo(p.pos.x, p.pos.z, dt, a.slam ? 3 : 8);
-    if (!a.hit && a.t >= a.hitAt && (a.summon || a.circles)) { // the Lich's spells
-      a.hit = true;
-      if (a.summon) {
-        const n = this.enraged ? 4 : 3;
-        for (let i = 0; i < n; i++) {
-          const ang = this.yaw + (i / n) * TAU;
-          g.enemies.summon(i === 0 && this.raised.length > 1 ? 'skeleton_warrior' : 'skeleton_minion', this.level - 1,
-            this.pos.x + Math.sin(ang) * 3.2, this.pos.z + Math.cos(ang) * 3.2, this);
-        }
-      } else {
-        const spots = [{ x: p.pos.x, z: p.pos.z }];
-        for (let i = 1, tries = 0; i < (this.enraged ? 5 : 3) && tries < 30; tries++) {
-          const ang = rand(0, TAU), r = rand(2.5, 5); // on open floor, clear of the walls
-          const x = p.pos.x + Math.cos(ang) * r, z = p.pos.z + Math.sin(ang) * r;
-          if (isWalkable(x, z, 2)) { spots.push({ x, z }); i++; }
-        }
-        for (const s of spots) {
-          const at = new THREE.Vector3(s.x, heightAt(s.x, s.z), s.z);
-          g.fx.telegraph(at, 2.2, 1.25, () => this.erupt(at), 0xb05cff);
-        }
-        g.sfx.play('cast');
-      }
-    }
-    if (a.lunge && a.t > 0.2 && a.t < 0.5) {
-      const f = Math.min(1, dist / 1.2);
-      this.pos.x += Math.sin(this.yaw) * 4 * f * dt;
-      this.pos.z += Math.cos(this.yaw) * 4 * f * dt;
-    }
-    if (!a.hit && a.t >= a.hitAt) {
-      a.hit = true;
-      if (a.cast) {
-        const hand = new THREE.Vector3();
-        this.h.bones.handslotr.getWorldPosition(hand);
-        const target = p.pos.clone().setY(p.pos.y + 1.1);
-        const aim = target.clone().sub(hand);
-        const n = d.lich ? (this.enraged ? 5 : 3) : 1; // the Lich fans out a volley
-        for (let i = 0; i < n; i++) {
-          const dir = aim.clone().applyAxisAngle(UP, (i - (n - 1) / 2) * 0.2);
-          g.projectiles.spawn({ from: hand.clone(), dir, owner: 'enemy', dmg: this.dmg, speed: d.lich ? 12 : 11, color: d.bolt || 0xb070ff, radius: 0.35, range: d.lich ? 20 : 16, size: 0.3 });
-        }
-      } else if (a.slam) {
-        const r = Math.hypot(p.pos.x - a.at.x, p.pos.z - a.at.z);
-        g.fx.ring(a.at, 0.5, 4.2, 0xff8a3a, 0.5);
-        g.fx.dust(new THREE.Vector3(a.at.x, a.at.y + 0.2, a.at.z), 30);
-        g.fx.burst(new THREE.Vector3(a.at.x, a.at.y + 0.3, a.at.z), 0xff9a4a, 30, 5);
-        g.shake(0.6);
-        g.sfx.play('slam');
-        if (r < 3.6 + p.radius) g.damagePlayer(this.dmg * 1.8, this);
-      } else {
-        const ang = Math.abs(angleDiff(this.yaw, yawTo(p.pos.x - this.pos.x, p.pos.z - this.pos.z)));
-        if (dist <= d.range + p.radius + 0.5 && ang < 1.3) g.damagePlayer(this.dmg, this);
-        if (this.h) g.sfx.play('swing', 0.5);
-      }
-    }
-    if (a.t >= a.dur) {
-      this.attack = null;
-      if (!a.summon && !a.circles) this.atkCd = d.atkCd * (this.enraged ? 0.7 : 1) * rand(0.85, 1.15);
-      if (a.cast || a.summon || a.circles) this.h.anim.stopOne();
-    }
-  }
-
-  sync(dt, speed) {
+  sync(dt) {
+    const d = this.def, speed = this.speed;
     this.obj.position.copy(this.pos);
+    this.obj.rotation.y = this.yaw;
     if (this.h) {
-      this.obj.rotation.y = this.yaw;
-      const s = this.def.scale || 1;
-      if (speed > this.def.speed * 0.6) this.h.anim.setBase('Running_A', speed / (4.6 * s));
+      const s = d.scale || 1;
+      if (speed > d.speed * 0.6) this.h.anim.setBase('Running_A', speed / (4.6 * s));
       else if (speed > 0.1) this.h.anim.setBase('Walking_A', Math.max(0.6, speed / (1.7 * s)));
       else this.h.anim.setBase('Idle_A');
       this.h.highlight = this.hover ? 1 : 0;
       this.h.update(dt);
       return;
     }
-    // slime: hop while moving, squash & stretch
+    // slime: rises out of the ground, hops while moving, squash & stretch
     const s = this.slime;
-    const moving = speed > 0.1 || (this.attack && this.attack.lunge);
+    if (this.grow < 1) {
+      this.grow = Math.min(1, this.grow + dt / 0.5);
+      const t = this.grow;
+      this.obj.scale.setScalar(d.size * (t < 1 ? 1 + Math.sin(t * Math.PI) * 0.35 : 1) * Math.max(0.01, t));
+    }
+    const moving = speed > 0.1 || this.attack?.lunge;
     this.hopT += dt * (moving ? 2.6 : 1.1);
     const ph = this.hopT % 1;
     let lift = 0, sq = 0;
@@ -552,67 +421,85 @@ export class Enemy {
       sq = Math.sin(this.hopT * Math.PI * 2) * 0.05;
     }
     this.squash = Math.max(0, (this.squash || 0) - dt * 2);
-    sq += this.squash * Math.sin(this.stateT * 30);
+    sq += this.squash * Math.sin(this.hopT * 30);
     s.body.position.y = lift;
     s.body.scale.set(1 + sq, 1 - sq * 1.4, 1 + sq);
-    this.obj.rotation.y = this.yaw;
     this.slimeFlash = Math.max(0, (this.slimeFlash || 0) - dt * 6);
     s.mat.emissive.copy(s.baseEmissive).addScalar(this.slimeFlash * 0.8 + (this.hover ? 0.12 : 0));
-    if (this.def.glow && Math.random() < dt * 6) {
-      this.game.fx.add.emit({ pos: { x: this.pos.x, y: this.pos.y + 0.9 * this.def.size, z: this.pos.z }, count: 1, spread: 0.3, velSpread: 0.3, vel: { x: 0, y: 1.4, z: 0 }, color: new THREE.Color(0xffa040).multiplyScalar(3), size: 0.12, sizeEnd: 0.02, life: 0.9, drag: 1 });
+    if (d.glow && Math.random() < dt * 6) {
+      this.game.fx.add.emit({ pos: { x: this.pos.x, y: this.pos.y + 0.9 * d.size, z: this.pos.z }, count: 1, spread: 0.3, velSpread: 0.3, vel: { x: 0, y: 1.4, z: 0 }, color: new THREE.Color(0xffa040).multiplyScalar(3), size: 0.12, sizeEnd: 0.02, life: 0.9, drag: 1 });
     }
   }
 }
 
+// The monsters our hero can see, by the world's id.
 export class EnemyManager {
   constructor(game) {
     this.game = game;
     this.list = [];
-    this.slots = [];
-    for (const sp of SPAWNS) {
-      for (let i = 0; i < sp.n; i++) this.slots.push({ ...sp, enemy: null, timer: rand(0, 1.5) });
+    this.byId = new Map();
+  }
+
+  // Full records (a monster comes into sight) and updates ([id, x, z, yaw, speed, life, state]).
+  records(recs, ts) {
+    for (const r of recs) {
+      if (Array.isArray(r)) {
+        this.byId.get(r[0])?.sample(ts, r[1], r[2], r[3], r[4], r[5], r[6]);
+        continue;
+      }
+      if (!r || !Object.hasOwn(ENEMY_TYPES, r.t) || r.s === 4) continue; // (already dead: nothing to see)
+      this.remove(r.i);
+      const e = new Enemy(this.game, r, ts);
+      this.byId.set(r.i, e);
+      this.list.push(e);
     }
+  }
+
+  remove(id) {
+    const e = this.byId.get(id);
+    if (!e) return;
+    e.dispose();
+    this.byId.delete(id);
+    this.list.splice(this.list.indexOf(e), 1);
+  }
+
+  clear() {
+    for (const e of this.list) e.dispose();
+    this.list = [];
+    this.byId.clear();
+  }
+
+  event(ev) {
+    this.byId.get(ev[1])?.event(ev);
+  }
+
+  // [d, id, x, z, credited heroes, killer, type, level]: it fell. If we helped, our share comes now.
+  died(ev) {
+    const [, id, x, z, who, , type, level] = ev;
+    const e = this.byId.get(id), g = this.game;
+    if (e) {
+      e.die();
+      e.predicted = 0;
+    }
+    if (!Array.isArray(who) || !who.includes(g.link.pid) || !Object.hasOwn(ENEMY_TYPES, type)) return;
+    const pos = e ? e.pos.clone() : new THREE.Vector3(x, heightAt(x, z), z);
+    g.rewardKill({ type, level, def: ENEMY_TYPES[type], pos, height: e ? e.height : 2 });
   }
 
   update(dt) {
-    const p = this.game.player, inside = this.game.dungeon.inside;
-    for (const s of this.slots) {
-      if (s.enemy || (s.crypt && !inside)) continue;
-      s.timer -= dt;
-      const far = Math.hypot(p.pos.x - s.x, p.pos.z - s.z) > s.r + 6 || s.timer < -20;
-      if (s.timer <= 0 && far) {
-        s.enemy = new Enemy(this.game, s);
-        this.list.push(s.enemy);
-      }
-    }
-    for (const e of this.list) {
-      // nobody near (the other side of the crypt door): don't draw them, and let idle ones rest
-      const far = Math.abs(e.pos.x - p.pos.x) > 90 || Math.abs(e.pos.z - p.pos.z) > 90;
-      if (e.alive) e.obj.visible = !far;
-      if (far && (e.state === 'idle' || e.state === 'spawn')) continue;
-      e.update(dt);
-    }
+    for (const e of this.list) e.update(dt);
     for (let i = this.list.length - 1; i >= 0; i--) {
       const e = this.list[i];
-      if (e.removed) {
-        this.list.splice(i, 1);
-        e.slot.enemy = null;
-        e.slot.timer = e.def.respawn || rand(18, 28);
-      }
+      if (!e.removed) continue;
+      e.dispose();
+      this.byId.delete(e.id);
+      this.list.splice(i, 1);
     }
   }
 
-  // A monster raised mid-fight (by the Lich): no spawn slot, so it never comes back.
-  summon(type, lvl, x, z, master) {
-    const slot = { type, x, z, r: 1, n: 1, lvl, summoned: true };
-    const e = new Enemy(this.game, slot);
-    e.summoner = master;
-    slot.enemy = e;
-    this.list.push(e);
-    return e;
-  }
-
+  // A boss in a fight near our hero (the boss bar and its music).
   get boss() {
-    return this.list.find((e) => e.def.boss && e.alive && e.state === 'chase') || null;
+    const p = this.game.player.pos;
+    return this.list.find((e) => e.def.boss && e.alive && e.state === 'chase' && Math.hypot(e.pos.x - p.x, e.pos.z - p.z) < 40) || null;
   }
 }

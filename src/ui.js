@@ -343,6 +343,46 @@ export class UI {
     return p;
   }
 
+  // Name, level and life over another hero, and a speech bubble when they chat.
+  createPlayerPlate(rp) {
+    const el = document.createElement('div');
+    el.className = `plate player c-${rp.cls}`;
+    el.innerHTML = '<div class="bubble"></div><div class="pn"><span></span><i></i></div><div class="hpb"><b></b></div>';
+    this.el.plates.appendChild(el);
+    const p = { el, ent: rp, kind: 'player', bar: el.querySelector('.hpb b'), bubble: el.querySelector('.bubble'), max: 46 };
+    this.plates.push(p);
+    rp.plate = p;
+    this.refreshPlayerPlate(rp);
+    return p;
+  }
+
+  refreshPlayerPlate(rp) {
+    const el = rp.plate.el;
+    el.querySelector('.pn span').textContent = rp.name; // (text, never HTML: names come from other players)
+    el.querySelector('.pn i').textContent = `Lv ${rp.level}`;
+  }
+
+  // A chat bubble over a hero's head for a few seconds (our own hero gets an empty plate for it).
+  say(who, text) {
+    let p = who.plate;
+    if (who === this.game.player) {
+      if (!this.selfPlate) {
+        const el = document.createElement('div');
+        el.className = 'plate player self';
+        el.innerHTML = '<div class="bubble"></div>';
+        this.el.plates.appendChild(el);
+        this.selfPlate = { el, ent: who, kind: 'player', bubble: el.querySelector('.bubble'), max: 46 };
+        this.plates.push(this.selfPlate);
+      }
+      p = this.selfPlate;
+    }
+    if (!p?.bubble) return;
+    p.bubble.textContent = text.length > 90 ? `${text.slice(0, 88)}…` : text;
+    p.el.classList.add('talking');
+    clearTimeout(p.bubbleT);
+    p.bubbleT = setTimeout(() => p.el.classList.remove('talking'), 2500 + Math.min(text.length, 90) * 60);
+  }
+
   removePlate(p) {
     if (!p) return;
     p.el.remove();
@@ -361,6 +401,7 @@ export class UI {
     this.plates = this.plates.filter((p) => !p.dead);
     for (const p of this.plates) {
       if (p.kind === 'enemy') p.ent.platePos(tmp);
+      else if (p.kind === 'player') tmp.set(p.ent.pos.x, p.ent.pos.y + 2.75, p.ent.pos.z);
       else p.getPos(tmp);
       const far = tmp.distanceTo(pp) > p.max;
       const sc = far ? null : this.project(tmp);
@@ -376,6 +417,11 @@ export class UI {
         p.bar.style.transform = `scaleX(${f.toFixed(3)})`;
         p.el.classList.toggle('hurt', f < 0.999);
         p.el.classList.toggle('hover', !!e.hover);
+      } else if (p.kind === 'player' && p.bar) {
+        const o = p.ent;
+        p.bar.style.transform = `scaleX(${o.hp.toFixed(3)})`;
+        p.el.classList.toggle('hurt', o.hp < 0.999 && o.alive);
+        p.el.classList.toggle('down', !o.alive || o.away);
       }
     }
   }
@@ -551,6 +597,7 @@ export class UI {
     this.closeInventory();
     this.togglePanel('help', false);
     this.syncSettings();
+    $('settings-note').textContent = this.game.offline ? 'game paused' : 'the world goes on';
     this.el.settings.classList.remove('hidden');
     this.settingsOpen = true;
     this.game.paused = true;
@@ -802,6 +849,17 @@ export class UI {
       if (!onMap(pt)) continue;
       ctx.fillStyle = RARITY[l.data.rarity].color;
       ctx.fillRect(pt[0] - 2, pt[1] - 2, 4, 4);
+    }
+    for (const o of g.others.list) { // other heroes
+      const [x, y] = m(o.pos.x, o.pos.z);
+      if (!onMap([x, y])) continue;
+      ctx.beginPath();
+      ctx.arc(x, y, 3.2, 0, Math.PI * 2);
+      ctx.fillStyle = o.alive ? '#5fd4ff' : '#4a6a78';
+      ctx.fill();
+      ctx.strokeStyle = '#06222c';
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
     }
     for (const e of g.enemies.list) {
       if (!e.alive) continue;

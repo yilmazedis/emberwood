@@ -1,4 +1,4 @@
-// Packs the KayKit Dungeon pieces the crypt uses (every model named in src/dungeon.js) into one
+// Packs the KayKit Dungeon pieces the crypt uses (every model named in src/crypt-map.js) into one
 // binary glTF, assets/dungeon/crypt.glb, so the game makes a single request instead of ~80 (the host
 // is slow to answer each one). The pieces share one material and texture, which are stored once.
 //
@@ -15,8 +15,8 @@ if (!SRC) {
   process.exit(1);
 }
 
-// every model dungeon.js names: put('…'), banner('…'), model: '…' and the quoted wall/floor variants
-const code = readFileSync(join(ROOT, 'src/dungeon.js'), 'utf8');
+// every model crypt-map.js names: put('…'), banner('…'), model: '…' and the quoted wall/floor variants
+const code = readFileSync(join(ROOT, 'src/crypt-map.js'), 'utf8');
 const names = [...new Set([...code.matchAll(/(?:put|banner)\('(\w+)'|model: '(\w+)'|'((?:wall|floor)\w*)'/g)]
   .map((m) => m[1] || m[2] || m[3]))].sort();
 

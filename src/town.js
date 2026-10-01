@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { Humanoid } from './character.js';
 import { cloneItem } from './assets.js';
-import { heightAt, addCollider, TOWN } from './world.js';
+import { heightAt, TOWN } from './world.js';
 import { vendorItem, buyPrice, RARITY } from './items.js';
 import { angleDiff, clamp, dampAngle, pick, yawTo } from './util.js';
 
@@ -80,14 +80,7 @@ function buildStall(scene) {
   g.add(box(0.7, 0.7, 0.7, wood, -2.25, 0.35, -0.9, 0, 0.3, 0));
   g.add(box(0.55, 0.55, 0.55, plank, -2.3, 0.97, -0.95, 0, -0.2, 0));
   g.add(mesh(new THREE.CylinderGeometry(0.34, 0.3, 0.85, 9), dark, 2.2, 0.43, -1.0));
-  scene.add(g);
-
-  for (const dx of [-0.95, 0, 0.95]) addCollider(x + dx, z, 0.6);
-  addCollider(x - 1.5, z - 1.55, 0.3);
-  addCollider(x + 1.5, z - 1.55, 0.3);
-  addCollider(x - 2.25, z - 0.9, 0.55);
-  addCollider(x + 2.2, z - 1.0, 0.4);
-  addCollider(x + 1.95, z + 0.35, 0.2);
+  scene.add(g); // (what blocks the way here is in terrain.js, which the server shares)
   return g;
 }
 
@@ -96,7 +89,7 @@ function buildChest(scene) {
   const { x, z } = TOWN.stash;
   const g = new THREE.Group();
   g.position.set(x, heightAt(x, z), z);
-  g.rotation.y = 0.35; // turned toward the camp
+  g.rotation.y = TOWN.stashYaw; // turned toward the camp
   const wood = mat(0x7a4a26), lidWood = mat(0x7a4a26, 0.85, 0, THREE.DoubleSide);
   const band = mat(0x3a3a42, 0.5, 0.3, THREE.DoubleSide), gold = mat(0xe8b640, 0.3, 0.45);
   g.add(box(1.3, 0.62, 0.85, wood, 0, 0.31, 0));
@@ -113,7 +106,6 @@ function buildChest(scene) {
   hinge.add(mesh(half(0.425, 1.3), lidWood, 0, 0, 0.425));
   for (const s of [-1, 1]) hinge.add(mesh(half(0.435, 0.09), band, s * 0.48, 0, 0.425));
   scene.add(g);
-  addCollider(x, z, 0.8);
   return { group: g, hinge };
 }
 
@@ -123,7 +115,7 @@ function buildBoard(scene) {
   const { x, z } = TOWN.board;
   const g = new THREE.Group();
   g.position.set(x, heightAt(x, z), z);
-  g.rotation.y = -0.4; // turned toward the fire
+  g.rotation.y = TOWN.boardYaw; // turned toward the fire
   const wood = mat(0x8a5a33), dark = mat(0x5a3a20), roof = mat(0x6b3a2a);
   const papers = [mat(0xf1e1bf, 0.95), mat(0xe6d3a8, 0.95)], pin = mat(0xc0392b, 0.5);
   for (const s of [-1, 1]) g.add(mesh(new THREE.CylinderGeometry(0.09, 0.11, 2.5, 6), dark, s * 1.0, 1.25, 0));
@@ -144,9 +136,6 @@ function buildBoard(scene) {
   marker.add(mesh(new THREE.BoxGeometry(0.18, 0.18, 0.18), glowMat, 0, -0.07, 0));
   g.add(marker);
   scene.add(g);
-  // colliders along the board, between the posts
-  const cy = g.rotation.y;
-  for (const lx of [-1, 0, 1]) addCollider(x + lx * Math.cos(cy), z - lx * Math.sin(cy), 0.4);
   return { group: g, marker };
 }
 
@@ -170,7 +159,6 @@ export class Town {
     this.npc.group.position.set(v.x, heightAt(v.x, v.z - 0.95), v.z - 0.95);
     this.npcYaw = 0;
     scene.add(this.npc.group);
-    addCollider(v.x, v.z - 0.95, 0.45);
 
     // where the player stands to use them
     this.vendorSpot = new THREE.Vector2(v.x, v.z + 1.25);

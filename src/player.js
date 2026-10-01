@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { Humanoid } from './character.js';
 import { heightAt, resolveCollision } from './world.js';
 import { makeItem, BASES } from './items.js';
+import { Assets } from './assets.js';
 import { dampAngle, yawTo, rand } from './util.js';
 import { CLASSES } from './classes.js';
 import { hdr } from './fx.js';
@@ -16,6 +17,7 @@ export const SKILLS = [
 
 export const xpForLevel = (lvl) => Math.round(60 * Math.pow(lvl, 1.55));
 const _axis = new THREE.Vector2();
+const r2 = (v) => Math.round(v * 100) / 100;
 const _ember = new THREE.Vector3();
 
 export const STASH_SIZE = 30;
@@ -42,6 +44,36 @@ export function applyEquipmentVisuals(h, eq, cls = 'knight') {
   h.enableGearTint();
   h.setGear('hands', gearLook(eq.hands));
   h.setGear('feet', gearLook(eq.feet));
+}
+
+// What the other players' games need to draw this hero: its level and the gear that shows.
+export function lookOf(p) {
+  const eq = p.equipment, leg = (it) => (it.rarity === 'legendary' ? 1 : 0);
+  const k = { lv: p.level };
+  if (eq.weapon?.model) k.w = [eq.weapon.model, leg(eq.weapon)];
+  if (eq.offhand?.model) k.o = [eq.offhand.model, leg(eq.offhand)];
+  if (eq.head) k.h = eq.head.base;
+  if (eq.back) k.b = 1;
+  if (eq.hands) k.g = [eq.hands.base, leg(eq.hands)];
+  if (eq.feet) k.f = [eq.feet.base, leg(eq.feet)];
+  return k;
+}
+
+// …and back, for a hero someone else plays. Looks come from other games, so anything unknown is left off.
+export function equipmentFromLook(k) {
+  const eq = emptyEquipment();
+  if (!k || typeof k !== 'object') return eq;
+  const rarity = (v) => (v ? 'legendary' : 'common');
+  const held = (v) => (Array.isArray(v) && typeof v[0] === 'string' && Object.hasOwn(Assets.items, v[0]) ? { model: v[0], rarity: rarity(v[1]) } : null);
+  const base = (key, slot) => typeof key === 'string' && Object.hasOwn(BASES, key) && BASES[key].slot === slot;
+  const worn = (v, slot) => (Array.isArray(v) && base(v[0], slot) && BASES[v[0]].gear ? { base: v[0], rarity: rarity(v[1]) } : null);
+  eq.weapon = held(k.w);
+  eq.offhand = held(k.o);
+  eq.head = base(k.h, 'head') ? { base: k.h } : null;
+  eq.back = k.b ? { base: 'cape' } : null;
+  eq.hands = worn(k.g, 'hands');
+  eq.feet = worn(k.f, 'feet');
+  return eq;
 }
 
 export class Player {
@@ -250,6 +282,7 @@ export class Player {
     applyEquipmentVisuals(this.h, this.equipment, this.cls);
     this.game.ui?.refreshInventory();
     this.game.doll?.setEquipment(this.equipment, this.cls);
+    this.game.link?.lookChanged();
     if (save) this.game.save();
   }
 
@@ -272,6 +305,8 @@ export class Player {
       this.game.ui.floater(this.headPos(), `Level ${this.level}`, 'info');
       this.game.ui.buildActionBar();
       this.game.town?.onLevelUp();
+      this.game.link?.act({ k: 'lv' });
+      this.game.link?.lookChanged();
       this.game.save();
     }
   }
@@ -313,6 +348,7 @@ export class Player {
         }
       },
     };
+    g.link.act({ k: 'sw', s: style, d: r2(dur) });
   }
 
   useSkill(i) {
@@ -324,7 +360,8 @@ export class Player {
     if (this.action) { this.queued = { t: 0.4, fn: () => this.useSkill(i) }; return; }
     this.mp -= sk.mp;
     this.cd[sk.id] = sk.cd;
-    this[`skill_${sk.id}`]();
+    const at = this[`skill_${sk.id}`]();
+    g.link.act(at ? { k: 'sk', id: sk.id, x: r2(at.x), z: r2(at.z) } : { k: 'sk', id: sk.id });
   }
 
   skill_cleave() {
@@ -347,6 +384,7 @@ export class Player {
         }
       },
     };
+    return point;
   }
 
   skill_fireball() {
@@ -372,6 +410,7 @@ export class Player {
       },
       end: () => this.h.anim.stopOne(),
     };
+    return target;
   }
 
   skill_whirlwind() {
@@ -422,6 +461,7 @@ export class Player {
     this.cd.potion = 1.5;
     this.heal(Math.round(this.stats.maxHp * 0.4));
     g.sfx.play('drink');
+    g.link.act({ k: 'dr' });
     g.save();
   }
 
@@ -446,6 +486,7 @@ export class Player {
     const lost = Math.floor(this.gold * 0.1);
     this.gold -= lost;
     g.sfx.play('death');
+    g.link.act({ k: 'de' });
     g.ui.closeInventory();
     setTimeout(() => g.ui.showDeath(true), 1400);
     g.save();
@@ -461,6 +502,7 @@ export class Player {
     this.yaw = this.targetYaw = Math.PI;
     this.h.anim.play('Spawn_Ground', { timeScale: 1.2 });
     this.game.ui.showDeath(false);
+    this.game.link.act({ k: 're' });
   }
 
   // ---------------------------------------------------------------- per frame
@@ -485,7 +527,7 @@ export class Player {
       }
     }
 
-    const ax = g.input.axis(_axis); // keyboard (0 or 1) or joystick (analog 0..1)
+    const ax = g.inputBlocked ? _axis.set(0, 0) : g.input.axis(_axis); // keyboard (0 or 1) or joystick (analog 0..1)
     const len = Math.min(1, ax.length());
     let speed = 0;
     const spawning = this.h.anim.oneName === 'Spawn_Ground';
@@ -501,6 +543,8 @@ export class Player {
     this.yaw = dampAngle(this.yaw, this.targetYaw, 16, dt);
     this.group.rotation.y = this.yaw;
 
+    this.moveSpeed = speed;
+    this.moveMode = speed > s.moveSpeed * 0.55 ? 2 : speed > 0 ? 1 : 0; // (what the others see)
     if (speed > s.moveSpeed * 0.55) this.h.anim.setBase('Running_A', speed / 5.4);
     else if (speed > 0) this.h.anim.setBase('Walking_A', Math.max(0.7, speed / 2.2));
     else this.h.anim.setBase('Idle_A');
@@ -515,7 +559,7 @@ export class Player {
         const q = this.queued;
         this.queued = null;
         q.fn();
-      } else if (g.input.attacking && this.cd.attack <= 0) {
+      } else if (g.input.attacking && !g.inputBlocked && this.cd.attack <= 0) {
         this.basicAttack();
       }
     }

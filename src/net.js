@@ -1,5 +1,8 @@
 // The connection to the game server: requests with replies, messages the server pushes, and
 // reconnecting by itself (signing back in with the saved token) if the line drops mid-game.
+import { PROTOCOL } from './sim/world.js';
+
+export { PROTOCOL };
 const PRODUCTION = 'wss://gameserver.kerimcaglar.com/ws';
 const TOKEN_KEY = 'emberwood-token';
 
@@ -27,6 +30,7 @@ export class Net {
     this.online = false;
     this.session = null; // { charId } once playing: reconnecting resumes it
     this.retry = 0;
+    this.hello = null; // the server's greeting: { v: protocol version, online, world }
   }
 
   on(type, fn) {
@@ -47,6 +51,7 @@ export class Net {
         this.online = true;
         try {
           const hello = await this.request('hello');
+          this.hello = hello;
           settled = true;
           clearTimeout(timer);
           resolve(hello);
@@ -97,7 +102,9 @@ export class Net {
     this.emit('connection', { online: false });
     while (this.session && !this.closing) {
       await new Promise((r) => setTimeout(r, Math.min(15000, 1000 * 2 ** this.retry++)));
-      try { await this.connect(); } catch { continue; } // still unreachable
+      try {
+        if ((await this.connect()).v !== PROTOCOL) { this.session = null; this.emit('signedOut', { msg: 'Emberwood was updated. Reload the page to keep playing.' }); break; }
+      } catch { continue; } // still unreachable
       try {
         await this.request('resume', { token: savedToken.get() });
         if (this.session?.charId) await this.request('play', { id: this.session.charId });

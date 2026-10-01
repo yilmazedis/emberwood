@@ -1,6 +1,7 @@
 # Emberwood
 
-A small online 3D action RPG in the browser: make an account and a hero, then fight monsters, collect loot and gear up.
+A small online 3D action RPG in the browser: make an account and a hero, then fight monsters alongside other players,
+collect loot and gear up.
 It uses Three.js with the free **KayKit Adventurers**, **Skeletons** and **Dungeon** packs (CC0, by Kay Lousberg).
 
 ## Run it
@@ -29,11 +30,21 @@ automated tests). Three.js loads from a CDN, so you need an internet connection.
   saved in the browser from the single-player days can be brought online once, as a Knight.
 - **Saving:** the game sends the hero's progress to the server every few seconds and when you leave. If the line
   drops, the game keeps going and reconnects by itself.
-- **Coming next:** the shared world (other players, chat, monsters and loot run by the server), each class's own
-  skills, parties with their own copy of the crypt, and trading.
+- **The shared world:** the monsters live on the server (`src/sim/world.js`): they spawn, wander, chase the nearest
+  hero and attack, the same for everybody. You see the other heroes nearby in their class and gear, with a name tag
+  and life bar, and what they do (swings, skills, ale, falling and rising). Everyone who hits a monster gets the kill's
+  XP and quest credit and rolls their **own** loot, which only they see, so nobody steals anyone's drops. Whether a
+  monster's blow, bolt or slam lands is decided by the game of the hero it's aimed at (it knows where that hero
+  really stands, so dodging works); the server keeps the monsters' life. Morvain's crypt is shared by everyone for now.
+- **Chat:** one world channel (Enter, or the Chat button on phones); nearby heroes also show it in a bubble.
+  Last 20 lines are shown to heroes who arrive.
+- **Coming next:** each class's own skills, parties with their own copy of the crypt, and trading.
 
 The server (`server/`, Node built-ins only) speaks JSON over one WebSocket at `/ws` and shows `{"ok":true,…}` at
-`/status`. Its data lives outside the website, in `$EMBERWOOD_DATA` or `~/emberwood-data`: one JSON file per account
+`/status`. Ten times a second it moves the world on and sends each hero's game what's around it: monsters and heroes
+within ~55 m (in full the first time, then only what changed) and what happened. Games show that 0.18 s in the past
+so movement stays smooth between updates. The messages have a version (`PROTOCOL` in `src/sim/world.js`): a game
+that doesn't match the server asks to reload (or, if the server is the older one, to try again in a minute). Its data lives outside the website, in `$EMBERWOOD_DATA` or `~/emberwood-data`: one JSON file per account
 (`accounts/<name>.json`), `names.json` (who has which hero name) and `secret.key` (signs the tokens; keep it private).
 To back up, copy that folder.
 
@@ -41,6 +52,8 @@ To back up, copy that folder.
 
 Live at https://emberwood.kerimcaglar.com, on DirectAdmin + LiteSpeed shared hosting.
 
+- **Order:** `git pull`, then Restart the game server (most updates change both). Players get the new game when
+  they reload.
 - **Website:** the subdomain's `public_html` is a symlink to the clone
   (`~/domains/emberwood.kerimcaglar.com/public_html -> emberwood`). Deploy with `git pull` in the clone.
   `.htaccess` sets the model MIME types and cache headers, and blocks `.git`, log files and `server/`.
@@ -52,11 +65,12 @@ Live at https://emberwood.kerimcaglar.com, on DirectAdmin + LiteSpeed shared hos
 
 ## Controls
 
-**Desktop:** WASD to move · left click to attack (hold to keep swinging) · 1–4 skills · Q ale (heal) · I bag · E use what's in reach (merchant, stash, notice board, the crypt door, chests) · mouse wheel to zoom · Esc settings · M mute
+**Desktop:** WASD to move · left click to attack (hold to keep swinging) · 1–4 skills · Q ale (heal) · I bag · E use what's in reach (merchant, stash, notice board, the crypt door, chests) · Enter chat · mouse wheel to zoom · Esc settings · M mute
 
 **Phones and tablets** (switches automatically on the first touch): a floating joystick on the left half of the screen
 (push a little to walk, fully to run), a hold-to-attack sword button and skill buttons on the right. On touch screens,
-attacks and skills aim at the nearest enemy. In the bag, tap an item to see it, then Equip or Sell.
+attacks and skills aim at the nearest enemy. In the bag, tap an item to see it, then Equip or Sell. Chat opens a line
+at the top of the screen (the keyboard covers the bottom); the last three lines stay there for a while.
 
 **Camp:** Wren the merchant sells ale and gear around your level (new stock every 5 minutes and on level-up),
 buys back anything you sold this session, and can sell all your common items at once. The stash chest next to
@@ -85,8 +99,8 @@ Everything you hear is synthesized live with WebAudio; there are no audio files.
   pond, crackling near fires; in the crypt a low rumble, a draft, dripping water and more echo.
 - **Settings** (Esc, or the Settings button): music, sound effect and ambience volume, mute, graphics quality (Low turns
   off shadows and glow and draws fewer pixels, for older phones), camera distance (phones have no mouse wheel), and
-  **Leave game**, which saves and returns to the title screen (Continue picks up where you were). The game pauses while
-  the settings are open, and the sound rests while the app is in the background. Settings are kept in the browser
+  **Leave game**, which saves and returns to the title screen. Online the world doesn't wait while the settings are
+  open (offline it pauses); monsters leave a hero alone while the app is in the background, and the sound rests. Settings are kept in the browser
   (`emberwood-settings`), separate from the save.
 
 ## Install as an app (PWA)
@@ -123,7 +137,7 @@ Variants: `?size=192`, `?size=512&maskable` (Android adaptive icon), `?size=180&
 | Gloves and boots on the knight | The Knight's hands/feet are recolored by a shader that follows the skinning weights of the hand/forearm and foot/toe/shin bones (`character.js`) |
 | Gloves, boots and rings (icons, loot on the ground) | Small procedural models (`gear.js`); the packs have none |
 | Sword swings | Generated in code (`character.js`); the free pack has no attack clips |
-| Terrain, trees, rocks, grass, water, camps, graveyard | Generated in code (`world.js`), flat-shaded to match KayKit |
+| Terrain, trees, rocks, grass, water, camps, graveyard | Generated in code (`terrain.js` places them, `world.js` draws them), flat-shaded to match KayKit |
 | Market stall, stash chest and notice board | Generated in code (`town.js`), with the pack's items as wares on the counter |
 | The crypt: walls, floors, pillars, stairs, torches, banners, chests, props | KayKit Dungeon models, packed into one file (`assets/dungeon/crypt.glb`), placed on a 4 m grid and merged into two meshes (`dungeon.js`); walls on the camera side are clipped low |
 | Morvain the Lich | The Skeleton Mage, scaled up and tinted violet, with a glowing staff; his rune circle is a shader (`dungeon.js`) |
@@ -136,12 +150,19 @@ Variants: `?size=192`, `?size=512&maskable` (Android adaptive icon), `?size=180&
 
 - `src/game.js`: renderer, camera, aim, damage, rewards, save
 - `src/input.js`: keyboard, mouse, joystick and touch buttons (also clears keys the browser never "releases")
-- `src/player.js`: stats, leveling, inventory, skills
-- `src/enemies.js`: monster types, spawn table, AI
+- `src/player.js`: stats, leveling, inventory, skills, and the looks other players see
+- `src/sim/world.js`: the shared world the server runs: monster AI, spawns, the crypt, heroes, who sees what
+- `src/link.js`: the game's side of it: smooth movement between updates, attacks played out, what we report back
+- `src/local.js`: the same world running in the page, for offline play (`?autostart`)
+- `src/enemies.js`: monsters as the world reports them (models, animation, their attacks on our hero)
+- `src/others.js`: the other heroes (models in their gear, name tags, what they do); `src/chat.js`: world chat
+- `src/monsters.js`: monster types and the spawn table; `src/terrain.js`: ground height, zones, what blocks the way
+  (with fixed seeds, so the game and the server agree); `src/crypt-map.js`: the crypt's map, walls and paths
+  (these three, `classes.js`, `util.js` and `noise.js` are plain data and math, shared with the server)
 - `src/items.js`: item bases (weapons, shields, helmets, capes, gloves, boots, rings), rarities, affixes, loot rolls
 - `src/gear.js`: procedural glove/boot/ring models
 - `src/town.js`: the camp: merchant, stall, stash chest, notice board, shop stock, buyback, stash transfers
-- `src/dungeon.js`: the crypt: map, walls and paths around them, torch lights, chests, the way in and out
+- `src/dungeon.js`: the crypt drawn: its pieces, torch lights, chests, the way in and out
 - `src/audio.js`, `src/music.js`, `src/ambience.js`: sound effects, generative music, ambience (mixer and volumes in `audio.js`)
 - `src/settings.js`: saved player settings
 - `src/classes.js`: the playable classes (shared with the server)
@@ -156,11 +177,12 @@ Variants: `?size=192`, `?size=512&maskable` (Android adaptive icon), `?size=180&
 
 KayKit's other free packs (Forest, Halloween…) use the same rig and style. The Skeletons pack was added this way:
 
-- **New monster:** copy the `.glb` into `assets/characters/`, add its name to `CHARACTERS` in `assets.js`, and add an entry to `ENEMY_TYPES` and `SPAWNS` in `enemies.js`. The skeleton entries show the options: `offhand` (shield), `style: 'chop'`, `eyes` (glow color), `bolt` (caster projectile color), `loot: 'bone'` (loot table).
+- **New monster:** copy the `.glb` into `assets/characters/`, add its name to `CHARACTERS` in `assets.js`, and add an entry to `ENEMY_TYPES` and `SPAWNS` in `monsters.js` (then restart the game server). The skeleton entries show the options: `offhand` (shield), `style: 'chop'`, `eyes` (glow color), `bolt` (caster projectile color), `loot: 'bone'` (loot table).
 - **New weapon or shield:** copy the `.gltf`, `.bin` and texture into `assets/items/`, add the model name to `ITEM_MODELS`, and add a base to `BASES` in `items.js`.
-- **More crypt pieces:** name any Dungeon pack model in `dungeon.js` (e.g. `put('barrel_large', x, z)`), then repack:
+- **More crypt pieces:** name any Dungeon pack model in `crypt-map.js` (e.g. `put('barrel_large', x, z)`), then repack:
   `node tools/pack-dungeon.mjs "<KayKit_Dungeon_Pack_1.1_FREE>/Assets/gltf"`. It writes every model `dungeon.js`
   names into `assets/dungeon/crypt.glb`, one file instead of ~80 (the host is slow to answer each request).
 - **Attack animations:** if you get a pack with combat clips (for example Rig_Medium_CombatMelee), drop the `.glb` into `assets/animations/`, add it to `ANIMATIONS`, and call `anim.play('<clip name>')` instead of `startSwing`.
 
-Progress is saved in the browser's localStorage. To start over, run `localStorage.removeItem('emberwood-save-v1')` in the console.
+Heroes are saved on the game server. Offline play (`?autostart`) saves in the browser's localStorage instead; to
+start that over, run `localStorage.removeItem('emberwood-save-v1')` in the console.

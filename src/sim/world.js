@@ -1,0 +1,648 @@
+// The shared world: monsters spawn, wander, chase whoever is nearest and attack; heroes come and go.
+// The game server runs one for everybody (server/main.mjs); offline, the game runs its own (local.js).
+//
+// Each hero's game says where its hero is, what it hit and what it did; ten times a second the world
+// tells every game where the monsters and other heroes around it are, and what happened. Whether a
+// monster's blow lands is decided by the game of the hero it swings at (that game knows where its hero
+// really stands, so dodging works), and so are XP and loot: everyone who hit a monster gets credit for
+// the kill and rolls their own loot.
+// Plain numbers only (no three.js), so Node runs it as is.
+import { ENEMY_TYPES, SPAWNS } from '../monsters.js';
+import { planWorld, zoneAt, resolveCollision, isWalkable, randomWalkablePoint } from '../terrain.js';
+import { inDungeon, steer, lineClear, ROOMS } from '../crypt-map.js';
+import { rand, clamp, dampAngle, yawTo, TAU } from '../util.js';
+
+export const PROTOCOL = 2; // bump when the messages change: older games are asked to reload
+export const TICK = 0.1; // seconds between world updates
+export const STATES = ['spawn', 'idle', 'chase', 'return', 'dead'];
+const CODE = Object.fromEntries(STATES.map((s, i) => [s, i]));
+const SEE_MONSTERS = 56; // a game hears about monsters this far (each way) from its hero
+const SEE_PLAYERS = 80; // … and about other heroes
+const ACTIVE = 90; // monsters further than this from every hero rest
+const EMPTY_RESET = 120; // seconds an empty crypt keeps its monsters
+const HERO_RADIUS = 0.5;
+const r2 = (v) => Math.round(v * 100) / 100;
+const r1 = (v) => Math.round(v * 10) / 10;
+
+// ---------------------------------------------------------------- monsters
+class Monster {
+  constructor(area, slot) {
+    const sim = area.sim, d = ENEMY_TYPES[slot.type];
+    this.area = area;
+    this.sim = sim;
+    this.slot = slot;
+    this.id = ++sim.lastId;
+    this.type = slot.type;
+    this.def = d;
+    this.level = slot.lvl;
+    this.maxHp = Math.round(d.hp * (1 + 0.32 * (this.level - 1)));
+    this.hp = this.maxHp;
+    this.radius = d.radius * (d.scale || 1);
+    this.crypt = inDungeon(slot.x, slot.z); // walls: path around them, and no seeing through them
+    const home = slot.ring ? ringPoint(slot) : randomWalkablePoint(slot.x, slot.z, slot.r);
+    this.home = { x: home.x, z: home.z };
+    this.x = home.x;
+    this.z = home.z;
+    this.yaw = rand(0, TAU);
+    this.state = 'spawn';
+    this.stateT = 0;
+    this.atkCd = rand(0.5, d.atkCd);
+    this.attack = null;
+    this.stagger = 0;
+    this.stun = 0; // skills can stun, slow and taunt (see hit)
+    this.slow = 0;
+    this.slowBy = 1;
+    this.taunt = 0;
+    this.taunter = null;
+    this.wanderT = rand(1, 4);
+    this.wanderTarget = null;
+    this.deadT = 0;
+    this.swingCount = 0;
+    this.speed = 0;
+    this.target = null;
+    this.sight = new Map(); // hero -> { at, clear }: line-of-sight checks in the crypt, 5 per second
+    this.hitters = new Map(); // pid -> when they last hit it: everyone here gets credit for the kill
+    if (d.lich) {
+      this.circleT = 5;
+      this.blinkCd = 6;
+      this.closeT = 0;
+      this.raised = [];
+      this.enraged = false;
+    }
+  }
+
+  emit(ev, to = null) {
+    this.area.events.push({ mid: this.id, ev, to });
+  }
+
+  dist(p) {
+    return Math.hypot(p.x - this.x, p.z - this.z);
+  }
+
+  // A hero this monster may fight: alive, at the keyboard, outside camp and on its side of the crypt door.
+  fair(p) {
+    return !!p && p.inWorld && p.area === this.area && p.alive && !p.away && !zoneAt(p.x, p.z)?.safe && inDungeon(p.x, p.z) === this.crypt;
+  }
+
+  // Can it see the hero? Always, outside; in the crypt, not through walls.
+  sees(p) {
+    if (!this.crypt) return true;
+    const t = this.sim.time;
+    let s = this.sight.get(p);
+    if (!s || t >= s.at) {
+      if (this.sight.size > 8) this.sight.clear(); // heroes who left
+      s = { at: t + 0.2, clear: lineClear(this.x, this.z, p.x, p.z, 0.15) };
+      this.sight.set(p, s);
+    }
+    return s.clear;
+  }
+
+  nearest(range, sight = true) {
+    let best = null, bd = range;
+    for (const p of this.area.players) {
+      if (!this.fair(p)) continue;
+      const d = this.dist(p);
+      if (d < bd && (!sight || this.sees(p))) { bd = d; best = p; }
+    }
+    return best;
+  }
+
+  faceTo(x, z, dt, rate = 10) {
+    this.yaw = dampAngle(this.yaw, yawTo(x - this.x, z - this.z), rate, dt);
+  }
+
+  moveToward(x, z, speed, dt) {
+    if (this.slow > 0) speed *= this.slowBy;
+    if (this.crypt) { // head for the next corner of the path instead of into the wall
+      const t = this.sim.time;
+      if (t >= (this.navAt || 0) || (this.nav && Math.hypot(this.nav.x - this.x, this.nav.z - this.z) < 0.6)) {
+        this.navAt = t + 0.25;
+        this.nav = steer(this.x, this.z, x, z, this.radius);
+      }
+      if (this.nav) { x = this.nav.x; z = this.nav.z; }
+    }
+    const dx = x - this.x, dz = z - this.z;
+    const d = Math.hypot(dx, dz);
+    if (d < 0.05) return 0;
+    const step = Math.min(d, speed * dt);
+    this.x += (dx / d) * step;
+    this.z += (dz / d) * step;
+    this.yaw = dampAngle(this.yaw, yawTo(dx, dz), 10, dt);
+    return speed;
+  }
+
+  aggro(p, alertPack) {
+    if (!p || this.state === 'dead' || this.state === 'spawn') return;
+    this.state = 'chase';
+    this.stateT = 0;
+    this.target = p;
+    if (!alertPack || !this.slot.group) return;
+    for (const o of this.area.monsters.values()) { // the rest of its pack joins in
+      if (o !== this && o.state === 'idle' && o.slot.group === this.slot.group && Math.hypot(o.x - this.x, o.z - this.z) < 12) o.aggro(p, false);
+    }
+  }
+
+  update(dt) {
+    const d = this.def;
+    this.stateT += dt;
+    this.atkCd -= this.slow > 0 ? dt * this.slowBy : dt;
+    this.stagger -= dt;
+    this.stun -= dt;
+    this.slow -= dt;
+    this.taunt -= dt;
+    this.speed = 0;
+
+    if (this.state === 'dead') {
+      this.deadT += dt;
+      if (this.deadT > 3.6) this.removed = true;
+      return;
+    }
+    if (this.state === 'spawn') {
+      if (this.stateT > (d.kind === 'slime' ? 0.5 : 1.0)) {
+        this.state = 'idle';
+        if (this.slot.summoned) this.aggro(this.nearest(30, false), false); // raised by the Lich: straight into the fight
+      }
+      return;
+    }
+
+    // who to fight: whoever taunted it; else the hero it's after while that's still fair; else the nearest
+    let p = this.target;
+    if (this.state === 'chase') {
+      if (this.taunt > 0 && this.fair(this.taunter)) p = this.taunter;
+      else if (!this.fair(p)) p = this.nearest(d.aggro * 1.2);
+      else if (this.sim.time >= (this.rethinkAt || 0)) { // someone much closer gets its attention
+        this.rethinkAt = this.sim.time + 1;
+        p = this.nearest(this.dist(p) - 3) || p;
+      }
+      this.target = p;
+    }
+    const dx = p ? p.x - this.x : 0, dz = p ? p.z - this.z : 0;
+    const dist = p ? Math.hypot(dx, dz) : Infinity;
+    const distHome = Math.hypot(this.home.x - this.x, this.home.z - this.z);
+    let speed = 0;
+
+    if (this.attack) {
+      this.updateAttack(dt, p, dist);
+    } else if (this.stagger > 0 || this.stun > 0) {
+      // reeling
+    } else if (this.state === 'idle') {
+      this.wanderT -= dt;
+      if (this.wanderT <= 0) {
+        const w = randomWalkablePoint(this.home.x, this.home.z, 4);
+        this.wanderT = rand(3, 7);
+        // in the crypt, stay in your own room
+        this.wanderTarget = this.crypt && !lineClear(this.home.x, this.home.z, w.x, w.z, this.radius) ? null : w;
+      }
+      if (this.wanderTarget) {
+        speed = this.moveToward(this.wanderTarget.x, this.wanderTarget.z, d.speed * 0.35, dt);
+        if (Math.hypot(this.wanderTarget.x - this.x, this.wanderTarget.z - this.z) < 0.3) this.wanderTarget = null;
+      }
+      const q = this.nearest(d.aggro);
+      if (q) this.aggro(q, true);
+    } else if (this.state === 'chase') {
+      if (!p || distHome > d.aggro * 2.4) {
+        this.state = 'return';
+        this.target = null;
+      } else if (d.lich) {
+        speed = this.lichChase(dt, p, dist, dx, dz);
+      } else if (d.kind === 'caster') {
+        const sees = this.sees(p);
+        if (dist < d.keep * 0.55 && sees) {
+          speed = this.moveToward(this.x - dx, this.z - dz, d.speed * 0.8, dt);
+        } else if (dist <= d.range && this.atkCd <= 0 && sees) {
+          this.startCast(p);
+        } else if (dist > d.range * 0.85 || !sees) {
+          speed = this.moveToward(p.x, p.z, d.speed, dt);
+        } else {
+          this.faceTo(p.x, p.z, dt);
+        }
+      } else if (dist <= d.range + HERO_RADIUS && this.atkCd <= 0) {
+        this.startAttack();
+      } else if (dist > d.range * 0.8) {
+        speed = this.moveToward(p.x, p.z, d.speed, dt);
+      } else {
+        this.faceTo(p.x, p.z, dt);
+      }
+    } else if (this.state === 'return') {
+      speed = this.moveToward(this.home.x, this.home.z, d.speed * 1.2, dt);
+      this.hp = Math.min(this.maxHp, this.hp + this.maxHp * 0.4 * dt);
+      if (distHome < 0.6) {
+        this.state = 'idle';
+        this.hitters.clear(); // a fresh start: nobody has a claim on it any more
+      }
+      const q = distHome < d.aggro ? this.nearest(d.aggro * 0.6) : null;
+      if (q) this.aggro(q, false);
+    }
+
+    // keep apart from other monsters, and out of the heroes
+    for (const o of this.area.monsters.values()) {
+      if (o === this || o.state === 'dead') continue;
+      const ex = this.x - o.x, ez = this.z - o.z, rr = this.radius + o.radius, dd = ex * ex + ez * ez;
+      if (dd < rr * rr && dd > 1e-6) {
+        const k = ((rr - Math.sqrt(dd)) * 0.5) / Math.sqrt(dd);
+        this.x += ex * k;
+        this.z += ez * k;
+      }
+    }
+    for (const h of this.area.players) {
+      if (!h.alive) continue;
+      const ex = this.x - h.x, ez = this.z - h.z, rr = this.radius + HERO_RADIUS, dd = Math.hypot(ex, ez);
+      if (dd < rr && dd > 1e-4) {
+        this.x += (ex / dd) * (rr - dd);
+        this.z += (ez / dd) * (rr - dd);
+      }
+    }
+    resolveCollision(this, this.radius);
+    this.speed = speed;
+  }
+
+  // ---------------------------------------------------------------- attacks (each hero's game resolves the hits)
+  startAttack() {
+    const d = this.def;
+    this.swingCount++;
+    if (d.boss && this.swingCount % 3 === 0) { // telegraphed ground slam
+      const dur = 1.25, hitAt = 0.62 * dur;
+      const at = { x: this.x + Math.sin(this.yaw) * 2.2, z: this.z + Math.cos(this.yaw) * 2.2 };
+      this.attack = { t: 0, dur, hitAt, hit: false, slam: true };
+      this.emit(['s', this.id, r2(at.x), r2(at.z), dur, r2(hitAt)]);
+      return;
+    }
+    if (d.kind === 'slime') {
+      this.attack = { t: 0, dur: 0.75, hitAt: 0.45, hit: false, lunge: true };
+      this.emit(['l', this.id]);
+      return;
+    }
+    const dur = d.atkDur, style = d.style || (d.boss ? 'chop' : this.swingCount % 2 ? 'slash' : 'backslash');
+    this.attack = { t: 0, dur, hitAt: 0.45 * dur, hit: false };
+    this.emit(['a', this.id, style, dur]);
+  }
+
+  startCast(p) {
+    this.attack = { t: 0, dur: 1.0, hitAt: 0.5, hit: false, cast: true };
+    this.emit(['c', this.id, p.pid, this.def.lich ? (this.enraged ? 5 : 3) : 1]);
+  }
+
+  updateAttack(dt, p, dist) {
+    const a = this.attack, d = this.def;
+    a.t += dt;
+    if (p && a.t < a.hitAt) this.faceTo(p.x, p.z, dt, a.slam ? 3 : 8);
+    if (!a.hit && a.t >= a.hitAt) {
+      a.hit = true;
+      if (a.summon) {
+        const n = this.enraged ? 4 : 3;
+        for (let i = 0; i < n; i++) {
+          const ang = this.yaw + (i / n) * TAU;
+          this.area.summon(i === 0 && this.raised.length > 1 ? 'skeleton_warrior' : 'skeleton_minion', this.level - 1,
+            this.x + Math.sin(ang) * 3.2, this.z + Math.cos(ang) * 3.2, this);
+        }
+      } else if (a.circles && p) { // grave circles: under the hero and around them, on open floor
+        const spots = [r2(p.x), r2(p.z)];
+        for (let i = 1, tries = 0; i < (this.enraged ? 5 : 3) && tries < 30; tries++) {
+          const ang = rand(0, TAU), r = rand(2.5, 5);
+          const x = p.x + Math.cos(ang) * r, z = p.z + Math.sin(ang) * r;
+          if (isWalkable(x, z, 2)) { spots.push(r2(x), r2(z)); i++; }
+        }
+        this.emit(['O', this.id, spots]);
+      }
+    }
+    if (a.lunge && a.t > 0.2 && a.t < 0.5) {
+      const f = Math.min(1, dist / 1.2);
+      this.x += Math.sin(this.yaw) * 4 * f * dt;
+      this.z += Math.cos(this.yaw) * 4 * f * dt;
+    }
+    if (a.t >= a.dur) {
+      this.attack = null;
+      if (!a.summon && !a.circles) this.atkCd = d.atkCd * (this.enraged ? 0.7 : 1) * rand(0.85, 1.15);
+    }
+  }
+
+  // ---------------------------------------------------------------- Morvain the Lich
+  lichChase(dt, p, dist, dx, dz) {
+    const d = this.def;
+    const frac = this.hp / this.maxHp;
+    for (const th of [0.7, 0.4]) { // raises the dead at 70% and 40% life
+      if (frac < th && !this.raised.includes(th)) {
+        this.raised.push(th);
+        this.attack = { t: 0, dur: 1.5, hitAt: 0.8, hit: false, summon: true };
+        this.emit(['u', this.id]);
+        return 0;
+      }
+    }
+    if (frac < 0.3 && !this.enraged) {
+      this.enraged = true;
+      this.emit(['e', this.id]);
+    }
+    this.circleT -= dt;
+    this.blinkCd -= dt;
+    this.closeT = dist < 3.6 ? this.closeT + dt : Math.max(0, this.closeT - dt);
+    if (this.closeT > 1.8 && this.blinkCd <= 0) { this.blink(p); return 0; }
+    const sees = this.sees(p);
+    if (sees && this.circleT <= 0 && dist < 20) {
+      this.attack = { t: 0, dur: 1.1, hitAt: 0.5, hit: false, circles: true };
+      this.circleT = this.enraged ? 5.5 : 8;
+      this.emit(['o', this.id]);
+      return 0;
+    }
+    if (sees && dist <= d.range && this.atkCd <= 0) { this.startCast(p); return 0; }
+    if (dist < d.keep * 0.5) return this.moveToward(this.x - dx, this.z - dz, d.speed * 0.8, dt);
+    if (!sees || dist > d.range * 0.85) return this.moveToward(p.x, p.z, d.speed, dt);
+    this.faceTo(p.x, p.z, dt);
+    return 0;
+  }
+
+  // Too close for comfort: vanish and reappear across the sanctum.
+  blink(p) {
+    const B = ROOMS.B;
+    let to = null;
+    for (let i = 0; i < 12 && !to; i++) {
+      const c = randomWalkablePoint(B.cx, B.cz, 8, 1.2);
+      if (Math.hypot(c.x - p.x, c.z - p.z) > 8) to = c;
+    }
+    if (!to) return;
+    this.emit(['b', this.id, r2(this.x), r2(this.z)]); // where it vanished; snapshots say where it went
+    this.x = to.x;
+    this.z = to.z;
+    this.blinkCd = this.enraged ? 5 : 7;
+    this.closeT = 0;
+    this.atkCd = Math.min(this.atkCd, 0.5);
+    this.nav = null;
+  }
+
+  // ---------------------------------------------------------------- taking hits
+  // eff: { stun: s, slow: [factor, s], taunt: s } from skills
+  hurt(amount, fx, fz, knock, by, eff) {
+    const d = this.def;
+    this.hp -= amount;
+    this.hitters.set(by.pid, this.sim.time);
+    if (this.state === 'idle' || this.state === 'return') this.aggro(by, true);
+    else if (this.target !== by && (!this.fair(this.target) || this.dist(by) < this.dist(this.target))) this.target = by;
+    if (!d.boss && knock > 0 && Number.isFinite(fx) && Number.isFinite(fz)) {
+      const ex = this.x - fx, ez = this.z - fz, dd = Math.hypot(ex, ez) || 1;
+      this.x += (ex / dd) * knock;
+      this.z += (ez / dd) * knock;
+      resolveCollision(this, this.radius);
+    }
+    if (eff) {
+      const k = d.boss ? 0.4 : 1; // bosses shrug most of it off
+      if (eff.stun > 0) this.stun = Math.max(this.stun, Math.min(3, eff.stun) * k);
+      if (Array.isArray(eff.slow) && eff.slow[1] > 0) { this.slowBy = clamp(eff.slow[0], 0.2, 1); this.slow = Math.min(6, eff.slow[1]); }
+      if (eff.taunt > 0) { this.taunt = Math.min(6, eff.taunt); this.taunter = by; this.target = by; }
+    }
+    if (this.hp > 0 && !d.boss) {
+      if (this.attack && this.attack.t < this.attack.hitAt) { // interrupts wind-ups: rewards aggressive play
+        this.attack = null;
+        this.atkCd = Math.max(this.atkCd, 0.6);
+        this.emit(['x', this.id]);
+      }
+      this.stagger = 0.28;
+    }
+  }
+
+  // credit: false when it just crumbles (the Lich's minions when he falls)
+  die(by, credit = true) {
+    this.state = 'dead';
+    this.deadT = 0;
+    this.attack = null;
+    this.hp = 0;
+    const who = credit ? [...this.hitters.keys()].filter((pid) => this.sim.players.get(pid)?.area === this.area) : [];
+    this.emit(['d', this.id, r2(this.x), r2(this.z), who, by ? by.pid : 0, this.type, this.level], who);
+    if (this.def.lich) this.area.lichDown(this);
+  }
+}
+
+// somewhere on a ring around the spawn (the pond's slimes live on its shore)
+function ringPoint(slot) {
+  const a = rand(0, TAU), r = rand(slot.r * 0.72, slot.r);
+  return randomWalkablePoint(slot.x + Math.cos(a) * r, slot.z + Math.sin(a) * r, 1.5);
+}
+
+// ---------------------------------------------------------------- areas
+// The overworld, and the crypt below (one for everyone for now; parties will get their own copy).
+class Area {
+  constructor(sim, id, crypt) {
+    this.sim = sim;
+    this.id = id;
+    this.crypt = crypt;
+    this.players = new Set();
+    this.monsters = new Map();
+    this.events = [];
+    this.emptyT = 0;
+    this.slots = [];
+    for (const sp of SPAWNS) {
+      if (!!sp.crypt !== crypt) continue;
+      for (let i = 0; i < sp.n; i++) this.slots.push({ ...sp, group: sp, monster: null, timer: rand(0, 1.5) });
+    }
+  }
+
+  update(dt) {
+    if (this.crypt && !this.players.size) { // nobody down there: it waits, and forgets after a while
+      this.emptyT += dt;
+      if (this.emptyT > EMPTY_RESET && this.monsters.size) this.reset();
+      return;
+    }
+    this.emptyT = 0;
+    const heroes = [...this.players];
+    for (const s of this.slots) {
+      if (s.monster) continue;
+      s.timer -= dt;
+      // rise out of sight (or eventually anyway)
+      if (s.timer <= 0 && (s.timer < -20 || heroes.every((p) => Math.hypot(p.x - s.x, p.z - s.z) > s.r + 6))) this.spawn(s);
+    }
+    for (const m of this.monsters.values()) {
+      const near = heroes.some((p) => Math.abs(p.x - m.x) < ACTIVE && Math.abs(p.z - m.z) < ACTIVE);
+      if (!near && (m.state === 'idle' || m.state === 'spawn')) continue;
+      m.update(dt);
+    }
+    for (const m of this.monsters.values()) {
+      if (!m.removed) continue;
+      this.monsters.delete(m.id);
+      if (m.slot.monster === m) {
+        m.slot.monster = null;
+        m.slot.timer = m.def.respawn || rand(18, 28);
+      }
+    }
+  }
+
+  spawn(slot) {
+    const m = new Monster(this, slot);
+    slot.monster = m;
+    this.monsters.set(m.id, m);
+    return m;
+  }
+
+  // A monster raised mid-fight (by the Lich): no spawn slot, so it never comes back.
+  summon(type, lvl, x, z, master) {
+    const m = this.spawn({ type, x, z, r: 1, n: 1, lvl, summoned: true });
+    m.summoner = master;
+    return m;
+  }
+
+  lichDown(lich) {
+    for (const o of this.monsters.values()) if (o.summoner === lich && o.state !== 'dead') o.die(null, false); // his minions crumble
+    this.events.push({ all: true, ev: ['L'] });
+  }
+
+  reset() {
+    this.monsters.clear();
+    for (const s of this.slots) { s.monster = null; s.timer = rand(0, 1.5); }
+  }
+}
+
+// ---------------------------------------------------------------- the world
+export class WorldSim {
+  constructor({ now = () => Date.now() } = {}) {
+    planWorld(); // what blocks the way
+    this.now = now;
+    this.time = 0;
+    this.lastId = 0;
+    this.players = new Map(); // pid -> hero
+    this.areas = new Map([['world', new Area(this, 'world', false)], ['crypt', new Area(this, 'crypt', true)]]);
+  }
+
+  areaAt(x, z) {
+    return this.areas.get(inDungeon(x, z) ? 'crypt' : 'world');
+  }
+
+  // A hero enters the world. info: { name, cls, p, k } (p: position etc., k: looks, see input)
+  join(pid, info) {
+    this.leave(pid);
+    const p = {
+      pid, name: info.name, cls: info.cls, level: 1, look: {}, lookVer: 1,
+      x: 0, z: 3.5, yaw: Math.PI, mode: 0, sp: 0, alive: true, hp: 1, away: false,
+      area: null, inWorld: true, knownM: new Map(), knownP: new Map(), budget: 40,
+    };
+    this.players.set(pid, p);
+    this.input(pid, info);
+    if (!p.area) this.place(p, this.areaAt(p.x, p.z));
+    return p;
+  }
+
+  leave(pid) {
+    const p = this.players.get(pid);
+    if (!p) return;
+    p.inWorld = false;
+    p.area?.players.delete(p);
+    this.players.delete(pid);
+  }
+
+  place(p, area) {
+    if (p.area === area) return;
+    p.area?.players.delete(p);
+    p.area = area;
+    area.players.add(p);
+  }
+
+  // A hero's game reports in: p = [x, z, yaw, move (0 still, 1 walk, 2 run), speed, alive, life 0..1,
+  // away], h = hits [[monster, damage, crit, knockback, fromX, fromZ, effects?]], a = actions for the
+  // others to see ({ k: kind, … }), k = looks ({ lv: level, w: weapon, … }).
+  input(pid, m) {
+    const p = this.players.get(pid);
+    if (!p || !m || typeof m !== 'object') return;
+    if (Array.isArray(m.p) && m.p.length >= 3) {
+      const [x, z, yaw, mode, sp, alive, hp, away] = m.p.map(Number);
+      if (Number.isFinite(x) && Number.isFinite(z) && Number.isFinite(yaw) && Math.abs(x) < 300 && Math.abs(z) < 600) {
+        p.x = x;
+        p.z = z;
+        p.yaw = yaw;
+        p.mode = mode === 1 || mode === 2 ? mode : 0;
+        p.sp = clamp(sp || 0, 0, 20);
+        p.alive = alive !== 0;
+        p.hp = clamp(Number.isFinite(hp) ? hp : 1, 0, 1);
+        p.away = away === 1;
+        this.place(p, this.areaAt(x, z));
+      }
+    }
+    if (m.k && typeof m.k === 'object' && JSON.stringify(m.k).length < 500) {
+      p.look = m.k;
+      p.level = clamp(Math.round(Number(m.k.lv) || 1), 1, 99);
+      p.lookVer++;
+    }
+    if (Array.isArray(m.h)) for (const h of m.h.slice(0, 40)) this.hit(p, h);
+    if (Array.isArray(m.a)) {
+      for (const a of m.a.slice(0, 8)) {
+        if (a && typeof a === 'object' && typeof a.k === 'string' && JSON.stringify(a).length < 240) p.area?.events.push({ pid: p.pid, ev: ['p', p.pid, a] });
+      }
+    }
+  }
+
+  hit(p, h) {
+    if (!Array.isArray(h) || p.budget < 1) return;
+    const m = p.area?.monsters.get(h[0]);
+    if (!m || m.state === 'dead' || m.state === 'spawn') return;
+    let dmg = Math.round(Number(h[1]));
+    if (!(dmg > 0)) return;
+    if (Math.hypot(m.x - p.x, m.z - p.z) > 30) return; // can't have reached it from there
+    p.budget--;
+    dmg = Math.min(dmg, 100 + 150 * p.level);
+    const eff = h[6] && typeof h[6] === 'object' ? h[6] : null;
+    m.hurt(dmg, Number(h[4]), Number(h[5]), clamp(Number(h[3]) || 0, 0, 2), p, eff);
+    m.emit(['h', m.id, dmg, h[2] ? 1 : 0, p.pid]);
+    if (m.hp <= 0) m.die(p);
+  }
+
+  // Advance the world by dt seconds, then hand each hero's game its update: deliver(pid, message).
+  step(dt, deliver) {
+    this.time += dt;
+    for (const p of this.players.values()) p.budget = Math.min(60, p.budget + dt * 40);
+    for (const a of this.areas.values()) a.update(dt);
+    const ts = this.now();
+    for (const p of this.players.values()) deliver(p.pid, this.snapshot(p, ts));
+    for (const a of this.areas.values()) a.events.length = 0;
+  }
+
+  // What one hero's game needs: monsters and heroes nearby (in full the first time, then only what
+  // changed), who went out of sight, and what happened this tick.
+  //   m: { i, t: type, l: level, x, z, y: yaw, h: life, mh: max life, s: state, st: time in state, sp: speed, e: enraged }
+  //      or [i, x, z, yaw, speed, life, state];  mg: monsters gone
+  //   p: { i, n: name, c: class, l: level, k: looks, u: [i, x, z, yaw, move, speed, alive, life, away] }
+  //      or that u array alone;  pg: heroes gone;  e: events (see the emit calls)
+  snapshot(me, ts) {
+    const out = { t: 'w', ts };
+    const area = me.area;
+    if (!area) return out;
+    const m = [], mg = [], seen = new Set();
+    for (const mon of area.monsters.values()) {
+      if (Math.abs(mon.x - me.x) > SEE_MONSTERS || Math.abs(mon.z - me.z) > SEE_MONSTERS) continue;
+      seen.add(mon.id);
+      const x = r2(mon.x), z = r2(mon.z), yaw = r2(mon.yaw), hp = Math.max(0, Math.round(mon.hp)), st = CODE[mon.state], sp = r1(mon.speed);
+      const k = me.knownM.get(mon.id);
+      if (!k) {
+        m.push({ i: mon.id, t: mon.type, l: mon.level, x, z, y: yaw, h: hp, mh: mon.maxHp, s: st, st: r2(mon.stateT), sp, e: mon.enraged ? 1 : 0 });
+        me.knownM.set(mon.id, { x, z, yaw, hp, st, sp });
+      } else if (k.x !== x || k.z !== z || k.yaw !== yaw || k.hp !== hp || k.st !== st || k.sp !== sp) {
+        m.push([mon.id, x, z, yaw, sp, hp, st]);
+        Object.assign(k, { x, z, yaw, hp, st, sp });
+      }
+    }
+    for (const id of me.knownM.keys()) if (!seen.has(id)) { mg.push(id); me.knownM.delete(id); }
+
+    const pl = [], pg = [], seenP = new Set();
+    for (const o of area.players) {
+      if (o === me || Math.abs(o.x - me.x) > SEE_PLAYERS || Math.abs(o.z - me.z) > SEE_PLAYERS) continue;
+      seenP.add(o.pid);
+      const u = [o.pid, r2(o.x), r2(o.z), r2(o.yaw), o.mode, r1(o.sp), o.alive ? 1 : 0, r2(o.hp), o.away ? 1 : 0];
+      const key = u.join(), k = me.knownP.get(o.pid);
+      if (!k || k.ver !== o.lookVer) {
+        pl.push({ i: o.pid, n: o.name, c: o.cls, l: o.level, k: o.look, u });
+        me.knownP.set(o.pid, { ver: o.lookVer, key });
+      } else if (k.key !== key) {
+        pl.push(u);
+        k.key = key;
+      }
+    }
+    for (const id of me.knownP.keys()) if (!seenP.has(id)) { pg.push(id); me.knownP.delete(id); }
+
+    const ev = [];
+    for (const e of area.events) {
+      if (e.all) ev.push(e.ev);
+      else if (e.mid !== undefined) { if (me.knownM.has(e.mid) || e.to?.includes(me.pid)) ev.push(e.ev); }
+      else if (e.pid !== me.pid && me.knownP.has(e.pid)) ev.push(e.ev);
+    }
+    if (m.length) out.m = m;
+    if (mg.length) out.mg = mg;
+    if (pl.length) out.p = pl;
+    if (pg.length) out.pg = pg;
+    if (ev.length) out.e = ev;
+    return out;
+  }
+}

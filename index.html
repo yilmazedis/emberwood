@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Emberwood</title>
-<meta name="description" content="A tiny 3D action RPG. Fight slimes, bandits and skeletons, collect loot and level up.">
+<meta name="description" content="A small online 3D action RPG. Make a hero, fight slimes, bandits and skeletons with other players, collect loot and level up.">
 <meta name="theme-color" content="#0e0b08">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
@@ -61,12 +61,23 @@
 
   <div id="log"></div>
 
+  <!-- world chat (src/chat.js) -->
+  <div id="chat">
+    <div id="chat-head"><span>World chat</span> <small id="chat-online"></small><kbd class="desk-only">Enter</kbd></div>
+    <div id="chat-log"></div>
+    <form id="chat-form" class="hidden" autocomplete="off">
+      <input id="chat-input" maxlength="160" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="send" placeholder="Say something to everyone…">
+      <button type="submit">Send</button>
+    </form>
+  </div>
+
   <div id="actionbar">
     <div id="xpbar"><div id="xp-fill"></div><span id="xp-text"></span></div>
     <div id="slots"></div>
   </div>
 
   <div id="menu-buttons">
+    <button id="btn-chat" title="Chat (Enter)">Chat <kbd>Enter</kbd></button>
     <button id="btn-bag" title="Inventory (I)">Bag <kbd>I</kbd></button>
     <button id="btn-help" title="Controls (H)">Help <kbd>H</kbd></button>
     <button id="btn-settings" title="Settings (Esc)">Settings <kbd>Esc</kbd></button>
@@ -133,9 +144,11 @@
       <li><kbd>E</kbd> Trade with Wren the merchant, open your stash, or read the notice board (in camp)</li>
       <li>Accept quests at the notice board, then come back to claim the reward. The golden <b>!</b> means something is waiting.</li>
       <li>The crypt door in the graveyard leads down to a dungeon and its boss, <b>Morvain the Lich</b>. Step out of his violet circles!</li>
+      <li><kbd>Enter</kbd> Chat with everyone in the world (Enter again to send, Esc to cancel)</li>
       <li><kbd>Mouse wheel</kbd> Zoom</li>
       <li><kbd>Esc</kbd> Settings: music, sound, graphics, leave the game · <kbd>M</kbd> mute</li>
       <li>Walk over loot to pick it up. The camp is safe and heals you fast.</li>
+      <li>Other heroes fight the same monsters: everyone who hits one gets the XP, and their own loot.</li>
     </ul>
     <ul class="touch-only">
       <li><b>Left thumb</b> anywhere on the left side: move. Push a little to walk, all the way to run.</li>
@@ -147,13 +160,15 @@
       <li><b>In camp</b>: tap <b>Trade</b> above Wren the merchant, <b>Open</b> above your stash chest, or <b>Read</b> at the notice board.</li>
       <li>Accept quests at the notice board, then come back to claim the reward. The golden <b>!</b> means something is waiting.</li>
       <li>The crypt door in the graveyard leads down to a dungeon and its boss, <b>Morvain the Lich</b>. Step out of his violet circles!</li>
+      <li><b>Chat</b>: talk to everyone in the world.</li>
       <li>Walk over loot to pick it up. The camp is safe and heals you fast.</li>
+      <li>Other heroes fight the same monsters: everyone who hits one gets the XP, and their own loot.</li>
     </ul>
   </div>
 
   <!-- settings: the game pauses while this is open -->
   <div id="settings" class="panel hidden">
-    <header><span>Settings <small>game paused</small></span><button class="close" data-close="settings" aria-label="Close">×</button></header>
+    <header><span>Settings <small id="settings-note">game paused</small></span><button class="close" data-close="settings" aria-label="Close">×</button></header>
     <div class="set-cols"><div>
     <div class="set-sec">Sound</div>
     <label class="set-row"><span>Music</span><input type="range" id="set-music" min="0" max="100" step="5"><output></output></label>
@@ -182,7 +197,7 @@
 
   <div id="loading">
     <div class="title">Emberwood</div>
-    <div class="subtitle">a tiny action RPG</div>
+    <div class="subtitle">an online action RPG</div>
     <div class="load-bar"><div id="load-fill"></div></div>
     <div id="load-text">Loading…</div>
     <!-- accounts: sign in, then pick or create a hero (src/account.js) -->
@@ -198,6 +213,7 @@
       </form>
       <div id="acc-chars" class="acc-card hidden">
         <div class="acc-title">Your heroes <small id="acc-who"></small></div>
+        <div class="acc-note" id="acc-online"></div>
         <div id="char-list"></div>
         <button type="button" id="char-play" class="acc-main">Play</button>
         <div class="acc-err" id="chars-err"></div>

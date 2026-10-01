@@ -2,7 +2,7 @@
 // Talks to the game server through net.js; calls onPlay(character) when a hero enters the world.
 import { CLASSES, CLASS_IDS, MAX_CHARACTERS, NAME_RULE, USER_RULE } from './classes.js';
 import { Assets } from './assets.js';
-import { savedToken } from './net.js';
+import { savedToken, PROTOCOL } from './net.js';
 
 const LOCAL_SAVE = 'emberwood-save-v1'; // the single-player save from before accounts
 const IMPORTED = 'emberwood-save-imported';
@@ -35,7 +35,7 @@ export class AccountScreen {
     $('acc-logout').addEventListener('click', () => this.logout());
     $('acc-create').addEventListener('submit', (e) => { e.preventDefault(); this.create(); });
     $('create-back').addEventListener('click', () => this.showChars());
-    $('acc-retry').addEventListener('click', () => this.start());
+    $('acc-retry').addEventListener('click', () => (this.reload ? location.reload() : this.start()));
     $('char-list').addEventListener('click', (e) => {
       const b = e.target.closest('.char-item');
       if (!b) return;
@@ -59,8 +59,11 @@ export class AccountScreen {
     $('account').classList.remove('hidden');
   }
 
-  wait(text, canRetry = false) {
+  // reload: the button reloads the page (a new version is out) instead of trying again
+  wait(text, canRetry = false, reload = false) {
+    this.reload = reload;
     $('acc-wait-text').textContent = text;
+    $('acc-retry').textContent = reload ? 'Reload' : 'Try again';
     $('acc-retry').classList.toggle('hidden', !canRetry);
     this.view('acc-wait');
   }
@@ -68,10 +71,17 @@ export class AccountScreen {
   // Connect, then sign straight in with a saved token if there is one.
   async start(message = '') {
     this.wait('Connecting to the game server…');
+    let hello;
     try {
-      if (!this.net.online) await this.net.connect();
+      hello = this.net.online ? this.net.hello : await this.net.connect();
     } catch (err) {
       this.wait(`${err.message} Check your internet connection and try again.`, true);
+      return;
+    }
+    if (hello?.v !== PROTOCOL) { // the game and the server must speak the same language
+      this.net.ws?.close();
+      if (hello?.v > PROTOCOL) this.wait('Emberwood has been updated. Reload the page to play.', true, true);
+      else this.wait('The game server is being updated. Try again in a minute.', true);
       return;
     }
     const token = savedToken.get();
@@ -115,6 +125,7 @@ export class AccountScreen {
     savedToken.set(r.token);
     this.user = r.user;
     this.chars = r.chars;
+    this.world = r.world;
     $('acc-pass').value = '';
     $('acc-pass2').value = '';
     if (this.chars.length) this.showChars(); else this.showCreate();
@@ -125,6 +136,8 @@ export class AccountScreen {
     if (selectId) this.selected = selectId;
     if (!this.chars.some((c) => c.id === this.selected)) this.selected = this.chars[0]?.id || null;
     $('acc-who').textContent = this.user;
+    const n = this.world;
+    $('acc-online').textContent = n ? `${n} ${n === 1 ? 'hero is' : 'heroes are'} in the world right now` : '';
     $('char-list').innerHTML = this.chars.map((c) => `
       <button type="button" class="char-item${c.id === this.selected ? ' on' : ''}" data-id="${c.id}">
         <img src="${portrait(c.cls)}" alt=""><b>${escapeHtml(c.name)}</b><span>Level ${c.level} ${CLASSES[c.cls]?.name || ''}</span>
@@ -137,7 +150,11 @@ export class AccountScreen {
 
   // Back from the game: fetch the list again (levels changed) and select the hero just played.
   async backFromGame(charId) {
-    try { this.chars = (await this.ask('chars')).chars; } catch { /* show what we have */ }
+    try {
+      const r = await this.ask('chars');
+      this.chars = r.chars;
+      this.world = r.world;
+    } catch { /* show what we have */ }
     this.showChars(charId);
   }
 

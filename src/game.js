@@ -1,4 +1,5 @@
-// Game orchestration: renderer, camera, input, combat resolution, rewards, saving.
+// Game orchestration: renderer, camera, input, combat resolution, rewards, saving. The monsters and the
+// other heroes live in the shared world (link.js talks to it); our own hero is played right here.
 import * as THREE from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
@@ -18,6 +19,9 @@ import { Input } from './input.js';
 import { Town } from './town.js';
 import { Quests } from './quests.js';
 import { Dungeon } from './dungeon.js';
+import { WorldLink } from './link.js';
+import { RemotePlayers } from './others.js';
+import { Chat } from './chat.js';
 import { loadSettings, saveSettings } from './settings.js';
 import { angleDiff, yawTo, randInt, rand, chance, clamp } from './util.js';
 
@@ -80,7 +84,9 @@ export class Game {
     this.sfx.vol = { music: this.settings.music, sfx: this.settings.sfx, ambience: this.settings.ambience };
     this.sfx.muted = this.settings.muted;
     this.started = false;
-    this.paused = false; // settings open
+    this.link = new WorldLink(this); // the shared world (attached to the server, or a local one: main.js)
+    this.offline = false; // playing on our own (?autostart): the world runs in this page and can pause
+    this.paused = false; // settings open (offline, the world holds still too)
     this.onTitle = false; // left the game (back on the title screen)
     this.applyQuality(this.settings.quality);
     window.addEventListener('resize', () => this.onResize());
@@ -88,6 +94,7 @@ export class Game {
     document.addEventListener('visibilitychange', () => {
       if (!this.started) return;
       if (document.hidden) { this.save(true); this.sfx.sleep(); } else if (!this.onTitle) this.sfx.wake();
+      this.link.sendNow(); // away (monsters leave an absent hero alone) or back
     });
     window.addEventListener('pagehide', () => this.save(true));
   }
@@ -144,10 +151,12 @@ export class Game {
     this.leave(msg);
   }
 
-  // "Leave game": save, stop everything and show the title screen (main.js); resume() comes back.
+  // "Leave game": save, step out of the world and show the title screen (main.js); resume() comes back.
   leave(msg = '') {
     if (this.onTitle) return;
     this.save(true);
+    this.link.exit();
+    this.chat.close();
     this.ui.closeSettings(true);
     this.ui.closeInventory();
     this.ui.togglePanel('help', false);
@@ -182,7 +191,9 @@ export class Game {
     this.scene.add(this.player.group);
     this.ui = new UI(this);
     this.doll = new Doll(document.getElementById('doll-canvas'));
-    this.enemies = new EnemyManager(this);
+    this.enemies = new EnemyManager(this); // the monsters the world tells us about
+    this.others = new RemotePlayers(this); // … and the other heroes
+    this.chat = new Chat(this);
 
     this.player.starterKit();
     this.player.pos.set(0, heightAt(0, 3.5), 3.5);
@@ -247,9 +258,10 @@ export class Game {
     const input = this.input;
     input.onKey = (code, e) => {
       if (!this.started || e.repeat || this.onTitle) return;
-      if (this.paused && code !== 'Escape' && code !== 'KeyM') return; // settings open: the game waits
+      if (this.paused && code !== 'Escape' && code !== 'KeyM') return; // settings open: keys go there
       const p = this.player;
       switch (code) {
+        case 'Enter': case 'NumpadEnter': this.chat.open(); e.preventDefault(); break;
         case 'Digit1': case 'Digit2': case 'Digit3': case 'Digit4':
           p.useSkill(Number(code.slice(-1)) - 1);
           break;
@@ -379,6 +391,17 @@ export class Game {
     return { target: null, point: new THREE.Vector3(p.x + Math.sin(facing) * 4, p.y, p.z + Math.cos(facing) * 4) };
   }
 
+  // Keys and buttons don't move the hero while a menu has them (the world doesn't wait online).
+  get inputBlocked() {
+    return this.paused || this.chat.isOpen;
+  }
+
+  // How loud something at pos sounds for us: full up close, nothing from 28 m.
+  volAt(pos) {
+    const p = this.player.pos;
+    return clamp(1 - Math.hypot(p.x - pos.x, p.z - pos.z) / 28, 0, 1);
+  }
+
   // ---------------------------------------------------------------- combat
   meleeHit({ range, arc, mult, knock }) {
     const p = this.player;
@@ -398,39 +421,39 @@ export class Game {
     return n;
   }
 
-  damageEnemy(e, { amount, crit }, fromPos, knock = 0.4) {
+  // Our hit lands: shown now, and sent to the world, which keeps the monster's score (eff: see link.hit).
+  damageEnemy(e, { amount, crit }, fromPos, knock = 0.4, eff = null) {
     if (!e.alive) return;
-    e.takeDamage(amount, fromPos, knock);
+    this.link.hit(e, amount, crit, knock, fromPos, eff);
+    e.hurt(amount);
     const c = e.center;
     const top = new THREE.Vector3(e.pos.x, e.pos.y + e.height + 0.1, e.pos.z);
     this.ui.floater(top, String(amount), crit ? 'crit' : '');
     this.fx.sparks(c, crit ? 0xffe070 : 0xfff0c0, crit ? 22 : 10, crit ? 7 : 5);
     if (e.slime) this.fx.goo(c, e.def.color, 6);
     this.sfx.play(crit ? 'crit' : 'hit');
-    if (e.hp <= 0) this.killEnemy(e);
   }
 
-  killEnemy(e) {
-    const p = this.player, d = e.def;
-    e.die();
-    if (e.slime) this.sfx.play('slime');
-    const levelGap = p.level - e.level;
-    const xp = Math.max(1, Math.round(d.xp * (1 + 0.25 * (e.level - 1)) * clamp(1 - (levelGap - 2) * 0.2, 0.2, 1.2)));
+  // The world says a monster we hit has fallen: everyone who helped gets this — XP, quest progress and
+  // their own loot (nobody else sees it).
+  rewardKill({ type, level, def: d, pos, height }) {
+    const p = this.player;
+    const levelGap = p.level - level;
+    const xp = Math.max(1, Math.round(d.xp * (1 + 0.25 * (level - 1)) * clamp(1 - (levelGap - 2) * 0.2, 0.2, 1.2)));
     p.gainXp(xp);
-    this.ui.floater(new THREE.Vector3(e.pos.x, e.pos.y + e.height + 0.6, e.pos.z), `+${xp} XP`, 'xp');
-    this.quests.onEvent('kill', { type: e.type });
-    const at = e.pos.clone();
-    if (chance(0.75)) this.loot.dropGold(Math.round(randInt(d.gold[0], d.gold[1]) * (1 + 0.2 * (e.level - 1))), at);
+    this.ui.floater(new THREE.Vector3(pos.x, pos.y + height + 0.6, pos.z), `+${xp} XP`, 'xp');
+    this.quests.onEvent('kill', { type });
+    const at = pos.clone();
+    if (chance(0.75)) this.loot.dropGold(Math.round(randInt(d.gold[0], d.gold[1]) * (1 + 0.2 * (level - 1))), at);
     if (chance(d.boss ? 1 : 0.07)) this.loot.dropPotion(at);
-    if (d.lich) this.dungeon.onLichDefeated(e);
     if (d.boss) {
-      this.loot.dropItem(randomItem(e.level + 1, { boost: 3, minRarity: 'rare' }), at);
-      this.loot.dropItem(randomItem(e.level, { boost: 2, minRarity: 'magic' }), at);
+      this.loot.dropItem(randomItem(level + 1, { boost: 3, minRarity: 'rare' }), at);
+      this.loot.dropItem(randomItem(level, { boost: 2, minRarity: 'magic' }), at);
       this.loot.dropPotion(at);
       this.ui.log(`<b>${d.name}</b> has been slain!`, 'lvl');
-      this.shake(0.5);
+      this.shake(0.5 * this.volAt(at));
     } else if (chance(d.drop)) {
-      this.loot.dropItem(randomItem(e.level, { boost: e.level * 0.1, table: d.loot }), at);
+      this.loot.dropItem(randomItem(level, { boost: level * 0.1, table: d.loot }), at);
     }
   }
 
@@ -441,6 +464,7 @@ export class Game {
     p.hp -= dmg;
     this.ui.floater(p.headPos(), String(dmg), 'hurt');
     p.h.hitFlash(0xff2a1a, 0.9);
+    if (this.time - (this.hurtSent || -1) > 0.25) { this.hurtSent = this.time; this.link.act({ k: 'hu' }); } // the others see it flinch
     this.ui.hurt();
     this.sfx.play('hurt');
     this.shake(0.15);
@@ -524,12 +548,14 @@ export class Game {
 
   frame(rawDt) {
     if (this.onTitle) return; // the title screen covers everything
-    if (this.paused) { // settings open: hold still, but keep the camera (zoom slider) and picture alive
+    if (this.paused && this.offline) { // settings open: hold still, but keep the camera (zoom slider) and picture alive
       this.updateCamera(rawDt);
       this.composer.render();
       return;
     }
     rawDt *= this.timeScale ?? 1;
+    this.net?.update?.(rawDt); // offline: the world moves on right here
+    this.link.update(rawDt); // what the world said (a moment ago) happens now; we report back
     let dt = rawDt;
     if (this.hitstop > 0) {
       this.hitstop -= rawDt;
@@ -543,6 +569,7 @@ export class Game {
     this.town.update(dt);
     this.dungeon.update(dt);
     this.enemies.update(dt);
+    this.others.update(dt);
     this.projectiles.update(dt);
     this.loot.update(dt);
 
