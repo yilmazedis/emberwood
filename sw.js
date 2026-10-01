@@ -46,8 +46,11 @@ self.addEventListener('fetch', (event) => {
   if (!cacheable(req.url)) return;
 
   if (isCode(url) || req.mode === 'navigate') {
+    // always ask the server (cache: 'no-cache' revalidates), whatever caching headers the host sends, so
+    // an update reaches players straight away; a navigation can't be re-made with options, so use its URL
+    const fresh = req.mode === 'navigate' ? fetch(req.url, { cache: 'no-cache', credentials: 'same-origin' }) : fetch(req, { cache: 'no-cache' });
     event.respondWith(
-      fetch(req)
+      fresh
         .then((res) => {
           if (res.ok) caches.open(CACHE).then((c) => c.put(req, res.clone()));
           return res;
