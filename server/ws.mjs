@@ -107,7 +107,10 @@ export function attachWebSocket(server, { path = '/ws', maxMessage = 256 * 1024,
   server.on('upgrade', (req, socket) => {
     const url = new URL(req.url, 'http://local');
     const key = req.headers['sec-websocket-key'];
-    const reject = (code, text) => socket.end(`HTTP/1.1 ${code} ${text}\r\nConnection: close\r\n\r\n`);
+    const reject = (code, text) => { // (logged: it helps to know why a game couldn't connect)
+      console.warn(`WebSocket refused (${code}): ${req.url} from ${req.headers['x-forwarded-for'] || socket.remoteAddress}, origin ${req.headers.origin || 'none'}`);
+      socket.end(`HTTP/1.1 ${code} ${text}\r\nConnection: close\r\n\r\n`);
+    };
     if (url.pathname !== path || !key || String(req.headers.upgrade).toLowerCase() !== 'websocket') return reject(400, 'Bad Request');
     if (!allowOrigin(String(req.headers.origin || ''))) return reject(403, 'Forbidden');
     const accept = crypto.createHash('sha1').update(key + GUID).digest('base64');

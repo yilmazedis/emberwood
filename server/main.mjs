@@ -14,8 +14,9 @@ const MAX_SAVE = 200 * 1024; // bytes of JSON per character save
 const secret = store.loadSecret();
 const started = Date.now();
 
-// the game's own site, plus local and home-network addresses for testing
-const ORIGINS = [/^https:\/\/emberwood\.kerimcaglar\.com$/, /^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+)(:\d+)?$/];
+// the game's own site (http too, though the site sends visitors on to https), plus local and
+// home-network addresses for testing
+const ORIGINS = [/^https?:\/\/emberwood\.kerimcaglar\.com$/, /^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+)(:\d+)?$/];
 const allowOrigin = (o) => ORIGINS.some((r) => r.test(o));
 
 process.on('uncaughtException', (err) => console.error('uncaught', err));
@@ -243,7 +244,7 @@ const server = http.createServer((req, res) => {
   res.end('not found');
 });
 
-attachWebSocket(server, {
+const sockets = attachWebSocket(server, {
   path: '/ws',
   maxMessage: MAX_SAVE + 4096,
   allowOrigin,
@@ -260,5 +261,21 @@ attachWebSocket(server, {
     };
   },
 });
+
+// ---------------------------------------------------------------- staying awake
+// The host (LiteSpeed) starts this app for an ordinary web request and stops it when it hasn't seen
+// one for a while; WebSocket traffic may not count, and a WebSocket alone can't wake it. So while
+// anyone is connected, knock on our own front door (through the host, like a visitor) every few
+// minutes. The address comes from the requests the host passes on (its Host header).
+let selfUrl = null;
+function learnAddress(req) {
+  const host = String(req.headers.host || '');
+  if (!selfUrl && /^[a-z0-9.-]+\.[a-z]{2,}$/i.test(host)) selfUrl = `https://${host}/status`; // (not localhost)
+}
+server.on('request', learnAddress);
+server.on('upgrade', learnAddress);
+setInterval(() => {
+  if (selfUrl && sockets.size) fetch(selfUrl, { cache: 'no-store' }).catch(() => { /* the next one */ });
+}, 4 * 60000).unref();
 
 server.listen(PORT, () => console.log(`Emberwood server on port ${PORT}, data in ${store.DATA_DIR}`));

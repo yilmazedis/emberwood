@@ -72,17 +72,19 @@ export class AccountScreen {
   async start(message = '') {
     this.wait('Connecting to the game server…');
     let hello;
-    for (let attempt = 1; !hello; attempt++) { // one more try before asking the player to
-      try {
-        hello = this.net.online ? this.net.hello : await this.net.connect();
-      } catch (err) {
-        if (attempt >= 2) {
-          this.wait(`${err.message} Check your internet connection and try again.`, true);
-          return;
-        }
-        this.wait('Still connecting: the game server is slow to answer…');
-        await new Promise((r) => setTimeout(r, 1500));
-      }
+    const slow = setTimeout(() => this.wait('Waking the game server up…'), 6000); // (net.js: it may be asleep)
+    try {
+      hello = this.net.online ? this.net.hello : await this.net.connect();
+    } catch (err) {
+      this.wait(`${err.message} Check your internet connection and try again.`, true);
+      return;
+    } finally {
+      clearTimeout(slow);
+    }
+    if (hello?.v < PROTOCOL) { // an older server: after a Restart the host may keep the old one running until a
+      this.net.ws?.close(); // web request comes in, and connect() just made one: try once more
+      await new Promise((r) => setTimeout(r, 2500));
+      try { hello = await this.net.connect(); } catch { /* answered below */ }
     }
     if (hello?.v !== PROTOCOL) { // the game and the server must speak the same language
       this.net.ws?.close();

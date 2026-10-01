@@ -7,7 +7,7 @@ import { heightAt } from './world.js';
 import { applyEquipmentVisuals, equipmentFromLook, boltAction } from './player.js';
 import { SKILLS, auraTick } from './skills.js';
 import { CLASSES } from './classes.js';
-import { lerp, angleDiff, clamp, yawTo } from './util.js';
+import { lerp, angleDiff, clamp, yawTo, has } from './util.js';
 
 const JUMP = 6; // m between two updates: a teleport (respawn), not a run
 const lerpAngle = (a, b, t) => a + angleDiff(a, b) * t;
@@ -18,7 +18,7 @@ export class RemotePlayer {
     this.game = game;
     this.id = r.i;
     this.name = String(r.n || '?');
-    this.cls = Object.hasOwn(CLASSES, r.c) ? r.c : 'knight';
+    this.cls = has(CLASSES, r.c) ? r.c : 'knight';
     this.level = 1;
     this.h = new Humanoid(CLASSES[this.cls].model);
     this.group = this.h.group;
@@ -204,7 +204,7 @@ export class RemotePlayer {
 
   // A skill they used: the same show as ours (skills.js), without the damage (their game deals it).
   skill(a) {
-    if (!this.alive || typeof a.id !== 'string' || !Object.hasOwn(SKILLS, a.id)) return;
+    if (!this.alive || typeof a.id !== 'string' || !has(SKILLS, a.id)) return;
     const tx = Number(a.x), tz = Number(a.z);
     const at = Number.isFinite(tx) && Number.isFinite(tz) ? new THREE.Vector3(tx, heightAt(tx, tz), tz) : null;
     this.endAction();

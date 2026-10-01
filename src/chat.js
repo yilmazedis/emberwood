@@ -2,6 +2,7 @@
 // heads. Enter (or the Chat button on phones) opens the line, Enter sends, Esc closes. Recent lines
 // stay on screen for a while; the whole conversation shows while the line is open.
 import { CLASSES } from './classes.js';
+import { has } from './util.js';
 
 const KEEP = 60; // lines kept
 const SHOW = 6; // lines shown while closed…
@@ -84,7 +85,7 @@ export class Chat {
   }
 
   add(m, old) {
-    this.line({ name: String(m.n || '?'), cls: Object.hasOwn(CLASSES, m.c) ? m.c : '', text: String(m.x || ''), old, me: m.i === this.game.link.pid });
+    this.line({ name: String(m.n || '?'), cls: has(CLASSES, m.c) ? m.c : '', text: String(m.x || ''), old, me: m.i === this.game.link.pid });
   }
 
   setOnline(n) {

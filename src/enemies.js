@@ -7,7 +7,7 @@ import { Humanoid } from './character.js';
 import { heightAt } from './world.js';
 import { ENEMY_TYPES } from './monsters.js';
 import { STATES } from './sim/world.js';
-import { rand, angleDiff, yawTo, lerp, clamp, TAU } from './util.js';
+import { rand, angleDiff, yawTo, lerp, clamp, TAU, has } from './util.js';
 
 export { ENEMY_TYPES, SPAWNS } from './monsters.js';
 
@@ -482,7 +482,7 @@ export class EnemyManager {
         this.byId.get(r[0])?.sample(ts, r[1], r[2], r[3], r[4], r[5], r[6]);
         continue;
       }
-      if (!r || !Object.hasOwn(ENEMY_TYPES, r.t) || r.s === 4) continue; // (already dead: nothing to see)
+      if (!r || !has(ENEMY_TYPES, r.t) || r.s === 4) continue; // (already dead: nothing to see)
       this.remove(r.i);
       const e = new Enemy(this.game, r, ts);
       this.byId.set(r.i, e);
@@ -516,7 +516,7 @@ export class EnemyManager {
       e.die();
       e.predicted = 0;
     }
-    if (!Array.isArray(who) || !who.includes(g.link.pid) || !Object.hasOwn(ENEMY_TYPES, type)) return;
+    if (!Array.isArray(who) || !who.includes(g.link.pid) || !has(ENEMY_TYPES, type)) return;
     const pos = e ? e.pos.clone() : new THREE.Vector3(x, heightAt(x, z), z);
     g.rewardKill({ type, level, def: ENEMY_TYPES[type], pos, height: e ? e.height : 2 });
   }

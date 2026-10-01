@@ -1,5 +1,13 @@
 # Emberwood: static hosting settings for Apache / LiteSpeed.
 
+# Always https: the game server only takes the game from https://emberwood…, and the app (offline
+# play, installing it) needs it too.
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteCond %{HTTPS} !=on
+  RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
+</IfModule>
+
 # Never serve git metadata (the site is deployed with `git pull` into the web root) or logs.
 RedirectMatch 404 /\.git
 RedirectMatch 404 \.log$

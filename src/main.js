@@ -1,3 +1,7 @@
+// The live site always runs over https (the game server takes the game only from there); .htaccess
+// sends http visitors on too, this catches the rest (e.g. an old home-screen shortcut).
+if (location.protocol === 'http:' && location.hostname === 'emberwood.kerimcaglar.com') location.replace(`https://${location.host}${location.pathname}${location.search}`);
+
 import { Game } from './game.js';
 import { Net } from './net.js';
 import { LocalWorld } from './local.js';

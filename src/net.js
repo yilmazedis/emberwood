@@ -41,13 +41,30 @@ export class Net {
     this.handlers[type]?.(data);
   }
 
-  connect() {
+  // Connect, and greet the server. The host only starts the game server for an ordinary web request
+  // (and may stop it after a while without visitors); a WebSocket alone doesn't wake it. So knock on
+  // /status alongside the first try, and if that try fails, try again once the server is up.
+  async connect() {
+    const awake = this.wake();
+    try {
+      return await this.open(8000);
+    } catch {
+      if (!(await awake)) throw new Error('The game server is not answering (it may be restarting).');
+      return this.open(20000); // awake now: again, with patience for a slow connection
+    }
+  }
+
+  wake() {
+    const url = this.url.replace(/^ws(s?):/, 'http$1:').replace(/\/ws$/, '/status');
+    return fetch(url, { cache: 'no-store' }).then((r) => r.ok, () => false);
+  }
+
+  open(timeout) {
     return new Promise((resolve, reject) => {
       let settled = false;
       const ws = new WebSocket(this.url);
       this.ws = ws;
-      // generous: on a slow phone connection, and with the host sometimes slow to answer, 10 s wasn't enough
-      const timer = setTimeout(() => { if (!settled) { settled = true; ws.close(); reject(new Error('The game server did not answer.')); } }, 20000);
+      const timer = setTimeout(() => { if (!settled) { settled = true; ws.close(); reject(new Error('The game server did not answer.')); } }, timeout);
       ws.onopen = async () => {
         this.online = true;
         try {
@@ -58,13 +75,14 @@ export class Net {
           resolve(hello);
         } catch (err) { settled = true; clearTimeout(timer); reject(err); }
       };
-      ws.onmessage = (e) => this.receive(e.data);
+      ws.onmessage = (e) => { if (this.ws === ws) this.receive(e.data); };
       ws.onclose = () => {
+        if (this.ws !== ws) return; // a try we already gave up on
         this.online = false;
         for (const w of this.waiting.values()) w.reject(new Error('Lost the connection to the game server.'));
         this.waiting.clear();
         if (!settled) { settled = true; clearTimeout(timer); reject(new Error('Could not reach the game server.')); return; }
-        if (this.ws === ws) this.lost();
+        this.lost();
       };
     });
   }
@@ -104,7 +122,9 @@ export class Net {
     while (this.session && !this.closing) {
       await new Promise((r) => setTimeout(r, Math.min(15000, 1000 * 2 ** this.retry++)));
       try {
-        if ((await this.connect()).v !== PROTOCOL) { this.session = null; this.emit('signedOut', { msg: 'Emberwood was updated. Reload the page to keep playing.' }); break; }
+        const v = (await this.connect()).v;
+        if (v > PROTOCOL) { this.session = null; this.emit('signedOut', { msg: 'Emberwood was updated. Reload the page to keep playing.' }); break; }
+        if (v < PROTOCOL) { this.ws.close(); continue; } // the server is still being updated: keep trying
       } catch { continue; } // still unreachable
       try {
         await this.request('resume', { token: savedToken.get() });

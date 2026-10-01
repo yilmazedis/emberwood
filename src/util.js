@@ -9,6 +9,8 @@ export const rand = (a, b) => a + Math.random() * (b - a);
 export const randInt = (a, b) => Math.floor(a + Math.random() * (b - a + 1));
 export const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 export const chance = (p) => Math.random() < p;
+// obj has its own key (not from its prototype); Object.hasOwn needs iOS 15.4, this works everywhere
+export const has = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
 
 export function angleDiff(a, b) {
   let d = (b - a) % TAU;

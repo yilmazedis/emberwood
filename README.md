@@ -53,7 +53,13 @@ To back up, copy that folder.
 Live at https://emberwood.kerimcaglar.com, on DirectAdmin + LiteSpeed shared hosting.
 
 - **Order:** `git pull`, then Restart the game server (most updates change both). Players get the new game when
-  they reload.
+  they reload. The host only really starts (or restarts) the Node app when an ordinary web request reaches it, and a
+  WebSocket doesn't count: so the game knocks on `/status` while it connects (and tries again once the server is
+  up), and the server knocks on its own door every few minutes while anyone is connected. To check a restart by
+  hand, open https://gameserver.kerimcaglar.com/status: `uptimeS` starts again from 0.
+- **https only:** `.htaccess` sends `http://` visitors on to `https://` (the game server only takes the game from
+  `https://emberwood.kerimcaglar.com`, and the app needs https). Refused connections are logged in the server's
+  `stderr.log` (in the app root, `server/`).
 - **Website:** the subdomain's `public_html` is a symlink to the clone
   (`~/domains/emberwood.kerimcaglar.com/public_html -> emberwood`). Deploy with `git pull` in the clone.
   `.htaccess` sets the model MIME types and cache headers, and blocks `.git`, log files and `server/`.
