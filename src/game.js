@@ -21,7 +21,7 @@ import { Dungeon } from './dungeon.js';
 import { loadSettings, saveSettings } from './settings.js';
 import { angleDiff, yawTo, randInt, rand, chance, clamp } from './util.js';
 
-const SAVE_KEY = 'emberwood-save-v1';
+const SAVE_KEY = 'emberwood-save-v1'; // the local save (offline play: ?autostart)
 
 export class Game {
   constructor() {
@@ -87,9 +87,9 @@ export class Game {
     // app in the background: save, and let the music and ambience rest
     document.addEventListener('visibilitychange', () => {
       if (!this.started) return;
-      if (document.hidden) { this.save(); this.sfx.sleep(); } else if (!this.onTitle) this.sfx.wake();
+      if (document.hidden) { this.save(true); this.sfx.sleep(); } else if (!this.onTitle) this.sfx.wake();
     });
-    window.addEventListener('pagehide', () => this.save());
+    window.addEventListener('pagehide', () => this.save(true));
   }
 
   // ---------------------------------------------------------------- settings
@@ -113,10 +113,41 @@ export class Game {
     this.onResize();
   }
 
+  // The hero to play: { id, name, cls, save } from the server (or the local one when offline).
+  setCharacter(char) {
+    this.character = { id: char.id, name: char.name, cls: char.cls };
+    const p = this.player;
+    p.setClass(char.cls);
+    p.reset();
+    if (char.save) p.load(char.save); else p.starterKit();
+    // nothing of the previous hero's world stays behind
+    if (this.dungeon.inside) this.dungeon.setInside(false);
+    this.loot.clear();
+    this.projectiles.clear();
+    this.town.buyback = [];
+    p.alive = true;
+    p.hp = p.stats.maxHp;
+    p.mp = p.stats.maxMp;
+    p.pos.set(0, heightAt(0, 3.5), 3.5);
+    p.yaw = p.targetYaw = Math.PI;
+    p.group.rotation.y = p.yaw;
+    this.camFocus.copy(p.pos);
+    this.ui.showDeath(false);
+    this.quests.ensure();
+    this.ui.setCharacter(char);
+    this.renderer.compile(this.scene, this.camera); // the new model's shaders, before the first frame
+  }
+
+  // Signed in from another device: back to the title screen (main.js shows why).
+  kicked(msg) {
+    this.character = null; // nothing more to save from here
+    this.leave(msg);
+  }
+
   // "Leave game": save, stop everything and show the title screen (main.js); resume() comes back.
-  leave() {
+  leave(msg = '') {
     if (this.onTitle) return;
-    this.save();
+    this.save(true);
     this.ui.closeSettings(true);
     this.ui.closeInventory();
     this.ui.togglePanel('help', false);
@@ -124,7 +155,7 @@ export class Game {
     this.paused = true;
     this.sfx.music?.play(null);
     this.sfx.sleep();
-    this.onLeave?.();
+    this.onLeave?.(msg);
   }
 
   resume() {
@@ -147,16 +178,13 @@ export class Game {
     this.fx.setViewport(window.innerHeight * this.renderer.getPixelRatio(), this.camera.fov);
     this.projectiles = new Projectiles(this);
     this.loot = new LootManager(this);
-    this.player = new Player(this);
+    this.player = new Player(this); // a stand-in until a hero is picked (setCharacter)
     this.scene.add(this.player.group);
     this.ui = new UI(this);
     this.doll = new Doll(document.getElementById('doll-canvas'));
     this.enemies = new EnemyManager(this);
 
-    const save = this.loadSave();
-    if (save) this.player.load(save);
-    else this.player.starterKit();
-    this.player.onGearChanged(false);
+    this.player.starterKit();
     this.player.pos.set(0, heightAt(0, 3.5), 3.5);
     this.camFocus.copy(this.player.pos);
     this.quests = new Quests(this); // story + bounties (reads the saved quest state)
@@ -441,9 +469,26 @@ export class Game {
   }
 
   // ---------------------------------------------------------------- persistence
-  save() {
-    if (!this.player) return;
-    try { localStorage.setItem(SAVE_KEY, JSON.stringify(this.player.serialize())); } catch { /* storage unavailable */ }
+  // Saves go to the game server (at most every 1.5 s; `now` sends straight away), or to this browser
+  // when playing offline.
+  save(now = false) {
+    if (!this.player || !this.character) return;
+    this.saveDirty = true;
+    if (now) this.flushSave();
+    else if (!this.saveTimer) this.saveTimer = setTimeout(() => this.flushSave(), 1500);
+  }
+
+  flushSave() {
+    clearTimeout(this.saveTimer);
+    this.saveTimer = null;
+    if (!this.saveDirty || !this.character) return;
+    this.saveDirty = false;
+    const data = this.player.serialize();
+    if (this.character.id === 'local') {
+      try { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); } catch { /* storage unavailable */ }
+    } else {
+      this.net?.send('save', { save: data });
+    }
   }
 
   loadSave() {

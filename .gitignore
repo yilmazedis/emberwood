@@ -1,5 +1,7 @@
 .DS_Store
 
-# written by the host when running as a Node.js app (Passenger)
+# written by the host when running as a Node.js app (Passenger / DirectAdmin)
 stderr.log
 tmp/
+node_modules
+server-data

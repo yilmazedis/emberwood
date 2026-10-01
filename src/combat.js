@@ -192,6 +192,11 @@ export class LootManager {
     l.dead = true;
   }
 
+  clear() {
+    for (const l of this.list) this.remove(l);
+    this.list = [];
+  }
+
   update(dt) {
     const g = this.game, p = g.player;
     this.fullMsgT -= dt;

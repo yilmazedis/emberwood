@@ -4,11 +4,13 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { BASES } from './items.js';
 import { buildGearModel, GEAR_ICON_ROT } from './gear.js';
+import { CLASSES } from './classes.js';
 
 export const Assets = { chars: {}, clips: {}, items: {}, icons: {} };
 
 const CHARACTERS = [
-  'Knight', 'Rogue_Hooded', 'Barbarian', 'Mage', 'Ranger', // KayKit Adventurers (Ranger = the merchant)
+  'Knight', 'Barbarian', 'Mage', 'Rogue', // KayKit Adventurers: the playable classes
+  'Rogue_Hooded', 'Ranger', // bandits, and Wren the merchant
   'Skeleton_Minion', 'Skeleton_Warrior', 'Skeleton_Rogue', 'Skeleton_Mage', // KayKit Skeletons
 ];
 const ANIMATIONS = ['Rig_Medium_General', 'Rig_Medium_MovementBasic'];
@@ -128,8 +130,8 @@ export function buildIcons() {
     if (base.gear) Assets.icons[`gear_${key}`] = snapshot(buildGearModel(base.gear), { rot: GEAR_ICON_ROT[base.gear.kind] });
   }
   // Helmets and cape are parts of the Knight mesh: render just those parts.
-  const part = (visible, dir, rot = [0, 0, 0]) => {
-    const k = cloneCharacter('Knight');
+  const part = (visible, dir, rot = [0, 0, 0], model = 'Knight') => {
+    const k = cloneCharacter(model);
     const shown = [];
     for (const [n, m] of Object.entries(k.meshes)) {
       m.visible = visible.includes(n);
@@ -140,5 +142,7 @@ export function buildIcons() {
   Assets.icons.helm = part(['Knight_Helmet'], new THREE.Vector3(0.9, 0.3, 1));
   Assets.icons.visor = part(['Knight_Helmet', 'Knight_HelmetVisor'], new THREE.Vector3(0.9, 0.3, 1));
   Assets.icons.cape = part(['Knight_Cape'], new THREE.Vector3(-0.6, 0.2, -1));
-  Assets.icons.portrait = part(['Knight_Head', 'Knight_Helmet'], new THREE.Vector3(0.35, 0.1, 1));
+  // a portrait of each class (the hero list on the title screen and the HUD)
+  for (const [id, c] of Object.entries(CLASSES)) Assets.icons[`portrait_${id}`] = part(c.portrait, new THREE.Vector3(0.35, 0.1, 1), [0, 0, 0], c.model);
+  Assets.icons.portrait = Assets.icons.portrait_knight;
 }

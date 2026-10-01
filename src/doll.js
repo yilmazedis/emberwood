@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { Humanoid } from './character.js';
 import { applyEquipmentVisuals } from './player.js';
+import { CLASSES } from './classes.js';
 
 export class Doll {
   constructor(canvas) {
@@ -21,8 +22,8 @@ export class Doll {
     this.camera = new THREE.PerspectiveCamera(30, 180 / 220, 0.1, 50);
     this.camera.position.set(0, 1.45, 5.6);
     this.camera.lookAt(0, 1.15, 0);
-    this.h = new Humanoid('Knight');
-    this.scene.add(this.h.group);
+    this.model = null;
+    this.setClass('knight');
     this.visible = false;
     this.t = 0;
     this.drag = null;
@@ -36,8 +37,18 @@ export class Doll {
     canvas.addEventListener('pointerup', () => { this.drag = null; });
   }
 
-  setEquipment(eq) {
-    applyEquipmentVisuals(this.h, eq);
+  setClass(cls) {
+    const model = CLASSES[cls].model;
+    if (model === this.model) return;
+    if (this.h) this.scene.remove(this.h.group);
+    this.model = model;
+    this.h = new Humanoid(model);
+    this.scene.add(this.h.group);
+  }
+
+  setEquipment(eq, cls = 'knight') {
+    this.setClass(cls);
+    applyEquipmentVisuals(this.h, eq, cls);
   }
 
   update(dt) {

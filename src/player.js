@@ -1,9 +1,10 @@
-// The player knight: stats, gear, leveling, movement and skills.
+// The player's hero (any of the classes in classes.js): stats, gear, leveling, movement and skills.
 import * as THREE from 'three';
 import { Humanoid } from './character.js';
 import { heightAt, resolveCollision } from './world.js';
 import { makeItem, BASES } from './items.js';
 import { dampAngle, yawTo, rand } from './util.js';
+import { CLASSES } from './classes.js';
 import { hdr } from './fx.js';
 
 export const SKILLS = [
@@ -28,14 +29,16 @@ function gearLook(item) {
   return { ...b.gear, cover: b.cover, glow: item.rarity === 'legendary' ? 1 : 0 };
 }
 
-export function applyEquipmentVisuals(h, eq) {
+// Weapons in the hands; a head item shows the class's own hat (helmet, bear hat, wizard hat), a back
+// item its cape (classes.js lists the model parts); gloves and boots tint the hands and feet.
+export function applyEquipmentVisuals(h, eq, cls = 'knight') {
+  const c = CLASSES[cls];
   const glow = (it) => (it && it.rarity === 'legendary' ? 0xff6a10 : null);
   h.equip('r', eq.weapon?.model || null, glow(eq.weapon));
   h.equip('l', eq.offhand?.model || null, glow(eq.offhand));
-  const head = eq.head?.meshes || [];
-  h.setMeshVisible('Knight_Helmet', head.includes('Knight_Helmet'));
-  h.setMeshVisible('Knight_HelmetVisor', head.includes('Knight_HelmetVisor'));
-  h.setMeshVisible('Knight_Cape', !!eq.back);
+  const shown = new Set(eq.head ? c.hats[eq.head.base] || [] : []);
+  for (const part of new Set(Object.values(c.hats).flat())) h.setMeshVisible(part, shown.has(part));
+  for (const part of c.capes) h.setMeshVisible(part, !!eq.back);
   h.enableGearTint();
   h.setGear('hands', gearLook(eq.hands));
   h.setGear('feet', gearLook(eq.feet));
@@ -44,12 +47,33 @@ export function applyEquipmentVisuals(h, eq) {
 export class Player {
   constructor(game) {
     this.game = game;
-    this.h = new Humanoid('Knight');
-    this.group = this.h.group;
-    this.pos = this.group.position;
+    this.setClass('knight');
     this.radius = 0.5;
     this.yaw = Math.PI;
     this.targetYaw = this.yaw;
+    this.reset();
+  }
+
+  // Wear the class's model (swapping it in the scene if one is already there).
+  setClass(cls) {
+    this.cls = cls;
+    const model = CLASSES[cls].model;
+    if (this.h && this.model === model) return;
+    const old = this.h;
+    this.model = model;
+    this.h = new Humanoid(model);
+    this.group = this.h.group;
+    this.pos = this.group.position;
+    if (old) {
+      this.group.position.copy(old.group.position);
+      this.group.rotation.y = old.group.rotation.y;
+      this.game.scene.remove(old.group);
+      this.game.scene.add(this.group);
+    }
+  }
+
+  // A brand-new character: level 1, nothing in the bag (see starterKit).
+  reset() {
     this.level = 1;
     this.xp = 0;
     this.gold = 0;
@@ -65,14 +89,17 @@ export class Player {
     this.combo = 0;
     this.alive = true;
     this.stepT = 0;
+    this.hp = undefined;
     this.recompute();
     this.hp = this.stats.maxHp;
     this.mp = this.stats.maxMp;
   }
 
   starterKit() {
-    this.equipment.weapon = makeItem('sword', 1, 'common', 'Rusty Sword');
+    for (const [slot, base, name] of CLASSES[this.cls].start) this.equipment[slot] = makeItem(base, 1, 'common', name);
     this.onGearChanged(false);
+    this.hp = this.stats.maxHp;
+    this.mp = this.stats.maxMp;
   }
 
   serialize() {
@@ -98,10 +125,11 @@ export class Player {
   }
 
   recompute() {
-    const L = this.level;
+    const L = this.level, c = CLASSES[this.cls];
     const s = {
-      maxHp: 90 + L * 14, maxMp: 40 + L * 6, armor: L * 1.5, dmgMin: 2, dmgMax: 4, speed: 1.3,
-      dmgPct: 0.06 * (L - 1), atkSpd: 0, moveSpd: 0, crit: 0.05, spell: 1, regen: 1 + L * 0.25, mpRegen: 3 + L * 0.3,
+      maxHp: (90 + L * 14) * c.hp, maxMp: (40 + L * 6) * c.mp, armor: L * 1.5 * c.armor, dmgMin: 2, dmgMax: 4, speed: 1.3,
+      dmgPct: 0.06 * (L - 1) + (c.dmg - 1), atkSpd: c.atkSpd, moveSpd: c.moveSpd, crit: 0.05 + c.crit, spell: 1 + c.spell,
+      regen: 1 + L * 0.25, mpRegen: (3 + L * 0.3) * Math.sqrt(c.mp),
     };
     for (const it of Object.values(this.equipment)) {
       if (!it) continue;
@@ -118,6 +146,8 @@ export class Player {
       s.regen += st.regen || 0;
     }
     s.armor = Math.round(s.armor);
+    s.maxHp = Math.round(s.maxHp);
+    s.maxMp = Math.round(s.maxMp);
     s.atkSpeed = s.speed * (1 + s.atkSpd);
     s.moveSpeed = 5.6 * (1 + s.moveSpd);
     s.dmgLo = Math.max(1, Math.round(s.dmgMin * (1 + s.dmgPct)));
@@ -217,9 +247,9 @@ export class Player {
     const hpFrac = this.hp !== undefined ? this.hp / this.stats.maxHp : 1;
     this.recompute();
     if (this.hp !== undefined) this.hp = Math.min(this.stats.maxHp, Math.max(this.hp, hpFrac * this.stats.maxHp));
-    applyEquipmentVisuals(this.h, this.equipment);
+    applyEquipmentVisuals(this.h, this.equipment, this.cls);
     this.game.ui?.refreshInventory();
-    this.game.doll?.setEquipment(this.equipment);
+    this.game.doll?.setEquipment(this.equipment, this.cls);
     if (save) this.game.save();
   }
 

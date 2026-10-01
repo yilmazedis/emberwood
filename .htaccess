@@ -3,6 +3,8 @@
 # Never serve git metadata (the site is deployed with `git pull` into the web root) or logs.
 RedirectMatch 404 /\.git
 RedirectMatch 404 \.log$
+# The game server (server/) runs as its own Node.js app; its files aren't part of the website.
+RedirectMatch 404 ^/server/
 
 <IfModule mod_mime.c>
   AddType text/javascript .js

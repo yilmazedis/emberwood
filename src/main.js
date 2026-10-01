@@ -1,4 +1,6 @@
 import { Game } from './game.js';
+import { Net } from './net.js';
+import { AccountScreen } from './account.js';
 
 const fill = document.getElementById('load-fill');
 const text = document.getElementById('load-text');
@@ -52,37 +54,71 @@ async function goFullscreen() {
 const game = new Game();
 window.game = game; // handy for debugging from the console
 
-// The title screen fades out on start, and comes back (with Continue) when you leave the game.
+// The title screen fades out when a hero enters the world, and comes back on "Leave game".
 let hideT = 0;
+let accounts = null; // the sign-in and hero screens (online play)
+// ?autostart: play offline with the hero saved in this browser (automated tests, no server needed)
+const offline = new URLSearchParams(location.search).has('autostart');
+
 function hideTitle() {
   loading.classList.add('gone');
   clearTimeout(hideT);
   hideT = setTimeout(() => loading.classList.add('away'), 900);
 }
-game.onLeave = () => {
+
+function enter(char) {
+  goFullscreen();
+  hideTitle();
+  game.setCharacter(char);
+  if (game.started) {
+    game.resume();
+  } else {
+    game.start();
+    cacheForOffline();
+  }
+}
+
+game.onLeave = (why) => {
   clearTimeout(hideT);
   loading.classList.add('returned');
   loading.classList.remove('away');
-  text.textContent = 'Your progress is saved.';
-  startBtn.textContent = 'Continue';
   requestAnimationFrame(() => loading.classList.remove('gone'));
+  if (!accounts) {
+    text.textContent = 'Your progress is saved.';
+    startBtn.textContent = 'Continue';
+    return;
+  }
+  text.textContent = '';
+  if (why) accounts.start(why); // signed out (e.g. signed in elsewhere): say why
+  else accounts.backFromGame(game.character?.id);
 };
 
 game.init((f, label) => {
   fill.style.width = `${Math.round(f * 100)}%`;
   if (label) text.textContent = label;
 }).then(() => {
-  text.textContent = 'Ready';
-  startBtn.classList.remove('hidden');
-  const go = () => {
-    goFullscreen();
-    hideTitle();
-    if (game.started) { game.resume(); return; }
-    game.start();
-    cacheForOffline();
-  };
-  startBtn.addEventListener('click', go);
-  if (new URLSearchParams(location.search).has('autostart')) go();
+  if (offline) {
+    text.textContent = 'Ready';
+    startBtn.classList.remove('hidden');
+    const go = () => {
+      if (!game.started) { enter({ id: 'local', name: 'Sir Ember', cls: 'knight', save: game.loadSave() }); return; }
+      goFullscreen();
+      hideTitle();
+      game.resume();
+    };
+    startBtn.addEventListener('click', go);
+    go();
+    return;
+  }
+  loading.classList.add('returned'); // the loading bar has done its job
+  text.textContent = '';
+  const net = new Net();
+  game.net = net;
+  accounts = new AccountScreen(net, { onPlay: enter });
+  net.on('kicked', (m) => game.kicked(m.msg));
+  net.on('signedOut', (m) => game.kicked(m.msg));
+  net.on('connection', ({ online }) => game.ui.connection(online));
+  accounts.start();
 }).catch((err) => {
   console.error(err);
   text.textContent = `Failed to load: ${err.message}`;

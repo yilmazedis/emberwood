@@ -1,27 +1,54 @@
 # Emberwood
 
-A small 3D action RPG in the browser: a knight with skills and gear, monsters to farm, and loot to collect.
+A small online 3D action RPG in the browser: make an account and a hero, then fight monsters, collect loot and gear up.
 It uses Three.js with the free **KayKit Adventurers**, **Skeletons** and **Dungeon** packs (CC0, by Kay Lousberg).
 
 ## Run it
 
-ES modules and model files need a local web server; opening `index.html` directly won't work. From this folder:
+Emberwood is an online game: the website (this folder) plus a game server (`server/`) that keeps accounts and
+characters. Locally, run both from this folder (Node 22 or newer):
 
+```bash
+EMBERWOOD_DATA=./server-data node server/index.js
+```
 ```bash
 python3 -m http.server 8765
 ```
 
-Then open http://localhost:8765. Three.js loads from a CDN, so you need an internet connection.
+Then open http://localhost:8765. Pages opened from `localhost` (or your home network, e.g. `192.168.x.x`) talk to
+the server on port 8787; anything else talks to `wss://gameserver.kerimcaglar.com`. Add `?server=ws://host:port/ws`
+to point a page at another server, or `?autostart` to play offline with a hero saved in the browser (used by the
+automated tests). Three.js loads from a CDN, so you need an internet connection.
+
+## Online play
+
+- **Accounts:** username and password. Passwords are stored as scrypt hashes; a signed token keeps you signed in
+  for 30 days. Signing in somewhere else signs the older session out.
+- **Heroes:** up to 4 per account, any mix of the 4 classes (`src/classes.js`: Knight, Barbarian, Mage, Rogue, each
+  with its own model, starting gear and stats). Names are unique, 3–14 letters (Turkish letters are fine). A hero
+  saved in the browser from the single-player days can be brought online once, as a Knight.
+- **Saving:** the game sends the hero's progress to the server every few seconds and when you leave. If the line
+  drops, the game keeps going and reconnects by itself.
+- **Coming next:** the shared world (other players, chat, monsters and loot run by the server), each class's own
+  skills, parties with their own copy of the crypt, and trading.
+
+The server (`server/`, Node built-ins only) speaks JSON over one WebSocket at `/ws` and shows `{"ok":true,…}` at
+`/status`. Its data lives outside the website, in `$EMBERWOOD_DATA` or `~/emberwood-data`: one JSON file per account
+(`accounts/<name>.json`), `names.json` (who has which hero name) and `secret.key` (signs the tokens; keep it private).
+To back up, copy that folder.
 
 ## Deploy
 
-Live at https://emberwood.kerimcaglar.com. Two ways to host it:
+Live at https://emberwood.kerimcaglar.com, on DirectAdmin + LiteSpeed shared hosting.
 
-- **Static files** (current): the subdomain's `public_html` is a symlink to the clone
-  (`~/domains/emberwood.kerimcaglar.com/public_html -> emberwood`). Deploy with `git pull` in the clone; no restart.
-  `.htaccess` sets the model MIME types and cache headers, and blocks `.git` and log files.
-- **Node.js app:** set a Node.js app's root to the clone and its startup file to `server.js`.
-  It only uses Node built-ins, so no `npm install` is needed.
+- **Website:** the subdomain's `public_html` is a symlink to the clone
+  (`~/domains/emberwood.kerimcaglar.com/public_html -> emberwood`). Deploy with `git pull` in the clone.
+  `.htaccess` sets the model MIME types and cache headers, and blocks `.git`, log files and `server/`.
+- **Game server:** a DirectAdmin "Setup Node.js App" on `gameserver.kerimcaglar.com`: application root
+  `domains/emberwood.kerimcaglar.com/emberwood/server`, startup file `index.js`, the newest Node.js. No `npm install`.
+  After a `git pull` that changes `server/` (or `src/classes.js`), press Restart for the app.
+- **Hosting test:** `tools/hosting-test` measures whether a host can run the server (see its README). Hyperion passed
+  with caveats: it is shared and overloaded, so expect the occasional stutter; a small VPS would remove it.
 
 ## Controls
 
@@ -117,6 +144,9 @@ Variants: `?size=192`, `?size=512&maskable` (Android adaptive icon), `?size=180&
 - `src/dungeon.js`: the crypt: map, walls and paths around them, torch lights, chests, the way in and out
 - `src/audio.js`, `src/music.js`, `src/ambience.js`: sound effects, generative music, ambience (mixer and volumes in `audio.js`)
 - `src/settings.js`: saved player settings
+- `src/classes.js`: the playable classes (shared with the server)
+- `src/net.js`, `src/account.js`: the connection to the game server, and the sign-in / hero screens
+- `server/`: the game server (`main.mjs` messages, `store.mjs` accounts on disk, `auth.mjs` passwords and tokens, `ws.mjs` WebSocket)
 - `src/quests.js`: the story quests, bounty templates, progress and rewards
 - `src/combat.js`: projectiles and ground loot
 - `src/ui.js`, `style.css`: HUD, action bar, minimap, inventory, tooltips

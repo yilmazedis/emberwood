@@ -33,6 +33,7 @@
   <div id="plates"></div>
   <div id="floaters"></div>
   <div id="vignette"></div>
+  <div id="net-banner" class="hidden">Lost the game server, reconnecting…</div>
 
   <!-- touch screens: floating joystick on the left half -->
   <div id="stick-zone"></div>
@@ -41,7 +42,7 @@
   <div id="hud-player" class="panel">
     <div class="portrait"><img id="portrait" alt=""><span id="lvl">1</span></div>
     <div class="bars">
-      <div class="pname">Sir Ember <small>Knight</small></div>
+      <div class="pname" id="pname">Sir Ember <small>Knight</small></div>
       <div class="bar hp"><div class="fill" id="hp-fill"></div><span id="hp-text"></span></div>
       <div class="bar mp"><div class="fill" id="mp-fill"></div><span id="mp-text"></span></div>
     </div>
@@ -184,6 +185,39 @@
     <div class="subtitle">a tiny action RPG</div>
     <div class="load-bar"><div id="load-fill"></div></div>
     <div id="load-text">Loading…</div>
+    <!-- accounts: sign in, then pick or create a hero (src/account.js) -->
+    <div id="account" class="hidden">
+      <form id="acc-login" class="acc-card hidden">
+        <div class="acc-title" id="acc-login-title">Sign in</div>
+        <input id="acc-user" name="username" autocomplete="username" placeholder="Username" maxlength="16" autocapitalize="off" autocorrect="off" spellcheck="false">
+        <input id="acc-pass" name="password" type="password" autocomplete="current-password" placeholder="Password" maxlength="72">
+        <input id="acc-pass2" type="password" autocomplete="new-password" placeholder="Repeat password" maxlength="72" class="hidden">
+        <button id="acc-go" type="submit" class="acc-main">Sign in</button>
+        <div class="acc-err" id="acc-err"></div>
+        <button type="button" class="acc-link" id="acc-switch">New here? Create an account</button>
+      </form>
+      <div id="acc-chars" class="acc-card hidden">
+        <div class="acc-title">Your heroes <small id="acc-who"></small></div>
+        <div id="char-list"></div>
+        <button type="button" id="char-play" class="acc-main">Play</button>
+        <div class="acc-err" id="chars-err"></div>
+        <div class="acc-row"><button type="button" class="acc-link" id="char-del">Delete hero</button><button type="button" class="acc-link" id="acc-logout">Sign out</button></div>
+      </div>
+      <form id="acc-create" class="acc-card hidden">
+        <div class="acc-title">New hero</div>
+        <div id="class-pick"></div>
+        <div id="class-desc" class="acc-desc"></div>
+        <input id="char-name" placeholder="Hero name" maxlength="14" autocomplete="off" autocapitalize="words" autocorrect="off" spellcheck="false">
+        <label id="import-row" class="acc-check hidden"><input type="checkbox" id="char-import" checked> Bring my level <span id="import-level"></span> knight saved on this device</label>
+        <button type="submit" class="acc-main">Create hero</button>
+        <div class="acc-err" id="create-err"></div>
+        <button type="button" class="acc-link" id="create-back">Back</button>
+      </form>
+      <div id="acc-wait" class="acc-card hidden">
+        <div id="acc-wait-text">Connecting to the game server…</div>
+        <button type="button" id="acc-retry" class="acc-main hidden">Try again</button>
+      </div>
+    </div>
     <button id="start" class="hidden">Enter the woods</button>
     <div class="load-help desk-only">WASD move · Click attack · 1–4 skills · Q ale · I bag</div>
     <div class="load-help touch-only">Left thumb moves · hold the sword to attack · best in landscape</div>

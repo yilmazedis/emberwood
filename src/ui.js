@@ -6,6 +6,7 @@ import { SKILLS, xpForLevel, STASH_SIZE } from './player.js';
 import { ALE_PRICE } from './town.js';
 import { ZONES, TOWN, CRYPT } from './world.js';
 import { ROOMS } from './dungeon.js';
+import { CLASSES } from './classes.js';
 import { rand } from './util.js';
 
 const $ = (id) => document.getElementById(id);
@@ -84,6 +85,21 @@ export class UI {
     this.bindSettings();
     $('respawn').addEventListener('click', () => this.game.player.respawn());
     this.buildActionBar();
+  }
+
+  // The hero in play: portrait and name on the HUD, refreshed bar, bag and quests.
+  setCharacter(char) {
+    this.el.portrait.src = Assets.icons[`portrait_${char.cls}`] || Assets.icons.portrait;
+    const name = String(char.name).replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
+    $('pname').innerHTML = `${name} <small>${CLASSES[char.cls].name}</small>`;
+    this.buildActionBar();
+    this.refreshInventory();
+    this.refreshTracker();
+  }
+
+  // Lost (or got back) the game server mid-game.
+  connection(online) {
+    $('net-banner').classList.toggle('hidden', online);
   }
 
   setTouchMode(on) {

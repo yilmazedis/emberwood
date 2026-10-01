@@ -1,0 +1,4 @@
+{
+  "type": "module",
+  "description": "The game's modules are ES modules; this lets the game server (server/) import the shared ones."
+}
