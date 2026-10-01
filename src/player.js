@@ -6,7 +6,7 @@ import { makeItem, BASES } from './items.js';
 import { Assets } from './assets.js';
 import { dampAngle, yawTo, rand, has } from './util.js';
 import { CLASSES } from './classes.js';
-import { SKILLS, CLASS_SKILLS, BUFFS, auraTick } from './skills.js';
+import { SKILLS, CLASS_SKILLS, BUFFS, auraTick, aimedAt } from './skills.js';
 import { hdr } from './fx.js';
 
 export const xpForLevel = (lvl) => Math.round(60 * Math.pow(lvl, 1.55));
@@ -83,9 +83,8 @@ export function boltAction(a, point, real) {
       const from = new THREE.Vector3();
       a.h.bones.handslotr.getWorldPosition(from);
       from.y = Math.max(from.y, a.pos.y + 1.2);
-      const to = new THREE.Vector3(point.x, from.y, point.z);
-      if (to.distanceTo(from) < 1) to.set(from.x + Math.sin(a.yaw), from.y, from.z + Math.cos(a.yaw));
-      g.projectiles.spawn({ from, to, owner: real ? 'player' : 'remote', mult: 1, speed: 22, color: 0x9a7dff, trail: 0x5a3aff, radius: 0.35, range: 13, size: 0.2, small: true });
+      const to = aimedAt(a, from, point);
+      g.projectiles.spawn({ from, to, owner: real ? 'player' : 'remote', mult: 1, speed: 22, color: 0x9a7dff, trail: 0x5a3aff, radius: 0.35, range: 13, size: 0.2, small: true, glide: 0.9 });
     },
     end: () => a.h.anim.stopOne(),
   };

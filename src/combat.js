@@ -1,7 +1,9 @@
 // Projectiles (fireballs, bolts, knives, meteors, cultist orbs) and ground loot. owner: 'player' (ours:
 // they deal damage), 'remote' (another hero's: for show, their game deals the damage) or 'enemy' (they
 // hurt our hero). Options: mult (× weapon damage; spell: false = not scaled by Spell Power), aoe
-// (blast radius), small (a light touch: no smoke or ring), noLight, meteor (a bigger crash).
+// (blast radius), small (a light touch: no smoke or ring), noLight, meteor (a bigger crash), glide
+// (fly level at this height over the ground, following it: heroes' shots, so they never sail over a
+// slime or dive into a bump; they end on a monster, a wall or at their range).
 import * as THREE from 'three';
 import { cloneItem } from './assets.js';
 import { heightAt, resolveCollision } from './world.js';
@@ -29,6 +31,7 @@ export class Projectiles {
 
   spawn(o) {
     const dir = o.dir ? o.dir.clone() : o.to.clone().sub(o.from);
+    if (o.glide) dir.y = 0;
     dir.normalize();
     const mesh = new THREE.Mesh(this.geo, new THREE.MeshBasicMaterial({ color: hdr(o.color, 3.2) }));
     mesh.scale.setScalar(o.size || 0.3);
@@ -44,6 +47,7 @@ export class Projectiles {
       const p = this.list[i];
       const step = p.speed * dt;
       p.pos.addScaledVector(p.dir, step);
+      if (p.glide) p.pos.y += (heightAt(p.pos.x, p.pos.z) + p.glide - p.pos.y) * Math.min(1, dt * 12); // down from the hand, then level
       p.traveled += step;
       p.t += dt;
       p.mesh.position.copy(p.pos);
@@ -56,7 +60,8 @@ export class Projectiles {
         for (const e of g.enemies.list) {
           if (!e.alive || e.state === 'spawn') continue;
           const dx = e.pos.x - p.pos.x, dz = e.pos.z - p.pos.z;
-          if (Math.hypot(dx, dz) < e.radius + p.radius && p.pos.y > e.pos.y - 0.2 && p.pos.y < e.pos.y + e.height + 0.3) { hit = e; break; }
+          // (the projectile's own size counts: a bolt at chest height still hits a knee-high slime)
+          if (Math.hypot(dx, dz) < e.radius + p.radius && p.pos.y + p.radius > e.pos.y - 0.2 && p.pos.y - p.radius < e.pos.y + e.height + 0.3) { hit = e; break; }
         }
       } else {
         // our hero (it hurts), or another hero in the way (it bursts on them; their game counts it)
@@ -64,7 +69,7 @@ export class Projectiles {
           if (pl.alive && Math.hypot(pl.pos.x - p.pos.x, pl.pos.z - p.pos.z) < pl.radius + p.radius && p.pos.y < pl.pos.y + 2.4) { hit = pl; break; }
         }
       }
-      if (!hit && p.pos.y < heightAt(p.pos.x, p.pos.z) + 0.05) hit = 'ground';
+      if (!hit && !p.glide && p.pos.y < heightAt(p.pos.x, p.pos.z) + 0.05) hit = 'ground';
       if (!hit && inDungeon(p.pos.x, p.pos.z) && wallAt(p.pos.x, p.pos.z)) hit = 'ground'; // crypt walls stop bolts
       if (hit || p.traveled > p.range) {
         this.explode(p, hit);

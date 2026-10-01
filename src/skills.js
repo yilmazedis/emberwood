@@ -51,6 +51,14 @@ function puff(g, p, hex) {
   g.fx.soft.emit({ pos: { x: p.x, y: p.y + 1, z: p.z }, count: 12, spread: 0.5, velSpread: 1, vel: { x: 0, y: 0.8, z: 0 }, color: new THREE.Color(0x2e2638), alpha: 0.45, size: 1, sizeEnd: 2.2, life: 1, drag: 2 });
 }
 
+// Which way a shot from `from` should fly: toward what was aimed at, or straight ahead if nothing was
+// (or it's right under our nose). Heroes' shots then glide over the ground (see Projectiles).
+export function aimedAt(a, from, point) {
+  const ahead10 = new THREE.Vector3(from.x + Math.sin(a.yaw) * 10, from.y, from.z + Math.cos(a.yaw) * 10);
+  if (!point || Math.hypot(point.x - from.x, point.z - from.z) < 1.2) return ahead10;
+  return new THREE.Vector3(point.x, from.y, point.z);
+}
+
 // The weapon hand, for things thrown or cast from it (at least chest high).
 function handPos(a) {
   const p = new THREE.Vector3();
@@ -296,10 +304,8 @@ export const SKILLS = {
         tick: (dt, s) => {
           if (s.fired || s.t < 0.24) return;
           s.fired = true;
-          const from = handPos(a);
-          const to = new THREE.Vector3(target.x, from.y, target.z);
-          if (to.distanceTo(from) < 1) to.set(from.x + Math.sin(a.yaw), from.y, from.z + Math.cos(a.yaw));
-          g.projectiles.spawn({ from, to, owner: real ? 'player' : 'remote', mult: 2.2, speed: 19, color: 0xff7a2a, trail: 0xff2a00, radius: 0.45, range: 20, aoe: 2.8, size: 0.32 });
+          const from = handPos(a), to = aimedAt(a, from, at && target);
+          g.projectiles.spawn({ from, to, owner: real ? 'player' : 'remote', mult: 2.2, speed: 19, color: 0xff7a2a, trail: 0xff2a00, radius: 0.45, range: 20, aoe: 2.8, size: 0.32, glide: 0.9 });
           play(a, 'fireball');
         },
         end: () => a.h.anim.stopOne(),
@@ -419,7 +425,7 @@ export const SKILLS = {
           const from = handPos(a);
           for (let i = 0; i < 7; i++) {
             const dir = new THREE.Vector3(Math.sin(a.yaw), 0, Math.cos(a.yaw)).applyAxisAngle(UP, (i - 3) * 0.2);
-            g.projectiles.spawn({ from: from.clone(), dir, owner: real ? 'player' : 'remote', mult: 0.8, spell: false, speed: 26, color: 0xdfe8f2, trail: 0x8899aa, radius: 0.35, range: 11, size: 0.12, small: true, noLight: true });
+            g.projectiles.spawn({ from: from.clone(), dir, owner: real ? 'player' : 'remote', mult: 0.8, spell: false, speed: 26, color: 0xdfe8f2, trail: 0x8899aa, radius: 0.35, range: 11, size: 0.12, small: true, noLight: true, glide: 0.85 });
           }
           play(a, 'knives');
         },
