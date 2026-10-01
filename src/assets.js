@@ -21,26 +21,64 @@ export const ITEM_MODELS = [
   'Skeleton_Blade', 'Skeleton_Axe', 'Skeleton_Staff', 'Skeleton_Shield_Small_A', 'Skeleton_Shield_Large_A',
 ];
 
+// Downloads are patient with slow connections but not with stuck ones: a download that gets no data
+// for STALL ms is dropped and asked for again, up to TRIES times. (The host can be slow to answer, and
+// phones drop requests; one stuck request used to leave the game on "Loading models" for good.)
+const STALL = 20000, TRIES = 3;
+
+async function download(url, onProgress) {
+  for (let attempt = 1; ; attempt++) {
+    const ctrl = new AbortController();
+    let timer = setTimeout(() => ctrl.abort(), STALL);
+    try {
+      // a retry gets its own address, so it doesn't queue behind the stuck one
+      const res = await fetch(attempt === 1 ? url : `${url}?try=${attempt}`, { signal: ctrl.signal });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const total = Number(res.headers.get('content-length')) || 0;
+      const reader = res.body.getReader(), parts = [];
+      let got = 0;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        clearTimeout(timer);
+        timer = setTimeout(() => ctrl.abort(), STALL);
+        parts.push(value);
+        got += value.length;
+        if (total) onProgress(Math.min(1, got / total));
+      }
+      clearTimeout(timer);
+      const buf = new Uint8Array(got);
+      let at = 0;
+      for (const part of parts) { buf.set(part, at); at += part.length; }
+      return buf.buffer;
+    } catch (err) {
+      clearTimeout(timer);
+      if (attempt >= TRIES) throw new Error(`Could not download ${url} (${err.name === 'AbortError' ? 'it stalled' : err.message})`);
+    }
+  }
+}
+
+// The characters, their animations, and every item model (packed into one file: tools/pack-items.mjs).
 export async function loadAssets(onProgress) {
-  const manager = new THREE.LoadingManager();
-  manager.onProgress = (_url, loaded, total) => onProgress(loaded / total);
-  const loader = new GLTFLoader(manager);
-  const jobs = [];
-  for (const c of CHARACTERS) {
-    jobs.push(loader.loadAsync(`assets/characters/${c}.glb`).then((g) => { Assets.chars[c] = g; }));
-  }
-  for (const a of ANIMATIONS) {
-    jobs.push(loader.loadAsync(`assets/animations/${a}.glb`).then((g) => {
-      for (const clip of g.animations) Assets.clips[clip.name] = clip;
-    }));
-  }
-  for (const i of ITEM_MODELS) {
-    jobs.push(loader.loadAsync(`assets/items/${i}.gltf`).then((g) => {
-      g.scene.traverse((o) => { if (o.isMesh) o.castShadow = true; });
-      Assets.items[i] = g.scene;
-    }));
-  }
-  await Promise.all(jobs);
+  const files = [
+    ...CHARACTERS.map((c) => [`assets/characters/${c}.glb`, (g) => { Assets.chars[c] = g; }]),
+    ...ANIMATIONS.map((a) => [`assets/animations/${a}.glb`, (g) => { for (const clip of g.animations) Assets.clips[clip.name] = clip; }]),
+    ['assets/items/items.glb', (g) => {
+      for (const root of [...g.scene.children]) {
+        root.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+        Assets.items[root.userData.model] = root;
+      }
+    }],
+  ];
+  const done = files.map(() => 0);
+  const report = () => onProgress(done.reduce((a, b) => a + b, 0) / files.length);
+  const loader = new GLTFLoader();
+  await Promise.all(files.map(async ([url, use], i) => {
+    const buf = await download(url, (f) => { done[i] = f * 0.9; report(); });
+    use(await loader.parseAsync(buf, ''));
+    done[i] = 1;
+    report();
+  }));
 }
 
 export function cloneCharacter(name) {

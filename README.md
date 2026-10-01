@@ -60,6 +60,10 @@ Live at https://emberwood.kerimcaglar.com, on DirectAdmin + LiteSpeed shared hos
 - **Game server:** a DirectAdmin "Setup Node.js App" on `gameserver.kerimcaglar.com`: application root
   `domains/emberwood.kerimcaglar.com/emberwood/server`, startup file `index.js`, the newest Node.js. No `npm install`.
   After a `git pull` that changes `server/` (or `src/classes.js`), press Restart for the app.
+- **Slow host, slow phones:** the host takes a second or two to answer each request, so the game asks for few:
+  every code file at once (`modulepreload` links in `index.html`: list new modules there too), the item models packed
+  into one file, the crypt in another. A model download that gets no data for 20 s is dropped and asked for again
+  (3 tries), and the game waits up to 20 s for the game server, then tries once more by itself.
 - **Hosting test:** `tools/hosting-test` measures whether a host can run the server (see its README). Hyperion passed
   with caveats: it is shared and overloaded, so expect the occasional stutter; a small VPS would remove it.
 
@@ -132,7 +136,7 @@ Variants: `?size=192`, `?size=512&maskable` (Android adaptive icon), `?size=180&
 | Skeleton minions, warriors, rogues, mages | KayKit Skeletons character models (`assets/characters/Skeleton_*`); glowing eyes come from the pack's `Glow` material |
 | Bone weapons and shields (skeleton loot) | KayKit Skeletons item models (`assets/items/Skeleton_*`) |
 | Walk / run / idle / hit / death / throw animations | KayKit shared rig animations (`assets/animations`) |
-| Swords, axes, shields, staff, ale mug | KayKit item models (`assets/items`), attached to the `handslot` bones |
+| Swords, axes, shields, staff, ale mug | KayKit item models (`assets/items`, packed into `items.glb`), attached to the `handslot` bones |
 | Helmets and cape | Parts of the Knight model, shown or hidden when equipped |
 | Gloves and boots on the knight | The Knight's hands/feet are recolored by a shader that follows the skinning weights of the hand/forearm and foot/toe/shin bones (`character.js`) |
 | Gloves, boots and rings (icons, loot on the ground) | Small procedural models (`gear.js`); the packs have none |
@@ -178,7 +182,7 @@ Variants: `?size=192`, `?size=512&maskable` (Android adaptive icon), `?size=180&
 KayKit's other free packs (Forest, Halloween…) use the same rig and style. The Skeletons pack was added this way:
 
 - **New monster:** copy the `.glb` into `assets/characters/`, add its name to `CHARACTERS` in `assets.js`, and add an entry to `ENEMY_TYPES` and `SPAWNS` in `monsters.js` (then restart the game server). The skeleton entries show the options: `offhand` (shield), `style: 'chop'`, `eyes` (glow color), `bolt` (caster projectile color), `loot: 'bone'` (loot table).
-- **New weapon or shield:** copy the `.gltf`, `.bin` and texture into `assets/items/`, add the model name to `ITEM_MODELS`, and add a base to `BASES` in `items.js`.
+- **New weapon or shield:** copy the `.gltf`, `.bin` and texture into `assets/items/`, add the model name to `ITEM_MODELS` in `assets.js`, add a base to `BASES` in `items.js`, then repack: `node tools/pack-items.mjs` (it packs every `ITEM_MODELS` model into `assets/items/items.glb`, which the game loads instead of the ~50 separate files).
 - **More crypt pieces:** name any Dungeon pack model in `crypt-map.js` (e.g. `put('barrel_large', x, z)`), then repack:
   `node tools/pack-dungeon.mjs "<KayKit_Dungeon_Pack_1.1_FREE>/Assets/gltf"`. It writes every model `dungeon.js`
   names into `assets/dungeon/crypt.glb`, one file instead of ~80 (the host is slow to answer each request).

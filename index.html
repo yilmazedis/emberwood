@@ -25,6 +25,43 @@
   }
 }
 </script>
+<!-- every module of the game, asked for at once (otherwise the browser finds them level by level, and the
+     host is slow to answer each request); a module missing here still loads, just a little later -->
+<link rel="modulepreload" href="src/main.js">
+<link rel="modulepreload" href="src/util.js">
+<link rel="modulepreload" href="src/items.js">
+<link rel="modulepreload" href="src/gear.js">
+<link rel="modulepreload" href="src/classes.js">
+<link rel="modulepreload" href="src/assets.js">
+<link rel="modulepreload" href="src/noise.js">
+<link rel="modulepreload" href="src/terrain.js">
+<link rel="modulepreload" href="src/world.js">
+<link rel="modulepreload" href="src/fx.js">
+<link rel="modulepreload" href="src/animator.js">
+<link rel="modulepreload" href="src/character.js">
+<link rel="modulepreload" href="src/player.js">
+<link rel="modulepreload" href="src/crypt-map.js">
+<link rel="modulepreload" href="src/monsters.js">
+<link rel="modulepreload" href="src/sim/world.js">
+<link rel="modulepreload" href="src/enemies.js">
+<link rel="modulepreload" href="src/dungeon.js">
+<link rel="modulepreload" href="src/combat.js">
+<link rel="modulepreload" href="src/town.js">
+<link rel="modulepreload" href="src/ui.js">
+<link rel="modulepreload" href="src/doll.js">
+<link rel="modulepreload" href="src/music.js">
+<link rel="modulepreload" href="src/ambience.js">
+<link rel="modulepreload" href="src/audio.js">
+<link rel="modulepreload" href="src/input.js">
+<link rel="modulepreload" href="src/quests.js">
+<link rel="modulepreload" href="src/link.js">
+<link rel="modulepreload" href="src/others.js">
+<link rel="modulepreload" href="src/chat.js">
+<link rel="modulepreload" href="src/settings.js">
+<link rel="modulepreload" href="src/game.js">
+<link rel="modulepreload" href="src/net.js">
+<link rel="modulepreload" href="src/local.js">
+<link rel="modulepreload" href="src/account.js">
 </head>
 <body>
 <div id="game"></div>

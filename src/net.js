@@ -46,7 +46,8 @@ export class Net {
       let settled = false;
       const ws = new WebSocket(this.url);
       this.ws = ws;
-      const timer = setTimeout(() => { if (!settled) { settled = true; ws.close(); reject(new Error('The game server did not answer.')); } }, 10000);
+      // generous: on a slow phone connection, and with the host sometimes slow to answer, 10 s wasn't enough
+      const timer = setTimeout(() => { if (!settled) { settled = true; ws.close(); reject(new Error('The game server did not answer.')); } }, 20000);
       ws.onopen = async () => {
         this.online = true;
         try {
