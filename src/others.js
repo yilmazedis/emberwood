@@ -4,10 +4,10 @@
 import * as THREE from 'three';
 import { Humanoid } from './character.js';
 import { heightAt } from './world.js';
-import { applyEquipmentVisuals, equipmentFromLook } from './player.js';
+import { applyEquipmentVisuals, equipmentFromLook, boltAction } from './player.js';
+import { SKILLS, auraTick } from './skills.js';
 import { CLASSES } from './classes.js';
-import { hdr } from './fx.js';
-import { lerp, angleDiff, clamp } from './util.js';
+import { lerp, angleDiff, clamp, yawTo } from './util.js';
 
 const JUMP = 6; // m between two updates: a teleport (respawn), not a run
 const lerpAngle = (a, b, t) => a + angleDiff(a, b) * t;
@@ -29,6 +29,7 @@ export class RemotePlayer {
     this.hp = 1;
     this.away = false;
     this.action = null;
+    this.auras = {}; // buffs' looks (skills.js)
     this.sample(ts, r.u);
     const s = this.samples[0] || { x: 0, z: 0, yaw: 0, a: 1 };
     this.pos.set(s.x, heightAt(s.x, s.z), s.z);
@@ -65,6 +66,18 @@ export class RemotePlayer {
   vol() {
     const p = this.game.player.pos;
     return clamp(1 - Math.hypot(p.x - this.pos.x, p.z - this.pos.z) / 28, 0, 1);
+  }
+
+  // (until the next update says otherwise: they turned to face it in their game too)
+  faceToward(p) {
+    const dx = p.x - this.pos.x, dz = p.z - this.pos.z;
+    if (Math.hypot(dx, dz) < 0.05) return;
+    this.yaw = yawTo(dx, dz);
+    this.group.rotation.y = this.yaw;
+  }
+
+  aura(id, dur) {
+    this.auras[id] = dur;
   }
 
   dispose() {
@@ -120,6 +133,7 @@ export class RemotePlayer {
         act.end?.();
       }
     }
+    auraTick(this, dt);
     this.h.update(dt);
   }
 
@@ -165,7 +179,17 @@ export class RemotePlayer {
         };
         break;
       }
-      case 'sk': this.skill(a); break; // a skill: { id, x, z: where it was aimed }
+      case 'sk': this.skill(a); break; // a skill: { id, x, z: where it was aimed, or where they went }
+      case 'bo': { // the mage's bolt: { x, z }
+        if (!this.alive) return;
+        const x = Number(a.x), z = Number(a.z);
+        if (!Number.isFinite(x) || !Number.isFinite(z)) return;
+        const at = new THREE.Vector3(x, heightAt(x, z), z);
+        this.endAction();
+        this.faceToward(at);
+        this.action = { t: 0, dur: 0.4, ...boltAction(this, at, false) };
+        break;
+      }
       case 'dr': g.fx.heal(this.pos); if (vol) g.sfx.play('drink', 0.6 * vol); break;
       case 'hu': this.h.hitFlash(0xff2a1a, 0.9); break;
       case 'de': if (this.alive) this.fall(); break;
@@ -178,84 +202,13 @@ export class RemotePlayer {
     }
   }
 
+  // A skill they used: the same show as ours (skills.js), without the damage (their game deals it).
   skill(a) {
-    if (!this.alive) return;
-    const g = this.game, vol = this.vol();
+    if (!this.alive || typeof a.id !== 'string' || !Object.hasOwn(SKILLS, a.id)) return;
     const tx = Number(a.x), tz = Number(a.z);
-    const target = Number.isFinite(tx) && Number.isFinite(tz) ? new THREE.Vector3(tx, heightAt(tx, tz), tz) : null;
+    const at = Number.isFinite(tx) && Number.isFinite(tz) ? new THREE.Vector3(tx, heightAt(tx, tz), tz) : null;
     this.endAction();
-    switch (a.id) {
-      case 'cleave': {
-        const dur = 0.78;
-        this.h.startSwing(dur, 'cleave');
-        if (vol) g.sfx.play('swing', vol);
-        this.action = {
-          t: 0, dur, hit: false,
-          tick: (dt, s) => {
-            if (s.hit || s.t < dur * 0.5) return;
-            s.hit = true;
-            g.fx.arc(this.pos, this.yaw, { span: 3.4, rIn: 0.7, rOut: 3.6, color: 0xffc070, dur: 0.3 });
-            g.fx.dust(new THREE.Vector3(this.pos.x + Math.sin(this.yaw) * 2, this.pos.y + 0.1, this.pos.z + Math.cos(this.yaw) * 2), 10);
-            if (vol) g.sfx.play('cleave', vol);
-          },
-        };
-        break;
-      }
-      case 'fireball': {
-        this.h.anim.play('Throw', { timeScale: 2.1, startAt: 0.2 });
-        if (vol) g.sfx.play('cast', vol);
-        this.action = {
-          t: 0, dur: 0.5, fired: false,
-          tick: (dt, s) => {
-            if (s.fired || s.t < 0.24) return;
-            s.fired = true;
-            const from = new THREE.Vector3();
-            this.h.bones.handslotr.getWorldPosition(from);
-            from.y = Math.max(from.y, this.pos.y + 1.3);
-            const to = target ? new THREE.Vector3(target.x, from.y, target.z) : new THREE.Vector3(from.x + Math.sin(this.yaw) * 10, from.y, from.z + Math.cos(this.yaw) * 10);
-            if (to.distanceTo(from) < 1) to.set(from.x + Math.sin(this.yaw), from.y, from.z + Math.cos(this.yaw));
-            g.projectiles.spawn({ from, to, owner: 'remote', speed: 19, color: 0xff7a2a, trail: 0xff2a00, radius: 0.45, range: 20, aoe: 2.8, size: 0.32 });
-            if (vol) g.sfx.play('fireball', vol);
-          },
-          end: () => this.h.anim.stopOne(),
-        };
-        break;
-      }
-      case 'whirlwind':
-        this.h.armsOut = 1;
-        if (vol) g.sfx.play('whirl', vol);
-        this.action = {
-          t: 0, dur: 1.4, next: 0.05,
-          tick: (dt, s) => {
-            this.h.model.rotation.y += dt * 17;
-            if (s.t >= s.next) {
-              s.next += 0.27;
-              g.fx.ring(this.pos, 0.8, 3.1, 0xffd9a0, 0.28, 0.9, 0.7);
-            }
-            if (Math.random() < 0.5) {
-              const ang = this.h.model.rotation.y + this.yaw;
-              g.fx.add.emit({ pos: { x: this.pos.x + Math.sin(ang) * 1.9, y: this.pos.y + 1.0, z: this.pos.z + Math.cos(ang) * 1.9 }, count: 2, spread: 0.1, velSpread: 0.6, color: hdr(0xfff0c0, 2), colorEnd: hdr(0xffa040, 0.3), size: 0.18, sizeEnd: 0.02, life: 0.3 });
-            }
-          },
-          end: () => { this.h.armsOut = 0; this.h.model.rotation.y = 0; },
-        };
-        break;
-      case 'heal':
-        this.h.anim.play('Use_Item', { timeScale: 2 });
-        this.action = {
-          t: 0, dur: 0.6, done: false,
-          tick: (dt, s) => {
-            if (s.done || s.t < 0.25) return;
-            s.done = true;
-            g.fx.heal(this.pos);
-            g.fx.ring(this.pos, 0.3, 2.4, 0x6dff8a, 0.6);
-            if (vol) g.sfx.play('heal', 0.7 * vol);
-          },
-          end: () => this.h.anim.stopOne(),
-        };
-        break;
-      default: break;
-    }
+    this.action = SKILLS[a.id].cast(this, at, false);
   }
 }
 

@@ -29,6 +29,7 @@ function keyed(keys, t) {
 //   twist: chest yaw (negative = turn to the right)   side: right arm lift outward
 //   fwd:   right arm raise forward (negative = up)     lean: spine pitch
 //   wrist: blade pitch                                 roll: blade roll (lays the blade flat)
+//   lfwd:  left (shield) arm raise forward
 const SWINGS = {
   slash: { // forehand: wind up on the right, sweep across to the left
     twist: [[0, 0], [0.3, -0.85], [0.5, 0.8], [1, 0]],
@@ -51,6 +52,19 @@ const SWINGS = {
     fwd: [[0, 0], [0.38, -2.9], [0.56, -1.1], [1, 0]],
     lean: [[0, 0], [0.38, -0.22], [0.56, 0.35], [1, 0]],
     wrist: [[0, 0], [0.38, 0.2], [0.56, 1.2], [1, 0]],
+  },
+  bash: { // shield punch: the shoulder turns away, then the left arm drives forward with a lean
+    twist: [[0, 0], [0.3, 0.55], [0.5, -0.4], [1, 0]],
+    lean: [[0, 0], [0.3, -0.1], [0.5, 0.3], [1, 0]],
+    lfwd: [[0, 0], [0.3, 0.35], [0.5, -1.45], [1, 0]],
+    fwd: [[0, 0], [0.3, 0.2], [0.5, 0.35], [1, 0]],
+  },
+  stab: { // a quick dagger thrust
+    twist: [[0, 0], [0.3, 0.35], [0.55, -0.3], [1, 0]],
+    side: [[0, 0], [0.3, 0.25], [0.55, 0.05], [1, 0]],
+    fwd: [[0, 0], [0.3, -0.5], [0.55, -1.55], [1, 0]],
+    lean: [[0, 0], [0.3, -0.05], [0.55, 0.22], [1, 0]],
+    wrist: [[0, 0], [0.3, 0.5], [0.55, 1.35], [1, 0]],
   },
   cleave: { // big forehand with a longer wind-up
     twist: [[0, 0], [0.36, -1.15], [0.56, 1.1], [1, 0]],
@@ -117,6 +131,7 @@ export class Humanoid {
     this.flash = 0;
     this.flashColor = new THREE.Color(1, 1, 1);
     this.highlight = 0;
+    this.frost = 0; // icy tint while slowed (0..1)
     this.armsOut = 0; // whirlwind pose weight
     this.sideSign = 1; // flipped at runtime if the rig's right arm is mirrored
   }
@@ -219,8 +234,8 @@ export class Humanoid {
     if (this.swing) {
       const s = SWINGS[this.swing.style] || SWINGS.slash;
       const p = Math.min(1, this.swing.t / this.swing.dur);
-      const twist = keyed(s.twist, p), fwd = keyed(s.fwd, p), side = keyed(s.side, p), lean = keyed(s.lean, p);
-      const wrist = keyed(s.wrist, p), roll = keyed(s.roll || NO_KEYS, p);
+      const twist = keyed(s.twist, p), fwd = keyed(s.fwd || NO_KEYS, p), side = keyed(s.side || NO_KEYS, p), lean = keyed(s.lean, p);
+      const wrist = keyed(s.wrist || NO_KEYS, p), roll = keyed(s.roll || NO_KEYS, p), lfwd = keyed(s.lfwd || NO_KEYS, p);
       this.model.updateMatrixWorld(true);
       this.rotateBone(b.spine, AX, lean);
       this.rotateBone(b.spine, AY, twist * 0.45);
@@ -230,6 +245,7 @@ export class Humanoid {
       this.rotateBone(b.upperarmr, AX, fwd);
       this.rotateBone(b.wristr, AX, wrist);
       this.rotateBone(b.wristr, AZ, roll);
+      this.rotateBone(b.upperarml, AX, lfwd);
     }
     if (this.armsOut > 0.01) {
       this.model.updateMatrixWorld(true);
@@ -248,16 +264,17 @@ export class Humanoid {
     } else if (this.armsOut > 0.01) {
       this.applyProcedural();
     }
-    if (this.flash > 0 || this.highlight > 0 || this._lit) {
+    if (this.flash > 0 || this.highlight > 0 || this.frost > 0 || this._lit) {
       this.flash = Math.max(0, this.flash - dt * 6);
       const f = easeOutCubic(this.flash);
       _flash.copy(this.flashColor).multiplyScalar(f * 0.9);
       this.materials.forEach((m, i) => {
         m.emissive.copy(this.baseEmissive[i]).add(_flash);
         m.emissive.r += this.highlight * 0.18;
-        m.emissive.g += this.highlight * 0.05;
+        m.emissive.g += this.highlight * 0.05 + this.frost * 0.16;
+        m.emissive.b += this.frost * 0.42;
       });
-      this._lit = this.flash > 0 || this.highlight > 0;
+      this._lit = this.flash > 0 || this.highlight > 0 || this.frost > 0;
     }
   }
 }

@@ -6,14 +6,8 @@ import { makeItem, BASES } from './items.js';
 import { Assets } from './assets.js';
 import { dampAngle, yawTo, rand } from './util.js';
 import { CLASSES } from './classes.js';
+import { SKILLS, CLASS_SKILLS, BUFFS, auraTick } from './skills.js';
 import { hdr } from './fx.js';
-
-export const SKILLS = [
-  { id: 'cleave', key: '1', name: 'Cleave', level: 1, mp: 8, cd: 2.5, desc: 'A wide, heavy arc that hits everything in front of you for 170% weapon damage and knocks enemies back.' },
-  { id: 'fireball', key: '2', name: 'Fireball', level: 2, mp: 14, cd: 1.1, desc: 'Hurl a fireball that explodes for 220% weapon damage in an area. Scales with Spell Power.' },
-  { id: 'whirlwind', key: '3', name: 'Whirlwind', level: 3, mp: 22, cd: 7, desc: 'Spin for 1.4 s, striking all nearby enemies 5 times for 65% damage. You can move while spinning.' },
-  { id: 'heal', key: '4', name: 'Second Wind', level: 4, mp: 25, cd: 14, desc: 'Restore 35% of your maximum Life.' },
-];
 
 export const xpForLevel = (lvl) => Math.round(60 * Math.pow(lvl, 1.55));
 const _axis = new THREE.Vector2();
@@ -76,6 +70,27 @@ export function equipmentFromLook(k) {
   return eq;
 }
 
+// The mage's arcane bolt as an action, for our hero (real: it deals damage) or for show.
+export function boltAction(a, point, real) {
+  const g = a.game;
+  a.h.anim.play('Throw', { timeScale: 2.6, startAt: 0.25 });
+  if (a.vol() > 0.01) g.sfx.play('bolt', 0.8 * a.vol());
+  return {
+    fired: false,
+    tick: (dt, s) => {
+      if (s.fired || s.t < 0.15) return;
+      s.fired = true;
+      const from = new THREE.Vector3();
+      a.h.bones.handslotr.getWorldPosition(from);
+      from.y = Math.max(from.y, a.pos.y + 1.2);
+      const to = new THREE.Vector3(point.x, from.y, point.z);
+      if (to.distanceTo(from) < 1) to.set(from.x + Math.sin(a.yaw), from.y, from.z + Math.cos(a.yaw));
+      g.projectiles.spawn({ from, to, owner: real ? 'player' : 'remote', mult: 1, speed: 22, color: 0x9a7dff, trail: 0x5a3aff, radius: 0.35, range: 13, size: 0.2, small: true });
+    },
+    end: () => a.h.anim.stopOne(),
+  };
+}
+
 export class Player {
   constructor(game) {
     this.game = game;
@@ -89,6 +104,8 @@ export class Player {
   // Wear the class's model (swapping it in the scene if one is already there).
   setClass(cls) {
     this.cls = cls;
+    // its four skills, in key order: { id, key, name, level, mp, cd, … } (skills.js)
+    this.skills = CLASS_SKILLS[cls].map((id, i) => ({ id, key: String(i + 1), ...SKILLS[id] }));
     const model = CLASSES[cls].model;
     if (this.h && this.model === model) return;
     const old = this.h;
@@ -115,7 +132,10 @@ export class Player {
     this.stash = new Array(STASH_SIZE).fill(null);
     this.shop = { stock: [], restockAt: 0 }; // the merchant's stock (see town.js)
     this.quests = freshQuests();
-    this.cd = { attack: 0, cleave: 0, fireball: 0, whirlwind: 0, heal: 0, potion: 0 };
+    this.cd = { attack: 0, potion: 0 };
+    for (const sk of this.skills) this.cd[sk.id] = 0;
+    this.buffs = {}; // id -> seconds left (skills.js BUFFS)
+    this.auras = {}; // their looks, the same for every hero (skills.js auraTick)
     this.action = null;
     this.queued = null;
     this.combo = 0;
@@ -161,7 +181,7 @@ export class Player {
     const s = {
       maxHp: (90 + L * 14) * c.hp, maxMp: (40 + L * 6) * c.mp, armor: L * 1.5 * c.armor, dmgMin: 2, dmgMax: 4, speed: 1.3,
       dmgPct: 0.06 * (L - 1) + (c.dmg - 1), atkSpd: c.atkSpd, moveSpd: c.moveSpd, crit: 0.05 + c.crit, spell: 1 + c.spell,
-      regen: 1 + L * 0.25, mpRegen: (3 + L * 0.3) * Math.sqrt(c.mp),
+      regen: 1 + L * 0.25, mpRegen: (3 + L * 0.3) * Math.sqrt(c.mp), evade: 0,
     };
     for (const it of Object.values(this.equipment)) {
       if (!it) continue;
@@ -176,6 +196,13 @@ export class Player {
       s.crit += st.crit || 0;
       s.spell += st.spell || 0;
       s.regen += st.regen || 0;
+    }
+    for (const id of Object.keys(this.buffs || {})) { // skills' timed boosts
+      const b = BUFFS[id];
+      if (b.armorMul) s.armor *= b.armorMul;
+      s.atkSpd += b.atkSpd || 0;
+      s.dmgPct += b.dmgPct || 0;
+      s.evade = Math.max(s.evade, b.evade || 0);
     }
     s.armor = Math.round(s.armor);
     s.maxHp = Math.round(s.maxHp);
@@ -192,10 +219,10 @@ export class Player {
     }
   }
 
-  rollDamage(mult, spell = false) {
+  rollDamage(mult, spell = false, critBonus = 0) {
     const s = this.stats;
     let amount = rand(s.dmgLo, s.dmgHi) * mult * (spell ? s.spell : 1);
-    const crit = Math.random() < s.crit;
+    const crit = Math.random() < s.crit + critBonus;
     if (crit) amount *= 2;
     return { amount: Math.max(1, Math.round(amount)), crit };
   }
@@ -293,7 +320,7 @@ export class Player {
       this.xp -= xpForLevel(this.level);
       this.level++;
       leveled = true;
-      const skill = SKILLS.find((s) => s.level === this.level);
+      const skill = this.skills.find((s) => s.level === this.level);
       this.game.ui.log(`<b>Level ${this.level}!</b>${skill ? ` New skill: <b>${skill.name}</b> [${skill.key}]` : ''}`, 'lvl');
     }
     if (leveled) {
@@ -325,6 +352,7 @@ export class Player {
 
   basicAttack() {
     const g = this.game, s = this.stats;
+    if (this.cls === 'mage') return this.arcaneBolt();
     const { point } = g.aim(3.2);
     const dur = 0.62 / s.atkSpeed;
     const twoH = !!this.equipment.weapon?.twoHanded;
@@ -351,8 +379,19 @@ export class Player {
     g.link.act({ k: 'sw', s: style, d: r2(dur) });
   }
 
+  // The mage's attack: a bolt of arcane force from the staff (weapon damage, scaled by Spell Power).
+  arcaneBolt() {
+    const g = this.game, s = this.stats;
+    const { point } = g.aim(12);
+    const dur = 0.62 / s.atkSpeed;
+    this.faceToward(point);
+    this.cd.attack = dur;
+    this.action = { t: 0, dur, canMove: false, ...boltAction(this, point, true) };
+    g.link.act({ k: 'bo', x: r2(point.x), z: r2(point.z) });
+  }
+
   useSkill(i) {
-    const g = this.game, sk = SKILLS[i];
+    const g = this.game, sk = this.skills[i];
     if (!this.alive || !sk) return;
     if (this.level < sk.level) { g.ui.centerMsg(`${sk.name} unlocks at level ${sk.level}`); return; }
     if (this.cd[sk.id] > 0) return;
@@ -360,96 +399,24 @@ export class Player {
     if (this.action) { this.queued = { t: 0.4, fn: () => this.useSkill(i) }; return; }
     this.mp -= sk.mp;
     this.cd[sk.id] = sk.cd;
-    const at = this[`skill_${sk.id}`]();
-    g.link.act(at ? { k: 'sk', id: sk.id, x: r2(at.x), z: r2(at.z) } : { k: 'sk', id: sk.id });
+    const at = sk.range ? g.aim(sk.range).point : null;
+    this.action = sk.cast(this, at, true);
+    const to = this.action.dest || at; // where the others should see it go (a leap's landing, a teleport's end)
+    g.link.act(to ? { k: 'sk', id: sk.id, x: r2(to.x), z: r2(to.z) } : { k: 'sk', id: sk.id });
   }
 
-  skill_cleave() {
-    const g = this.game;
-    const { point } = g.aim(3.6);
-    this.faceToward(point);
-    const dur = 0.78;
-    this.h.startSwing(dur, 'cleave');
-    g.sfx.play('swing', 1);
-    this.action = {
-      t: 0, dur, canMove: false, hit: false,
-      tick: (dt, a) => {
-        if (!a.hit && a.t >= dur * 0.5) {
-          a.hit = true;
-          g.meleeHit({ range: 3.4, arc: 3.4, mult: 1.7, knock: 1.5 });
-          g.fx.arc(this.pos, this.yaw, { span: 3.4, rIn: 0.7, rOut: 3.6, color: 0xffc070, dur: 0.3 });
-          g.fx.dust(new THREE.Vector3(this.pos.x + Math.sin(this.yaw) * 2, this.pos.y + 0.1, this.pos.z + Math.cos(this.yaw) * 2), 10);
-          g.shake(0.22);
-          g.sfx.play('cleave');
-        }
-      },
-    };
-    return point;
+  // Timed boosts from skills (skills.js BUFFS); their looks are an aura every hero shows.
+  addBuff(id) {
+    this.buffs[id] = BUFFS[id].dur;
+    this.recompute();
   }
 
-  skill_fireball() {
-    const g = this.game;
-    const { point } = g.aim(14);
-    this.faceToward(point);
-    this.h.anim.play('Throw', { timeScale: 2.1, startAt: 0.2 });
-    g.sfx.play('cast');
-    const target = point.clone();
-    this.action = {
-      t: 0, dur: 0.5, canMove: false, fired: false,
-      tick: (dt, a) => {
-        if (!a.fired && a.t >= 0.24) {
-          a.fired = true;
-          const from = new THREE.Vector3();
-          this.h.bones.handslotr.getWorldPosition(from);
-          from.y = Math.max(from.y, this.pos.y + 1.3);
-          const to = new THREE.Vector3(target.x, from.y, target.z);
-          if (to.distanceTo(from) < 1) to.set(from.x + Math.sin(this.yaw), from.y, from.z + Math.cos(this.yaw));
-          g.projectiles.spawn({ from, to, owner: 'player', mult: 2.2, speed: 19, color: 0xff7a2a, trail: 0xff2a00, radius: 0.45, range: 20, aoe: 2.8, size: 0.32 });
-          g.sfx.play('fireball');
-        }
-      },
-      end: () => this.h.anim.stopOne(),
-    };
-    return target;
+  aura(id, dur) {
+    this.auras[id] = dur;
   }
 
-  skill_whirlwind() {
-    const g = this.game;
-    this.h.armsOut = 1;
-    g.sfx.play('whirl');
-    this.action = {
-      t: 0, dur: 1.4, canMove: true, moveMult: 0.8, lockFacing: true, nextTick: 0.05,
-      tick: (dt, a) => {
-        this.h.model.rotation.y += dt * 17;
-        if (a.t >= a.nextTick) {
-          a.nextTick += 0.27;
-          g.meleeHit({ range: 3.0, arc: 7, mult: 0.65, knock: 0.3 });
-          g.fx.ring(this.pos, 0.8, 3.1, 0xffd9a0, 0.28, 0.9, 0.7);
-          g.sfx.play('swing', 0.45);
-        }
-        if (Math.random() < 0.6) {
-          const ang = this.h.model.rotation.y + this.yaw;
-          g.fx.add.emit({ pos: { x: this.pos.x + Math.sin(ang) * 1.9, y: this.pos.y + 1.0, z: this.pos.z + Math.cos(ang) * 1.9 }, count: 2, spread: 0.1, velSpread: 0.6, color: hdr(0xfff0c0, 2), colorEnd: hdr(0xffa040, 0.3), size: 0.18, sizeEnd: 0.02, life: 0.3 });
-        }
-      },
-      end: () => { this.h.armsOut = 0; this.h.model.rotation.y = 0; },
-    };
-  }
-
-  skill_heal() {
-    const g = this.game;
-    this.h.anim.play('Use_Item', { timeScale: 2 });
-    this.action = {
-      t: 0, dur: 0.6, canMove: false, healed: false,
-      tick: (dt, a) => {
-        if (!a.healed && a.t >= 0.25) {
-          a.healed = true;
-          this.heal(Math.round(this.stats.maxHp * 0.35));
-          g.fx.ring(this.pos, 0.3, 2.4, 0x6dff8a, 0.6);
-        }
-      },
-      end: () => this.h.anim.stopOne(),
-    };
+  vol() {
+    return 1; // (our own sounds are never far away)
   }
 
   drinkAle() {
@@ -509,6 +476,13 @@ export class Player {
   update(dt) {
     const g = this.game, s = this.stats;
     for (const k in this.cd) this.cd[k] = Math.max(0, this.cd[k] - dt);
+    let lapsed = false;
+    for (const id of Object.keys(this.buffs)) {
+      this.buffs[id] -= dt;
+      if (this.buffs[id] <= 0) { delete this.buffs[id]; lapsed = true; }
+    }
+    if (lapsed) this.recompute();
+    auraTick(this, dt);
     if (!this.alive) {
       this.h.update(dt);
       return;

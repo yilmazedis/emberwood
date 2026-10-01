@@ -403,7 +403,9 @@ export class Game {
   }
 
   // ---------------------------------------------------------------- combat
-  meleeHit({ range, arc, mult, knock }) {
+  // Our hero's blow: everything within range in an arc in front. eff: stun / slow / taunt (see link.hit);
+  // critBonus: extra chance of a critical hit.
+  meleeHit({ range, arc, mult, knock, eff = null, critBonus = 0 }) {
     const p = this.player;
     let n = 0;
     for (const e of this.enemies.list) {
@@ -411,7 +413,7 @@ export class Game {
       const dx = e.pos.x - p.pos.x, dz = e.pos.z - p.pos.z, d = Math.hypot(dx, dz);
       if (d > range + e.radius) continue;
       if (arc < 6.2 && Math.abs(angleDiff(p.yaw, yawTo(dx, dz))) > arc / 2 && d > e.radius + 0.5) continue;
-      this.damageEnemy(e, p.rollDamage(mult), p.pos, knock);
+      this.damageEnemy(e, p.rollDamage(mult, false, critBonus), p.pos, knock, eff);
       n++;
     }
     if (n) {
@@ -421,10 +423,30 @@ export class Game {
     return n;
   }
 
+  // Everything within radius of a spot (leaps, novas, charges): spell: scaled by Spell Power.
+  areaHit({ at, radius, mult, knock = 0.4, eff = null, spell = false }) {
+    const p = this.player, from = at.clone();
+    let n = 0;
+    for (const e of this.enemies.list) {
+      if (!e.alive || e.state === 'spawn' || Math.hypot(e.pos.x - at.x, e.pos.z - at.z) > radius + e.radius) continue;
+      this.damageEnemy(e, p.rollDamage(mult, spell), from, knock, eff);
+      n++;
+    }
+    return n;
+  }
+
+  // A skill that only stuns or taunts (no damage): shown now, and the world applies it.
+  affectEnemy(e, eff) {
+    if (!e.alive) return;
+    this.link.hit(e, 0, false, 0, this.player.pos, eff);
+    e.applyStatus(eff);
+  }
+
   // Our hit lands: shown now, and sent to the world, which keeps the monster's score (eff: see link.hit).
   damageEnemy(e, { amount, crit }, fromPos, knock = 0.4, eff = null) {
     if (!e.alive) return;
     this.link.hit(e, amount, crit, knock, fromPos, eff);
+    if (eff) e.applyStatus(eff);
     e.hurt(amount);
     const c = e.center;
     const top = new THREE.Vector3(e.pos.x, e.pos.y + e.height + 0.1, e.pos.z);
@@ -460,6 +482,10 @@ export class Game {
   damagePlayer(amount, src) {
     const p = this.player;
     if (!p.alive) return;
+    if (p.stats.evade && Math.random() < p.stats.evade) { // in the smoke: it misses
+      this.ui.floater(p.headPos(), 'Dodged', 'info small');
+      return;
+    }
     const dmg = Math.max(1, Math.round(amount * (1 - p.stats.dr) * rand(0.9, 1.1)));
     p.hp -= dmg;
     this.ui.floater(p.headPos(), String(dmg), 'hurt');

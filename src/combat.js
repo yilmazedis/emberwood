@@ -1,5 +1,7 @@
-// Projectiles (fireballs, cultist orbs) and ground loot. owner: 'player' (ours: they deal damage),
-// 'remote' (another hero's: for show, their game deals the damage) or 'enemy' (they hurt our hero).
+// Projectiles (fireballs, bolts, knives, meteors, cultist orbs) and ground loot. owner: 'player' (ours:
+// they deal damage), 'remote' (another hero's: for show, their game deals the damage) or 'enemy' (they
+// hurt our hero). Options: mult (× weapon damage; spell: false = not scaled by Spell Power), aoe
+// (blast radius), small (a light touch: no smoke or ring), noLight, meteor (a bigger crash).
 import * as THREE from 'three';
 import { cloneItem } from './assets.js';
 import { heightAt, resolveCollision } from './world.js';
@@ -32,7 +34,7 @@ export class Projectiles {
     mesh.scale.setScalar(o.size || 0.3);
     mesh.position.copy(o.from);
     this.game.scene.add(mesh);
-    const light = this.game.fx.claimLight(mesh, o.color, 5, 7);
+    const light = o.noLight ? null : this.game.fx.claimLight(mesh, o.color, 5, 7);
     this.list.push({ ...o, pos: o.from.clone(), dir, mesh, light, traveled: 0, t: 0 });
   }
 
@@ -76,18 +78,27 @@ export class Projectiles {
 
   explode(p, hit) {
     const g = this.game, vol = p.owner === 'player' ? 1 : g.volAt(p.pos);
-    g.fx.burst(p.pos, p.color, p.aoe ? 50 : 20, p.aoe ? 6 : 3, p.aoe ? 0.45 : 0.3, 0.6);
-    g.fx.flashLight(p.pos, p.color, p.aoe ? 14 : 6, 0.45, p.aoe ? 12 : 7);
+    if (p.small) {
+      g.fx.sparks(p.pos, p.color, 10, 3);
+    } else {
+      g.fx.burst(p.pos, p.color, p.meteor ? 90 : p.aoe ? 50 : 20, p.meteor ? 9 : p.aoe ? 6 : 3, p.aoe ? 0.45 : 0.3, p.meteor ? 0.9 : 0.6);
+      g.fx.flashLight(p.pos, p.color, p.meteor ? 24 : p.aoe ? 14 : 6, p.meteor ? 0.7 : 0.45, p.meteor ? 16 : p.aoe ? 12 : 7);
+    }
     if (p.owner !== 'enemy') {
-      g.fx.ring({ x: p.pos.x, y: heightAt(p.pos.x, p.pos.z), z: p.pos.z }, 0.3, p.aoe || 1.2, p.color, 0.45);
-      g.fx.soft.emit({ pos: p.pos, count: 12, spread: 0.5, velSpread: 1.5, vel: { x: 0, y: 1.5, z: 0 }, color: new THREE.Color(0x3a3430), alpha: 0.35, size: 0.9, sizeEnd: 1.8, life: 1.1, drag: 2 });
-      if (vol) g.sfx.play('explode', vol);
+      if (!p.small) {
+        g.fx.ring({ x: p.pos.x, y: heightAt(p.pos.x, p.pos.z), z: p.pos.z }, 0.3, p.aoe || 1.2, p.color, p.meteor ? 0.7 : 0.45);
+        g.fx.soft.emit({ pos: p.pos, count: p.meteor ? 30 : 12, spread: p.meteor ? 1.2 : 0.5, velSpread: 1.5, vel: { x: 0, y: 1.5, z: 0 }, color: new THREE.Color(0x3a3430), alpha: 0.35, size: 0.9, sizeEnd: p.meteor ? 3 : 1.8, life: p.meteor ? 1.8 : 1.1, drag: 2 });
+        if (p.meteor) g.fx.dust(new THREE.Vector3(p.pos.x, heightAt(p.pos.x, p.pos.z) + 0.2, p.pos.z), 30);
+      }
+      if (vol) g.sfx.play(p.small ? 'hit' : p.meteor ? 'slam' : 'explode', p.small ? 0.5 * vol : vol);
+      if (p.meteor && vol) g.sfx.play('explode', vol);
+      if (p.meteor) g.shake(0.55 * vol);
       if (p.owner !== 'player') return; // someone else's: their game deals the damage
-      g.shake(0.25);
+      if (!p.small) g.shake(0.25);
       const targets = p.aoe
         ? g.enemies.list.filter((e) => e.alive && e.state !== 'spawn' && Math.hypot(e.pos.x - p.pos.x, e.pos.z - p.pos.z) < p.aoe + e.radius)
         : hit && hit !== 'ground' ? [hit] : [];
-      for (const e of targets) g.damageEnemy(e, g.player.rollDamage(p.mult, true), p.pos, 0.8);
+      for (const e of targets) g.damageEnemy(e, g.player.rollDamage(p.mult, p.spell !== false), p.pos, p.small ? 0.2 : 0.8);
     } else {
       if (vol) g.sfx.play('zap', vol);
       if (hit === g.player) g.damagePlayer(p.dmg, null);

@@ -175,6 +175,15 @@ export class Sfx {
       case 'blink': this._tone(now, 0.25, 'sine', 1100, 260, 0.2 * v); this._noise(now, 0.2, 'highpass', 3000, 1200, 0.25 * v); break;
       case 'enrage': this._tone(now, 0.8, 'sawtooth', 130, 65, 0.22 * v, 0.03); this._noise(now, 0.7, 'lowpass', 800, 120, 0.5 * v); break;
       case 'levelup': [523, 659, 784, 1047].forEach((f, i) => this._tone(now + i * 0.1, 0.5, 'triangle', f, f, 0.2 * v, 0.02)); break;
+      // the classes' skills (skills.js)
+      case 'bash': this._tone(now, 0.18, 'sine', 150, 55, 0.7 * v); this._noise(now, 0.12, 'bandpass', 900, 300, 0.6 * v, 1.5); this._tone(now + 0.01, 0.1, 'square', 520, 300, 0.05 * v); break;
+      case 'charge': this._noise(now, 0.35, 'bandpass', 380, 1700, 0.45 * v, 2); this._tone(now, 0.3, 'sine', 90, 140, 0.25 * v, 0.03); break;
+      case 'warcry': [196, 247, 294].forEach((f) => this._tone(now, 0.75, 'sawtooth', f, f * 0.96, 0.06 * v, 0.06)); this._noise(now, 0.55, 'lowpass', 900, 250, 0.3 * v); break;
+      case 'leap': this._noise(now, 0.55, 'bandpass', 300, 1300, 0.35 * v, 2); break;
+      case 'frost': this._noise(now, 0.6, 'highpass', 6000, 2500, 0.28 * v); [1568, 2093, 2637].forEach((f, i) => this._tone(now + i * 0.03, 0.5, 'sine', f, f, 0.05 * v, 0.005)); this._tone(now, 0.3, 'sine', 130, 60, 0.4 * v); break;
+      case 'knives': for (let i = 0; i < 4; i++) this._noise(now + i * 0.035, 0.09, 'bandpass', 3000, 5200, 0.25 * v, 3); break;
+      case 'smoke': this._tone(now, 0.12, 'sine', 320, 80, 0.5 * v); this._noise(now, 1.2, 'lowpass', 3200, 400, 0.35 * v); break;
+      case 'bolt': this._tone(now, 0.18, 'triangle', 820, 1400, 0.1 * v); this._noise(now, 0.12, 'highpass', 4000, 2000, 0.12 * v); break;
       default: break;
     }
   }

@@ -68,6 +68,8 @@ export class Enemy {
     this.predictUntil = 0; // our own hits show before the world confirms them
     this.predicted = 0; // when our hit looked deadly (the world confirms the kill, or it gets up again)
     this.enraged = false;
+    this.stunT = 0; // what skills did to it, for the looks (the world applies the effects)
+    this.slowT = 0;
 
     const rising = this.state === 'spawn' && (r.st || 0) < 0.4;
     if (d.kind === 'slime') {
@@ -154,6 +156,20 @@ export class Enemy {
     if (this.def.boss) return;
     if (this.attack && this.attack.t < this.attack.hitAt) this.cancelAttack(); // a hit interrupts the wind-up
     if (this.h && this.h.anim.oneName !== 'Death_A') this.h.anim.play('Hit_A', { timeScale: 1.6 });
+  }
+
+  // Stunned (stars over its head), slowed (frosted) or taunted (it flashes red): { stun, slow: [f, s],
+  // taunt } from our hit, or { s, w, t } (seconds) from someone else's (the world tells us). Bosses shrug
+  // most of a stun off, as in the world.
+  applyStatus(eff) {
+    if (!eff || !this.alive) return;
+    const stun = Number(eff.stun ?? eff.s) || 0, slow = Number(Array.isArray(eff.slow) ? eff.slow[1] : eff.w) || 0;
+    if (stun > 0) {
+      this.stunT = Math.max(this.stunT, Math.min(3, stun) * (this.def.boss ? 0.4 : 1));
+      if (!this.def.boss && this.attack) this.cancelAttack();
+    }
+    if (slow > 0) this.slowT = Math.max(this.slowT, Math.min(6, slow));
+    if (Number(eff.taunt ?? eff.t) > 0) this.h?.hitFlash(0xff3a2a, 0.8);
   }
 
   cancelAttack() {
@@ -247,7 +263,12 @@ export class Enemy {
       case 'b': this.blinkFx(ev[2], ev[3]); break; // the Lich vanished from (x, z)
       case 'e': this.enrage(); break;
       case 'x': this.cancelAttack(); break; // someone interrupted it
-      case 'h': if (ev[4] !== g.link.pid) this.struck(ev[2], ev[3]); break;
+      case 'h': // a hit: [h, id, damage, crit, by, effects]
+        if (ev[4] !== g.link.pid) {
+          if (ev[2] > 0) this.struck(ev[2], ev[3]);
+          if (ev[5]) this.applyStatus(ev[5]);
+        }
+        break;
       default: break;
     }
   }
@@ -383,11 +404,24 @@ export class Enemy {
     this.yaw = yaw;
     this.speed = cur.sp;
     if (this.attack) this.updateAttack(dt);
+    this.statusLooks(dt);
     this.sync(dt);
     if (d.lich && Math.random() < dt * 14) { // a cold violet haze around him
       const ang = rand(0, TAU), r = rand(0.3, 1.1);
       g.fx.add.emit({ pos: { x: this.pos.x + Math.cos(ang) * r, y: this.pos.y + rand(0.2, 2.6), z: this.pos.z + Math.sin(ang) * r }, count: 1, spread: 0.1, velSpread: 0.2, vel: { x: 0, y: 0.9, z: 0 }, color: new THREE.Color(this.enraged ? 0xff5ad8 : 0xb57dff).multiplyScalar(2.2), size: 0.2, sizeEnd: 0.02, life: 1.1, drag: 1 });
     }
+  }
+
+  statusLooks(dt) {
+    this.stunT = Math.max(0, this.stunT - dt);
+    this.slowT = Math.max(0, this.slowT - dt);
+    if (this.stunT > 0 && Math.random() < dt * 16) { // dizzy stars circling its head
+      const ang = this.game.time * 6 + rand(0, 0.5), y = this.pos.y + this.height + 0.15;
+      this.game.fx.add.emit({ pos: { x: this.pos.x + Math.cos(ang) * 0.45, y, z: this.pos.z + Math.sin(ang) * 0.45 }, count: 1, spread: 0.05, velSpread: 0.1, vel: { x: -Math.sin(ang) * 1.2, y: 0.1, z: Math.cos(ang) * 1.2 }, color: new THREE.Color(0xffe066).multiplyScalar(2.4), size: 0.16, sizeEnd: 0.04, life: 0.45, drag: 0.5 });
+    }
+    const frost = this.slowT > 0 ? Math.min(1, this.slowT * 2) : 0;
+    if (this.h) this.h.frost = frost;
+    else this.frost = frost;
   }
 
   sync(dt) {
@@ -426,6 +460,7 @@ export class Enemy {
     s.body.scale.set(1 + sq, 1 - sq * 1.4, 1 + sq);
     this.slimeFlash = Math.max(0, (this.slimeFlash || 0) - dt * 6);
     s.mat.emissive.copy(s.baseEmissive).addScalar(this.slimeFlash * 0.8 + (this.hover ? 0.12 : 0));
+    if (this.frost) { s.mat.emissive.g += this.frost * 0.15; s.mat.emissive.b += this.frost * 0.45; }
     if (d.glow && Math.random() < dt * 6) {
       this.game.fx.add.emit({ pos: { x: this.pos.x, y: this.pos.y + 0.9 * d.size, z: this.pos.z }, count: 1, spread: 0.3, velSpread: 0.3, vel: { x: 0, y: 1.4, z: 0 }, color: new THREE.Color(0xffa040).multiplyScalar(3), size: 0.12, sizeEnd: 0.02, life: 0.9, drag: 1 });
     }

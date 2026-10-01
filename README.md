@@ -38,7 +38,7 @@ automated tests). Three.js loads from a CDN, so you need an internet connection.
   really stands, so dodging works); the server keeps the monsters' life. Morvain's crypt is shared by everyone for now.
 - **Chat:** one world channel (Enter, or the Chat button on phones); nearby heroes also show it in a bubble.
   Last 20 lines are shown to heroes who arrive.
-- **Coming next:** each class's own skills, parties with their own copy of the crypt, and trading.
+- **Coming next:** parties with their own copy of the crypt, and trading.
 
 The server (`server/`, Node built-ins only) speaks JSON over one WebSocket at `/ws` and shows `{"ok":true,…}` at
 `/status`. Ten times a second it moves the world on and sends each hero's game what's around it: monsters and heroes
@@ -66,6 +66,23 @@ Live at https://emberwood.kerimcaglar.com, on DirectAdmin + LiteSpeed shared hos
   (3 tries), and the game waits up to 20 s for the game server, then tries once more by itself.
 - **Hosting test:** `tools/hosting-test` measures whether a host can run the server (see its README). Hyperion passed
   with caveats: it is shared and overloaded, so expect the occasional stutter; a small VPS would remove it.
+
+## Classes and skills
+
+Each class has its own four skills (`src/skills.js`), unlocking at levels 1 to 4 (keys 1–4, or the round buttons
+on phones). Stuns, slows and taunts are applied by the game server, so everyone sees them: dizzy stars over a
+stunned monster, a frosty blue tint on a slowed one. Bosses shrug off most of a stun.
+
+| Class | 1 | 2 | 3 | 4 |
+|---|---|---|---|---|
+| **Knight** (sword and shield) | Shield Bash: 120%, stuns 1.5 s | Charge: rush 7 m, 150% around you, knockback, short stun | War Cry: monsters within 9 m turn on you for 4 s; +50% armor for 8 s | Second Wind: heal 35% |
+| **Barbarian** (two-handed axe) | Cleave: wide arc, 170%, knockback | Leap Slam: jump 8 m, 180% within 3 m, slows by half for 3 s | Whirlwind: spin 1.4 s, 5 × 65% | Battle Rage: +30% attack speed, +25% damage for 8 s |
+| **Mage** (staff) | Fireball: 220% blast | Frost Nova: 120% within 5 m, slows by 60% for 4 s | Blink: teleport 8 m | Meteor: 350% within 3.5 m after a moment |
+| **Rogue** (daggers) | Twin Strike: 2 × 90%, more crits | Fan of Knives: 7 knives, 80% each | Smoke Bomb: stuns within 4 m for 2 s; half of the blows at you miss for 4 s | Shadow Step: appear behind an enemy 12 m away, 250%, more crits |
+
+Percentages are of weapon damage; the mage's spells (and the mage's basic attack, an arcane bolt from the staff
+instead of a swing) also scale with Spell Power. Other heroes' skills play out on your screen the same way, from
+the same code, without the damage (their game deals it).
 
 ## Controls
 
@@ -154,7 +171,8 @@ Variants: `?size=192`, `?size=512&maskable` (Android adaptive icon), `?size=180&
 
 - `src/game.js`: renderer, camera, aim, damage, rewards, save
 - `src/input.js`: keyboard, mouse, joystick and touch buttons (also clears keys the browser never "releases")
-- `src/player.js`: stats, leveling, inventory, skills, and the looks other players see
+- `src/player.js`: stats, leveling, inventory, buffs, and the looks other players see
+- `src/skills.js`: the classes' skills: one definition plays them for our hero (with the damage) and for others
 - `src/sim/world.js`: the shared world the server runs: monster AI, spawns, the crypt, heroes, who sees what
 - `src/link.js`: the game's side of it: smooth movement between updates, attacks played out, what we report back
 - `src/local.js`: the same world running in the page, for offline play (`?autostart`)

@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { Assets } from './assets.js';
 import { RARITY, itemLines, COMPARE_STATS } from './items.js';
-import { SKILLS, xpForLevel, STASH_SIZE } from './player.js';
+import { xpForLevel, STASH_SIZE } from './player.js';
 import { ALE_PRICE } from './town.js';
 import { ZONES, TOWN, CRYPT } from './world.js';
 import { ROOMS } from './dungeon.js';
@@ -11,12 +11,10 @@ import { rand } from './util.js';
 
 const $ = (id) => document.getElementById(id);
 
-const SKILL_SVG = {
-  attack: `<svg viewBox="0 0 32 32"><path d="M27.5 4.5 26 10.5 12.5 24 8 19.5 21.5 6z" fill="#e3e9f0" stroke="#5d6875" stroke-width="1.2" stroke-linejoin="round"/><path d="M21.5 6 26 10.5" stroke="#fff" stroke-width="1" opacity=".7"/><path d="M6 17.5l8.5 8.5" stroke="#d6aa4a" stroke-width="3.2" stroke-linecap="round"/><path d="M9.2 22.8 4.5 27.5" stroke="#7a4f2c" stroke-width="3.4" stroke-linecap="round"/></svg>`,
-  cleave: `<svg viewBox="0 0 32 32"><path d="M4 22C6 9 22 4 29 12c-8-3-17 0-21 11z" fill="#ffc46a" stroke="#a8641c" stroke-width="1.2" stroke-linejoin="round"/><path d="M7 20C10 12 19 8 25 10" stroke="#fff6d8" stroke-width="1.6" fill="none" stroke-linecap="round"/><circle cx="8" cy="24" r="2.2" fill="#fff0c0"/></svg>`,
-  fireball: `<svg viewBox="0 0 32 32"><path d="M20 5c1 5-3 6-2 10 2-1 3-3 3-5 4 3 6 7 5 11-1 5-6 8-11 7S6 23 7 18c1-4 4-5 5-9 1 2 1 4 3 5-1-4 1-7 5-9z" fill="#ff7a2a" stroke="#a32d0a" stroke-width="1.2" stroke-linejoin="round"/><path d="M16 17c2 2 4 3 3 6-1 2-4 3-6 1-2-1-1-4 0-5 0 1 1 2 2 2-1-2 0-3 1-4z" fill="#ffe08a"/></svg>`,
-  whirlwind: `<svg viewBox="0 0 32 32" fill="none" stroke-linecap="round"><path d="M16 4a12 12 0 1 1-11.3 8" stroke="#dfe9ff" stroke-width="2.6"/><path d="M16 9a7 7 0 1 1-6.6 4.7" stroke="#9fc0ff" stroke-width="2.4"/><path d="M16 14a2.5 2.5 0 1 1-2.4 1.8" stroke="#fff" stroke-width="2.2"/><path d="M4.7 12l-1.5-4.5 4.6 1.2" stroke="#dfe9ff" stroke-width="2.2"/></svg>`,
-  heal: `<svg viewBox="0 0 32 32"><path d="M16 28S4 20 4 12a6 6 0 0 1 12-2 6 6 0 0 1 12 2c0 8-12 16-12 16z" fill="#4fd46b" stroke="#1d6a2c" stroke-width="1.3" stroke-linejoin="round"/><path d="M16 11v10M11 16h10" stroke="#eaffea" stroke-width="3" stroke-linecap="round"/></svg>`,
+// The attack button (the skills' icons are in skills.js).
+const ATTACK_SVG = {
+  sword: `<svg viewBox="0 0 32 32"><path d="M27.5 4.5 26 10.5 12.5 24 8 19.5 21.5 6z" fill="#e3e9f0" stroke="#5d6875" stroke-width="1.2" stroke-linejoin="round"/><path d="M21.5 6 26 10.5" stroke="#fff" stroke-width="1" opacity=".7"/><path d="M6 17.5l8.5 8.5" stroke="#d6aa4a" stroke-width="3.2" stroke-linecap="round"/><path d="M9.2 22.8 4.5 27.5" stroke="#7a4f2c" stroke-width="3.4" stroke-linecap="round"/></svg>`,
+  bolt: `<svg viewBox="0 0 32 32"><path d="M4 26l9-9M6 29l8-8M2 21l8-8" stroke="#b99cff" stroke-width="1.8" stroke-linecap="round" opacity=".7"/><circle cx="20" cy="12" r="7.5" fill="#8a6dff" stroke="#3a2a7a" stroke-width="1.3"/><circle cx="18" cy="10" r="3" fill="#e6dcff"/></svg>`,
 };
 
 export class UI {
@@ -244,11 +242,14 @@ export class UI {
 
   // ---------------------------------------------------------------- action bar
   buildActionBar() {
-    const p = this.game.player;
+    const p = this.game.player, mage = p.cls === 'mage';
+    const attackTip = mage
+      ? `<div class="tt-name">Arcane Bolt</div><div class="tt-type">Left mouse · hold to keep casting</div>A bolt of force from your staff at the cursor: weapon damage, scaled by Spell Power.`
+      : `<div class="tt-name">Attack</div><div class="tt-type">Left mouse · hold to keep swinging</div>Swing your weapon at the cursor. Hits everything in a short arc.`;
     const defs = [
-      { key: 'LMB', attack: true, cls: 'slot-attack', icon: SKILL_SVG.attack, tip: () => `<div class="tt-name">Attack</div><div class="tt-type">Left mouse · hold to keep swinging</div>Swing your weapon at the cursor. Hits everything in a short arc.` },
-      ...SKILLS.map((s, i) => ({
-        key: s.key, skill: s, cls: `slot-s${i + 1}`, icon: SKILL_SVG[s.id], sep: i === 0,
+      { key: 'LMB', attack: true, cls: 'slot-attack', icon: mage ? ATTACK_SVG.bolt : ATTACK_SVG.sword, tip: () => attackTip },
+      ...p.skills.map((s, i) => ({
+        key: s.key, skill: s, cls: `slot-s${i + 1}`, icon: s.icon, sep: i === 0,
         tip: () => `<div class="tt-name">${s.name}</div><div class="tt-type">${s.mp} mana · ${s.cd}s cooldown${p.level < s.level ? ` · unlocks at level ${s.level}` : ''}</div>${s.desc}`,
       })),
       { key: 'Q', potion: true, cls: 'slot-potion', icon: `<img src="${Assets.icons.mug_full}" alt="">`, sep: true, tip: () => `<div class="tt-name">Hearty Ale</div><div class="tt-type">Q · ${p.potions} left</div>Restores 40% of your maximum Life. Buy more from Wren, the merchant in camp, or find them on monsters.` },
@@ -266,7 +267,7 @@ export class UI {
         // pointerdown, not click: buttons react the instant a thumb lands
         el.addEventListener('pointerdown', (e) => {
           e.preventDefault();
-          if (d.skill) p.useSkill(SKILLS.indexOf(d.skill));
+          if (d.skill) p.useSkill(p.skills.indexOf(d.skill));
           else if (d.potion) p.drinkAle();
         });
       }

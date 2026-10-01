@@ -12,7 +12,7 @@ import { planWorld, zoneAt, resolveCollision, isWalkable, randomWalkablePoint } 
 import { inDungeon, steer, lineClear, ROOMS } from '../crypt-map.js';
 import { rand, clamp, dampAngle, yawTo, TAU } from '../util.js';
 
-export const PROTOCOL = 2; // bump when the messages change: older games are asked to reload
+export const PROTOCOL = 3; // bump when the messages change: older games are asked to reload
 export const TICK = 0.1; // seconds between world updates
 export const STATES = ['spawn', 'idle', 'chase', 'return', 'dead'];
 const CODE = Object.fromEntries(STATES.map((s, i) => [s, i]));
@@ -23,6 +23,18 @@ const EMPTY_RESET = 120; // seconds an empty crypt keeps its monsters
 const HERO_RADIUS = 0.5;
 const r2 = (v) => Math.round(v * 100) / 100;
 const r1 = (v) => Math.round(v * 10) / 10;
+
+// What a skill does besides damage, from a hero's game, checked: { stun: s, slow: [speed factor, s],
+// taunt: s } (null if nothing sensible).
+function cleanEffects(e) {
+  if (!e || typeof e !== 'object') return null;
+  const out = {};
+  const stun = Number(e.stun), taunt = Number(e.taunt);
+  if (stun > 0) out.stun = Math.min(3, stun);
+  if (taunt > 0) out.taunt = Math.min(6, taunt);
+  if (Array.isArray(e.slow) && Number(e.slow[1]) > 0) out.slow = [clamp(Number(e.slow[0]) || 1, 0.2, 1), Math.min(6, Number(e.slow[1]))];
+  return Object.keys(out).length ? out : null;
+}
 
 // ---------------------------------------------------------------- monsters
 class Monster {
@@ -369,7 +381,7 @@ class Monster {
   }
 
   // ---------------------------------------------------------------- taking hits
-  // eff: { stun: s, slow: [factor, s], taunt: s } from skills
+  // eff: { stun: s, slow: [factor, s], taunt: s } from skills (see cleanEffects); amount can be 0 (a taunt)
   hurt(amount, fx, fz, knock, by, eff) {
     const d = this.def;
     this.hp -= amount;
@@ -384,11 +396,14 @@ class Monster {
     }
     if (eff) {
       const k = d.boss ? 0.4 : 1; // bosses shrug most of it off
-      if (eff.stun > 0) this.stun = Math.max(this.stun, Math.min(3, eff.stun) * k);
-      if (Array.isArray(eff.slow) && eff.slow[1] > 0) { this.slowBy = clamp(eff.slow[0], 0.2, 1); this.slow = Math.min(6, eff.slow[1]); }
-      if (eff.taunt > 0) { this.taunt = Math.min(6, eff.taunt); this.taunter = by; this.target = by; }
+      if (eff.stun) {
+        this.stun = Math.max(this.stun, eff.stun * k);
+        if (!d.boss && this.attack && !this.attack.summon && !this.attack.circles) { this.attack = null; this.emit(['x', this.id]); }
+      }
+      if (eff.slow) { this.slowBy = eff.slow[0]; this.slow = Math.max(this.slow, eff.slow[1]); }
+      if (eff.taunt) { this.taunt = eff.taunt; this.taunter = by; this.target = by; }
     }
-    if (this.hp > 0 && !d.boss) {
+    if (amount > 0 && this.hp > 0 && !d.boss) {
       if (this.attack && this.attack.t < this.attack.hitAt) { // interrupts wind-ups: rewards aggressive play
         this.attack = null;
         this.atkCd = Math.max(this.atkCd, 0.6);
@@ -570,13 +585,15 @@ export class WorldSim {
     const m = p.area?.monsters.get(h[0]);
     if (!m || m.state === 'dead' || m.state === 'spawn') return;
     let dmg = Math.round(Number(h[1]));
-    if (!(dmg > 0)) return;
+    const eff = cleanEffects(h[6]);
+    if (!(dmg >= 0) || (dmg === 0 && !eff)) return; // (0 damage: a skill that only stuns or taunts)
     if (Math.hypot(m.x - p.x, m.z - p.z) > 30) return; // can't have reached it from there
     p.budget--;
     dmg = Math.min(dmg, 100 + 150 * p.level);
-    const eff = h[6] && typeof h[6] === 'object' ? h[6] : null;
     m.hurt(dmg, Number(h[4]), Number(h[5]), clamp(Number(h[3]) || 0, 0, 2), p, eff);
-    m.emit(['h', m.id, dmg, h[2] ? 1 : 0, p.pid]);
+    // the others see the number, and the stars or frost: { s: stun s, w: slow s, t: taunt s }
+    const looks = eff ? { ...(eff.stun && { s: eff.stun }), ...(eff.slow && { w: eff.slow[1] }), ...(eff.taunt && { t: eff.taunt }) } : 0;
+    m.emit(looks ? ['h', m.id, dmg, h[2] ? 1 : 0, p.pid, looks] : ['h', m.id, dmg, h[2] ? 1 : 0, p.pid]);
     if (m.hp <= 0) m.die(p);
   }
 

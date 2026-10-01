@@ -1,7 +1,7 @@
 {
   "name": "Emberwood",
   "short_name": "Emberwood",
-  "description": "A tiny 3D action RPG. Fight slimes, bandits and skeletons, collect loot and level up.",
+  "description": "A small online 3D action RPG. Make a Knight, Barbarian, Mage or Rogue, fight monsters with other players, collect loot and level up.",
   "id": "./",
   "start_url": "./?app",
   "scope": "./",
