@@ -24,8 +24,13 @@ export class LocalWorld {
   async request(t, data = {}) {
     if (t === 'enter') {
       this.who = { name: data.name, cls: data.cls };
-      this.sim.join(1, data);
-      return { t: 'entered', pid: 1, chat: [], online: 1 };
+      const where = this.sim.join(1, { ...data, key: 'local' });
+      return { t: 'entered', pid: 1, chat: [], online: 1, ...where };
+    }
+    if (t === 'travel') {
+      const r = this.sim.travel(1, String(data.to || ''), { respawn: !!data.respawn });
+      if (r.error) throw new Error(r.error);
+      return { t: 'traveled', ...r };
     }
     if (t === 'exit') {
       this.sim.leave(1);

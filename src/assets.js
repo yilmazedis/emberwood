@@ -19,6 +19,7 @@ export const ITEM_MODELS = [
   'shield_round', 'shield_round_color', 'shield_square', 'shield_square_color', 'shield_spikes', 'shield_spikes_color',
   'shield_badge', 'shield_badge_color', 'spellbook_open', 'mug_full',
   'Skeleton_Blade', 'Skeleton_Axe', 'Skeleton_Staff', 'Skeleton_Shield_Small_A', 'Skeleton_Shield_Large_A',
+  'Skeleton_Shield_Small_B', 'Skeleton_Shield_Large_B', 'shield_round_barbarian', 'bow_withString', // (monsters' gear)
 ];
 
 // Downloads are patient with slow connections but not with stuck ones: a download that gets no data
@@ -63,7 +64,7 @@ export async function loadAssets(onProgress) {
   const files = [
     ...CHARACTERS.map((c) => [`assets/characters/${c}.glb`, (g) => { Assets.chars[c] = g; }]),
     ...ANIMATIONS.map((a) => [`assets/animations/${a}.glb`, (g) => { for (const clip of g.animations) Assets.clips[clip.name] = clip; }]),
-    ['assets/items/items.glb', (g) => {
+    ['assets/items/items.glb?v=2', (g) => { // (?v=: a new pack is a new address, so no stale copy is used)
       for (const root of [...g.scene.children]) {
         root.traverse((o) => { if (o.isMesh) o.castShadow = true; });
         Assets.items[root.userData.model] = root;
@@ -98,6 +99,7 @@ export function cloneCharacter(name) {
 }
 
 export function cloneItem(name, glow = null) {
+  if (!Assets.items[name]) { console.warn(`item model ${name} is missing`); return new THREE.Group(); }
   const obj = Assets.items[name].clone(true);
   if (glow) {
     obj.traverse((o) => {

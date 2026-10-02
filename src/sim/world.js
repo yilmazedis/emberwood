@@ -1,5 +1,8 @@
 // The shared world: monsters spawn, wander, chase whoever is nearest and attack; heroes come and go.
 // The game server runs one for everybody (server/main.mjs); offline, the game runs its own (local.js).
+// Every place (maps.js) is an area of its own: one for each land, and a private copy of a dungeon for each
+// party (or lone hero) that goes down. A hero travels between them through the waystones, doors and stairs
+// (travel), and only areas with heroes in them move on.
 //
 // Each hero's game says where its hero is, what it hit and what it did; ten times a second the world
 // tells every game where the monsters and other heroes around it are, and what happened. Whether a
@@ -7,19 +10,19 @@
 // really stands, so dodging works), and so are XP and loot: everyone who hit a monster gets credit for
 // the kill and rolls their own loot.
 // Plain numbers only (no three.js), so Node runs it as is.
-import { ENEMY_TYPES, SPAWNS, monsterHp } from '../monsters.js';
+import { ENEMY_TYPES, monsterHp } from '../monsters.js';
 import { planWorld, zoneAt, resolveCollision, isWalkable, randomWalkablePoint } from '../terrain.js';
-import { inDungeon, steer, lineClear, ROOMS } from '../crypt-map.js';
+import { MAPS, START, portalTo, arrival } from '../maps.js';
 import { rand, clamp, dampAngle, yawTo, TAU } from '../util.js';
 
-export const PROTOCOL = 3; // bump when the messages change: older games are asked to reload
+export const PROTOCOL = 4; // bump when the messages change: older games are asked to reload
 export const TICK = 0.1; // seconds between world updates
 export const STATES = ['spawn', 'idle', 'chase', 'return', 'dead'];
 const CODE = Object.fromEntries(STATES.map((s, i) => [s, i]));
 const SEE_MONSTERS = 56; // a game hears about monsters this far (each way) from its hero
 const SEE_PLAYERS = 80; // … and about other heroes
 const ACTIVE = 90; // monsters further than this from every hero rest
-const EMPTY_RESET = 120; // seconds an empty crypt keeps its monsters
+const INSTANCE_TTL = 300; // seconds an empty dungeon copy is kept (come back for what you left)
 const HERO_RADIUS = 0.5;
 const r2 = (v) => Math.round(v * 100) / 100;
 const r1 = (v) => Math.round(v * 10) / 10;
@@ -50,7 +53,7 @@ class Monster {
     this.maxHp = monsterHp(d, this.level);
     this.hp = this.maxHp;
     this.radius = d.radius * (d.scale || 1);
-    this.crypt = inDungeon(slot.x, slot.z); // walls: path around them, and no seeing through them
+    this.dun = area.dun; // in a dungeon: walls to path around, and no seeing through them
     const home = slot.ring ? ringPoint(slot) : randomWalkablePoint(slot.x, slot.z, slot.r);
     this.home = { x: home.x, z: home.z };
     this.x = home.x;
@@ -74,12 +77,12 @@ class Monster {
     this.target = null;
     this.sight = new Map(); // hero -> { at, clear }: line-of-sight checks in the crypt, 5 per second
     this.hitters = new Map(); // pid -> when they last hit it: everyone here gets credit for the kill
+    this.raised = []; // a boss's calls for help so far (at 70% and 40% life)
+    this.enraged = false; // bosses below 30% life
     if (d.lich) {
       this.circleT = 5;
       this.blinkCd = 6;
       this.closeT = 0;
-      this.raised = [];
-      this.enraged = false;
     }
   }
 
@@ -91,19 +94,19 @@ class Monster {
     return Math.hypot(p.x - this.x, p.z - this.z);
   }
 
-  // A hero this monster may fight: alive, at the keyboard, outside camp and on its side of the crypt door.
+  // A hero this monster may fight: here, alive, at the keyboard and outside camp.
   fair(p) {
-    return !!p && p.inWorld && p.area === this.area && p.alive && !p.away && !zoneAt(p.x, p.z)?.safe && inDungeon(p.x, p.z) === this.crypt;
+    return !!p && p.inWorld && p.area === this.area && p.alive && !p.away && !zoneAt(p.x, p.z)?.safe;
   }
 
-  // Can it see the hero? Always, outside; in the crypt, not through walls.
+  // Can it see the hero? Always, outside; in a dungeon, not through walls.
   sees(p) {
-    if (!this.crypt) return true;
+    if (!this.dun) return true;
     const t = this.sim.time;
     let s = this.sight.get(p);
     if (!s || t >= s.at) {
       if (this.sight.size > 8) this.sight.clear(); // heroes who left
-      s = { at: t + 0.2, clear: lineClear(this.x, this.z, p.x, p.z, 0.15) };
+      s = { at: t + 0.2, clear: this.dun.lineClear(this.x, this.z, p.x, p.z, 0.15) };
       this.sight.set(p, s);
     }
     return s.clear;
@@ -125,11 +128,11 @@ class Monster {
 
   moveToward(x, z, speed, dt) {
     if (this.slow > 0) speed *= this.slowBy;
-    if (this.crypt) { // head for the next corner of the path instead of into the wall
+    if (this.dun) { // head for the next corner of the path instead of into the wall
       const t = this.sim.time;
       if (t >= (this.navAt || 0) || (this.nav && Math.hypot(this.nav.x - this.x, this.nav.z - this.z) < 0.6)) {
         this.navAt = t + 0.25;
-        this.nav = steer(this.x, this.z, x, z, this.radius);
+        this.nav = this.dun.steer(this.x, this.z, x, z, this.radius);
       }
       if (this.nav) { x = this.nav.x; z = this.nav.z; }
     }
@@ -202,8 +205,8 @@ class Monster {
       if (this.wanderT <= 0) {
         const w = randomWalkablePoint(this.home.x, this.home.z, 4);
         this.wanderT = rand(3, 7);
-        // in the crypt, stay in your own room
-        this.wanderTarget = this.crypt && !lineClear(this.home.x, this.home.z, w.x, w.z, this.radius) ? null : w;
+        // in a dungeon, stay in your own room
+        this.wanderTarget = this.dun && !this.dun.lineClear(this.home.x, this.home.z, w.x, w.z, this.radius) ? null : w;
       }
       if (this.wanderTarget) {
         speed = this.moveToward(this.wanderTarget.x, this.wanderTarget.z, d.speed * 0.35, dt);
@@ -217,6 +220,8 @@ class Monster {
         this.target = null;
       } else if (d.lich) {
         speed = this.lichChase(dt, p, dist, dx, dz);
+      } else if (d.boss && this.bossPhase()) {
+        // (calling for help)
       } else if (d.kind === 'caster') {
         const sees = this.sees(p);
         if (dist < d.keep * 0.55 && sees) {
@@ -300,12 +305,13 @@ class Monster {
     if (p && a.t < a.hitAt) this.faceTo(p.x, p.z, dt, a.slam ? 3 : 8);
     if (!a.hit && a.t >= a.hitAt) {
       a.hit = true;
-      if (a.summon) {
-        const n = this.enraged ? 4 : 3;
+      if (a.summon) { // the first of each call is an elite after the first call
+        const n = this.enraged ? 4 : 3, [common, elite = common] = d.summons || ['skeleton_minion', 'skeleton_warrior'];
         for (let i = 0; i < n; i++) {
           const ang = this.yaw + (i / n) * TAU;
-          this.area.summon(i === 0 && this.raised.length > 1 ? 'skeleton_warrior' : 'skeleton_minion', this.level - 1,
-            this.x + Math.sin(ang) * 3.2, this.z + Math.cos(ang) * 3.2, this);
+          const x = this.x + Math.sin(ang) * 3.2, z = this.z + Math.cos(ang) * 3.2;
+          const at = isWalkable(x, z, 0.6) ? { x, z } : randomWalkablePoint(this.x, this.z, 3, 0.6);
+          this.area.summon(i === 0 && this.raised.length > 1 ? elite : common, this.level - 1, at.x, at.z, this);
         }
       } else if (a.circles && p) { // grave circles: under the hero and around them, on open floor
         const spots = [r2(p.x), r2(p.z)];
@@ -328,22 +334,32 @@ class Monster {
     }
   }
 
-  // ---------------------------------------------------------------- Morvain the Lich
-  lichChase(dt, p, dist, dx, dz) {
-    const d = this.def;
+  // ---------------------------------------------------------------- bosses
+  // At 70% and 40% life a boss calls for help (raises the dead, calls its guards); below 30% it rages.
+  // True when it starts a call (that's what it does this turn).
+  bossPhase() {
     const frac = this.hp / this.maxHp;
-    for (const th of [0.7, 0.4]) { // raises the dead at 70% and 40% life
-      if (frac < th && !this.raised.includes(th)) {
-        this.raised.push(th);
-        this.attack = { t: 0, dur: 1.5, hitAt: 0.8, hit: false, summon: true };
-        this.emit(['u', this.id]);
-        return 0;
+    if (this.def.summons) {
+      for (const th of [0.7, 0.4]) {
+        if (frac < th && !this.raised.includes(th)) {
+          this.raised.push(th);
+          this.attack = { t: 0, dur: 1.5, hitAt: 0.8, hit: false, summon: true };
+          this.emit(['u', this.id]);
+          return true;
+        }
       }
     }
     if (frac < 0.3 && !this.enraged) {
       this.enraged = true;
       this.emit(['e', this.id]);
     }
+    return false;
+  }
+
+  // Morvain the Lich (and those like him): bolt volleys, grave circles, blinking away when crowded.
+  lichChase(dt, p, dist, dx, dz) {
+    const d = this.def;
+    if (this.bossPhase()) return 0;
     this.circleT -= dt;
     this.blinkCd -= dt;
     this.closeT = dist < 3.6 ? this.closeT + dt : Math.max(0, this.closeT - dt);
@@ -362,9 +378,10 @@ class Monster {
     return 0;
   }
 
-  // Too close for comfort: vanish and reappear across the sanctum.
+  // Too close for comfort: vanish and reappear across its room.
   blink(p) {
-    const B = ROOMS.B;
+    const B = this.dun?.rooms[this.slot.room || 'B'];
+    if (!B) { this.blinkCd = 7; return; }
     let to = null;
     for (let i = 0; i < 12 && !to; i++) {
       const c = randomWalkablePoint(B.cx, B.cz, 8, 1.2);
@@ -421,7 +438,7 @@ class Monster {
     this.hp = 0;
     const who = credit ? [...this.hitters.keys()].filter((pid) => this.sim.players.get(pid)?.area === this.area) : [];
     this.emit(['d', this.id, r2(this.x), r2(this.z), who, by ? by.pid : 0, this.type, this.level], who);
-    if (this.def.lich) this.area.lichDown(this);
+    if (this.def.boss) this.area.bossDown(this);
   }
 }
 
@@ -432,27 +449,26 @@ function ringPoint(slot) {
 }
 
 // ---------------------------------------------------------------- areas
-// The overworld, and the crypt below (one for everyone for now; parties will get their own copy).
+// One place (maps.js) and what's in it: a land, or one party's copy of a dungeon.
 class Area {
-  constructor(sim, id, crypt) {
+  constructor(sim, key, map) {
     this.sim = sim;
-    this.id = id;
-    this.crypt = crypt;
+    this.key = key;
+    this.map = map;
+    this.dun = map.dungeon || null;
     this.players = new Set();
     this.monsters = new Map();
     this.events = [];
     this.emptyT = 0;
     this.slots = [];
-    for (const sp of SPAWNS) {
-      if (!!sp.crypt !== crypt) continue;
+    for (const sp of map.spawns || []) {
       for (let i = 0; i < sp.n; i++) this.slots.push({ ...sp, group: sp, monster: null, timer: rand(0, 1.5) });
     }
   }
 
   update(dt) {
-    if (this.crypt && !this.players.size) { // nobody down there: it waits, and forgets after a while
+    if (!this.players.size) { // nobody here: everything waits (a dungeon copy is let go after a while)
       this.emptyT += dt;
-      if (this.emptyT > EMPTY_RESET && this.monsters.size) this.reset();
       return;
     }
     this.emptyT = 0;
@@ -492,44 +508,64 @@ class Area {
     return m;
   }
 
-  lichDown(lich) {
-    for (const o of this.monsters.values()) if (o.summoner === lich && o.state !== 'dead') o.die(null, false); // his minions crumble
-    this.events.push({ all: true, ev: ['L'] });
-  }
-
-  reset() {
-    this.monsters.clear();
-    for (const s of this.slots) { s.monster = null; s.timer = rand(0, 1.5); }
+  // A boss fell: whatever it called crumbles, and everyone here hears (a dungeon's hoard opens).
+  bossDown(boss) {
+    for (const o of this.monsters.values()) if (o.summoner === boss && o.state !== 'dead') o.die(null, false);
+    this.events.push({ all: true, ev: ['L', boss.type] });
   }
 }
 
 // ---------------------------------------------------------------- the world
 export class WorldSim {
   constructor({ now = () => Date.now() } = {}) {
-    planWorld(); // what blocks the way
+    planWorld(); // what blocks the way in Emberwood (the other places planned theirs when maps.js loaded)
     this.now = now;
     this.time = 0;
     this.lastId = 0;
     this.players = new Map(); // pid -> hero
-    this.areas = new Map([['world', new Area(this, 'world', false)], ['crypt', new Area(this, 'crypt', true)]]);
+    this.areas = new Map(); // key -> Area: a land by its id, a dungeon copy by `<dungeon>:<party or hero>`
   }
 
-  areaAt(x, z) {
-    return this.areas.get(inDungeon(x, z) ? 'crypt' : 'world');
+  area(key, map) {
+    let a = this.areas.get(key);
+    if (!a) {
+      a = new Area(this, key, map);
+      this.areas.set(key, a);
+    }
+    return a;
   }
 
-  // A hero enters the world. info: { name, cls, p, k } (p: position etc., k: looks, see input)
+  // Where hero p goes in `map`: the land itself, or for a dungeon the copy its party is already in, else
+  // its party's own (or the hero's own when alone).
+  areaFor(map, p) {
+    if (!map.instanced) return this.area(map.id, map);
+    if (p.party) for (const o of this.players.values()) if (o !== p && o.party === p.party && o.area?.map === map) return o.area;
+    return this.area(`${map.id}:${p.party ? `p${p.party}` : `h${p.key}`}`, map);
+  }
+
+  // A hero enters the world. info: { name, cls, key: the character's id, map, p, k } (p: position etc.,
+  // k: looks, see input). Its game says where it is; a place it can't be (or can't be yet) sends it to
+  // Emberwood's camp. Returns { map, ep, at? } (at: where it was put instead).
   join(pid, info) {
     this.leave(pid);
     const p = {
-      pid, name: info.name, cls: info.cls, level: 1, look: {}, lookVer: 1,
-      x: 0, z: 3.5, yaw: Math.PI, mode: 0, sp: 0, alive: true, hp: 1, away: false,
-      area: null, inWorld: true, knownM: new Map(), knownP: new Map(), budget: 40,
+      pid, key: String(info.key || pid), name: info.name, cls: info.cls, level: 1, look: {}, lookVer: 1,
+      x: 0, z: 3.5, yaw: Math.PI, mode: 0, sp: 0, alive: true, hp: 1, away: false, party: 0,
+      area: null, ep: 0, inWorld: true, knownM: new Map(), knownP: new Map(), budget: 40,
     };
     this.players.set(pid, p);
-    this.input(pid, info);
-    if (!p.area) this.place(p, this.areaAt(p.x, p.z));
-    return p;
+    this.input(pid, { k: info.k }); // (its level first)
+    const want = MAPS[info.map], x = Number(info.p?.[0]), z = Number(info.p?.[1]);
+    const fits = want && p.level >= want.minLevel && Number.isFinite(x) && Number.isFinite(z) && want.contains(x, z);
+    const map = fits ? want : MAPS[START];
+    this.place(p, this.areaFor(map, p));
+    if (fits) {
+      this.input(pid, { p: info.p });
+      return { map: map.id, ep: p.ep };
+    }
+    const at = map.respawn;
+    Object.assign(p, { x: at.x, z: at.z, yaw: at.yaw });
+    return { map: map.id, ep: p.ep, at: { x: at.x, z: at.z, yaw: at.yaw } };
   }
 
   leave(pid) {
@@ -540,11 +576,38 @@ export class WorldSim {
     this.players.delete(pid);
   }
 
+  // Into another area: its game starts over with what it sees there (ep tells its updates apart).
   place(p, area) {
     if (p.area === area) return;
     p.area?.players.delete(p);
     p.area = area;
     area.players.add(p);
+    p.ep++;
+    p.knownM.clear();
+    p.knownP.clear();
+  }
+
+  // Hero pid goes to map `to`: through a portal it stands at (a waystone, a dungeon's door or stairs), or,
+  // fallen (respawn), to where heroes who fall here rise. { map, x, z, yaw, ep } or { error }.
+  travel(pid, to, { respawn = false } = {}) {
+    const p = this.players.get(pid), map = MAPS[to];
+    if (!p?.area || !map) return { error: 'There is no such place.' };
+    const from = p.area.map;
+    let at;
+    if (respawn) {
+      if (p.alive) return { error: 'You are still standing.' };
+      if (from.respawn.map !== to) return { error: 'You rise elsewhere.' };
+      at = from.respawn;
+    } else {
+      if (!p.alive) return { error: 'You have fallen.' };
+      const portal = portalTo(from, to, p.x, p.z);
+      if (!portal) return { error: 'The way there is not here.' };
+      if (p.level < map.minLevel) return { error: `${map.name} is for heroes of level ${map.minLevel} and up.` };
+      at = arrival(portal, to);
+    }
+    this.place(p, this.areaFor(map, p));
+    Object.assign(p, { x: at.x, z: at.z, yaw: at.yaw ?? 0 });
+    return { map: map.id, x: at.x, z: at.z, yaw: at.yaw ?? 0, ep: p.ep, copy: map.instanced ? (p.party ? 'party' : 'own') : null };
   }
 
   // A hero's game reports in: p = [x, z, yaw, move (0 still, 1 walk, 2 run), speed, alive, life 0..1,
@@ -555,7 +618,8 @@ export class WorldSim {
     if (!p || !m || typeof m !== 'object') return;
     if (Array.isArray(m.p) && m.p.length >= 3) {
       const [x, z, yaw, mode, sp, alive, hp, away] = m.p.map(Number);
-      if (Number.isFinite(x) && Number.isFinite(z) && Number.isFinite(yaw) && Math.abs(x) < 300 && Math.abs(z) < 600) {
+      // (only where it is: a position from before a journey is left behind)
+      if (Number.isFinite(x) && Number.isFinite(z) && Number.isFinite(yaw) && p.area?.map.contains(x, z)) {
         p.x = x;
         p.z = z;
         p.yaw = yaw;
@@ -564,7 +628,6 @@ export class WorldSim {
         p.alive = alive !== 0;
         p.hp = clamp(Number.isFinite(hp) ? hp : 1, 0, 1);
         p.away = away === 1;
-        this.place(p, this.areaAt(x, z));
       }
     }
     if (m.k && typeof m.k === 'object' && JSON.stringify(m.k).length < 500) {
@@ -601,7 +664,10 @@ export class WorldSim {
   step(dt, deliver) {
     this.time += dt;
     for (const p of this.players.values()) p.budget = Math.min(60, p.budget + dt * 40);
-    for (const a of this.areas.values()) a.update(dt);
+    for (const [key, a] of this.areas) {
+      a.update(dt);
+      if (a.map.instanced && !a.players.size && a.emptyT > INSTANCE_TTL) this.areas.delete(key);
+    }
     const ts = this.now();
     for (const p of this.players.values()) deliver(p.pid, this.snapshot(p, ts));
     for (const a of this.areas.values()) a.events.length = 0;
@@ -614,7 +680,7 @@ export class WorldSim {
   //   p: { i, n: name, c: class, l: level, k: looks, u: [i, x, z, yaw, move, speed, alive, life, away] }
   //      or that u array alone;  pg: heroes gone;  e: events (see the emit calls)
   snapshot(me, ts) {
-    const out = { t: 'w', ts };
+    const out = { t: 'w', ts, ep: me.ep };
     const area = me.area;
     if (!area) return out;
     const m = [], mg = [], seen = new Set();

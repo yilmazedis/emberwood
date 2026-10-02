@@ -12,7 +12,7 @@ export * from './terrain.js';
 export const worldUniforms = { uTime: { value: 0 } };
 
 // ---------------------------------------------------------------- geometry helpers
-function colored(geo, hex) {
+export function colored(geo, hex) {
   const g = geo.index ? geo.toNonIndexed() : geo;
   if (g.attributes.uv) g.deleteAttribute('uv');
   const c = new THREE.Color(hex);
@@ -23,7 +23,7 @@ function colored(geo, hex) {
   return g;
 }
 
-function gradient(geo, hexBottom, hexTop, y0, y1) {
+export function gradient(geo, hexBottom, hexTop, y0, y1) {
   const g = geo.index ? geo.toNonIndexed() : geo;
   if (g.attributes.uv) g.deleteAttribute('uv');
   const a = new THREE.Color(hexBottom), b = new THREE.Color(hexTop), c = new THREE.Color();
@@ -38,7 +38,7 @@ function gradient(geo, hexBottom, hexTop, y0, y1) {
 }
 
 // Offsets vertices by position so shared corners move together (no cracks).
-function jitter(geo, amt, rng) {
+export function jitter(geo, amt, rng) {
   const p = geo.attributes.position;
   const cache = new Map();
   for (let i = 0; i < p.count; i++) {
@@ -50,7 +50,7 @@ function jitter(geo, amt, rng) {
   return geo;
 }
 
-const envMaterial = () => new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.92, metalness: 0 });
+export const envMaterial = () => new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.92, metalness: 0 });
 
 // ---------------------------------------------------------------- terrain
 const COL = {
@@ -169,7 +169,7 @@ function buildWater(scene, rng) {
   return water;
 }
 // ---------------------------------------------------------------- vegetation
-function makePine(rng) {
+export function makePine(rng) {
   return mergeGeometries([
     colored(new THREE.CylinderGeometry(0.16, 0.26, 1.3, 6).translate(0, 0.65, 0), 0x6b4a2f),
     colored(jitter(new THREE.ConeGeometry(1.55, 1.9, 7).translate(0, 1.9, 0), 0.28, rng), 0x2e7443),
@@ -178,7 +178,7 @@ function makePine(rng) {
   ]);
 }
 
-function makeOak(rng, c1, c2, c3) {
+export function makeOak(rng, c1, c2, c3) {
   return mergeGeometries([
     colored(new THREE.CylinderGeometry(0.2, 0.32, 2.0, 6).translate(0, 1.0, 0), 0x7a5536),
     colored(new THREE.CylinderGeometry(0.08, 0.12, 1.0, 5).rotateZ(-0.9).translate(0.45, 1.9, 0.1), 0x7a5536),
@@ -188,7 +188,7 @@ function makeOak(rng, c1, c2, c3) {
   ]);
 }
 
-function makeBush(rng) {
+export function makeBush(rng) {
   return mergeGeometries([
     colored(jitter(new THREE.IcosahedronGeometry(0.75, 0), 0.2, rng).scale(1, 0.75, 1).translate(0, 0.42, 0), 0x4c9439),
     colored(jitter(new THREE.IcosahedronGeometry(0.55, 0), 0.15, rng).translate(0.55, 0.33, 0.2), 0x5aa844),
@@ -196,11 +196,11 @@ function makeBush(rng) {
   ]);
 }
 
-function makeRock(rng, hex) {
+export function makeRock(rng, hex) {
   return colored(jitter(new THREE.DodecahedronGeometry(1, 0), 0.35, rng).scale(1, 0.62, 1).translate(0, 0.22, 0), hex);
 }
 
-function makeTuft() {
+export function makeTuft() {
   const blades = [];
   for (let i = 0; i < 4; i++) {
     const h = 0.48 + i * 0.07;
@@ -220,7 +220,7 @@ function makeFlower() {
   ]);
 }
 
-function swayMaterial(base) {
+export function swayMaterial(base) {
   base.onBeforeCompile = (shader) => {
     shader.uniforms.uTime = worldUniforms.uTime;
     shader.vertexShader = 'uniform float uTime;\n' + shader.vertexShader.replace(
@@ -239,7 +239,7 @@ function swayMaterial(base) {
   return base;
 }
 
-function scatterInstanced(scene, geo, material, items, { castShadow = true, receiveShadow = true } = {}) {
+export function scatterInstanced(scene, geo, material, items, { castShadow = true, receiveShadow = true } = {}) {
   const mesh = new THREE.InstancedMesh(geo, material, items.length);
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3(), e = new THREE.Euler();
   const col = new THREE.Color();
@@ -316,6 +316,7 @@ function buildProps(scene, props, rng) {
   const parts = [];
   const fires = [];
   const spiritFires = [];
+  const waystones = [];
   const fencePosts = new Map(); // fence post index -> [x, z]; railings join neighbours
   const add = (geo, x, z, { y = 0, rotY = 0, ground = true } = {}) => {
     geo.rotateY(rotY);
@@ -469,6 +470,11 @@ function buildProps(scene, props, rng) {
       }
       add(mergeGeometries(bits), x, z, { rotY: rng() * 6.28 });
     },
+    waystone({ x, z }) {
+      const w = buildWaystone(x, z, rng);
+      scene.add(w.group);
+      waystones.push(w);
+    },
     brazier({ x, z }) { // green spirit fire
       add(colored(new THREE.CylinderGeometry(0.1, 0.14, 1.1, 6).translate(0, 0.55, 0), 0x3a3b40), x, z);
       add(colored(new THREE.CylinderGeometry(0.38, 0.2, 0.3, 8).translate(0, 1.2, 0), 0x3a3b40), x, z);
@@ -510,10 +516,11 @@ function buildProps(scene, props, rng) {
   crystal.castShadow = true;
   scene.add(crystal);
 
-  return { fires, crystal, spiritFires, spiritLight };
+  return { fires, crystal, spiritFires, spiritLight, waystones };
 }
 
-function buildSky(scene) {
+// A sky dome (gradient: top, middle, horizon); it follows the camera (places.js), so any land has one.
+export function buildSky(scene) {
   const mat = new THREE.ShaderMaterial({
     side: THREE.BackSide, depthWrite: false, fog: false,
     uniforms: {
@@ -566,14 +573,47 @@ function buildMinimapBase(mapDots) {
   return { canvas: c, range: R };
 }
 
+// Emberwood, drawn into its own group (root: hidden while the hero is in another land).
 export function buildWorld(scene, { lowSpec = false } = {}) {
   const plan = planWorld(); // positions and colliders (shared with the server)
   const rng = mulberry32(20260930); // the looks only
-  scene.add(buildTerrain(rng));
-  const water = buildWater(scene, rng);
-  const props = buildProps(scene, plan.props, rng);
-  buildVegetation(scene, rng, plan, lowSpec);
+  const root = new THREE.Group();
+  root.name = 'emberwood';
+  scene.add(root);
+  root.add(buildTerrain(rng));
+  const water = buildWater(root, rng);
+  const props = buildProps(root, plan.props, rng);
+  buildVegetation(root, rng, plan, lowSpec);
   const sky = buildSky(scene);
   const minimap = buildMinimapBase(plan.mapDots);
-  return { water, sky, fires: props.fires, crystal: props.crystal, spiritFires: props.spiritFires, spiritLight: props.spiritLight, minimap };
+  return { root, water, sky, fires: props.fires, crystal: props.crystal, spiritFires: props.spiritFires, spiritLight: props.spiritLight, waystones: props.waystones, minimap };
+}
+
+// A waystone: a carved monolith with glowing runes and a crystal floating over it. Travelers touch it to go
+// to another land (places.js). Its own meshes, so the crystal can bob and turn.
+export function buildWaystone(x, z, rng = Math.random) {
+  const g = new THREE.Group();
+  g.position.set(x, heightAt(x, z), z);
+  const stone = new THREE.Mesh(mergeGeometries([
+    colored(new THREE.CylinderGeometry(1.05, 1.22, 0.36, 6).translate(0, 0.12, 0), 0x6f737c),
+    colored(jitter(new THREE.BoxGeometry(0.76, 2.5, 0.56, 1, 3, 1), 0.07, rng).translate(0, 1.52, 0), 0x8a8f9a),
+    colored(new THREE.ConeGeometry(0.46, 0.5, 4).rotateY(Math.PI / 4).translate(0, 3.0, 0), 0x7a7f8a),
+  ]), envMaterial());
+  stone.castShadow = true;
+  stone.receiveShadow = true;
+  g.add(stone);
+  const rune = new THREE.MeshBasicMaterial({ color: new THREE.Color(0x7fe0ff).multiplyScalar(2.2) });
+  for (const [y, w] of [[0.9, 0.36], [1.35, 0.22], [1.8, 0.36], [2.25, 0.2]]) {
+    for (const side of [-1, 1]) {
+      const r = new THREE.Mesh(new THREE.BoxGeometry(w, 0.06, 0.02), rune);
+      r.position.set(0, y, side * 0.29);
+      g.add(r);
+    }
+  }
+  const crystal = new THREE.Mesh(new THREE.OctahedronGeometry(0.32, 0), new THREE.MeshStandardMaterial({ color: 0x9fe8ff, emissive: 0x3ab8ff, emissiveIntensity: 2.4, flatShading: true, roughness: 0.2 }));
+  crystal.scale.set(1, 1.5, 1);
+  crystal.position.y = 3.8;
+  crystal.castShadow = true;
+  g.add(crystal);
+  return { group: g, crystal, glow: new THREE.Vector3(x, g.position.y + 3.8, z) };
 }

@@ -653,3 +653,26 @@ body.touch #ui:has(#boss:not(.hidden)) #chat:not(.open) { top: calc(104px + var(
 #update .ghost { background: none; border-color: transparent; color: var(--muted); padding: 7px 6px; }
 @keyframes update-in { from { opacity: 0; transform: translate(-50%, -12px); } }
 @media (max-width: 520px) { #update { font-size: 12px; gap: 6px; } #update span { flex: 1; } }
+
+/* ------------------------------------------------------------------ a waystone's travel menu (src/places.js) */
+#travel {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 25;
+  width: min(420px, calc(100vw - 24px)); max-height: calc(100vh - 24px); overflow-y: auto; padding: 0 14px 10px;
+}
+#travel header { display: flex; justify-content: space-between; align-items: center; padding: 10px 0 8px; font: 800 16px Cinzel, serif; color: var(--gold); border-bottom: 1px solid rgba(201, 162, 90, .25); margin-bottom: 10px; }
+#travel-list { display: grid; gap: 8px; }
+#travel .land {
+  display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto auto; text-align: left; gap: 1px 10px; padding: 10px 12px;
+  border-left: 4px solid var(--land, var(--edge));
+}
+#travel .land b { font: 800 15px Cinzel, serif; color: var(--gold); }
+#travel .land small { grid-row: 2; color: var(--muted); font-size: 12px; }
+#travel .land span { grid-row: 1 / span 2; grid-column: 2; align-self: center; font-weight: 700; color: #8fe0ff; }
+#travel .land:disabled { opacity: 0.55; }
+#travel .land.here { opacity: 0.8; }
+#travel .land.here span { color: var(--muted); }
+#travel .l-emberwood { --land: #6aa843; }
+#travel .l-frostfang { --land: #a8d4f0; }
+#travel .l-cinderfall { --land: #ff6a1a; }
+#travel .l-shadowmere { --land: #9a6aff; }
+#travel .set-note { margin: 10px 0 2px; }

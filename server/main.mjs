@@ -166,16 +166,24 @@ const handlers = {
     return { t: 'saved' }; // (only sent when the game asked for an answer: before a reload)
   },
 
-  // The hero steps into the world (its game sends where it stands and how it looks).
+  // The hero steps into the world (its game sends where it stands, in which place, and how it looks).
   enter(c, m) {
     needAccount(c);
     if (!c.char) throw new Oops('Pick a hero first.');
     leaveWorld(c, true);
     c.pid = ++lastPid;
-    world.join(c.pid, { name: c.char.name, cls: c.char.cls, p: m.p, k: m.k });
+    const where = world.join(c.pid, { name: c.char.name, cls: c.char.cls, key: c.char.id, map: String(m.map || ''), p: m.p, k: m.k });
     inWorld.set(c.pid, c);
     announce(`${c.char.name} has entered Emberwood.`, c);
-    return { t: 'entered', pid: c.pid, chat: chatLog.slice(-20), online: inWorld.size };
+    return { t: 'entered', pid: c.pid, chat: chatLog.slice(-20), online: inWorld.size, ...where };
+  },
+
+  // Through a waystone, a dungeon's door or its stairs (or, fallen, back to where heroes rise).
+  travel(c, m) {
+    if (!c.pid) throw new Oops('Step into the world first.');
+    const r = world.travel(c.pid, String(m.to || ''), { respawn: !!m.respawn });
+    if (r.error) throw new Oops(r.error);
+    return { t: 'traveled', ...r };
   },
 
   // Where our hero is, what it hit and did (see WorldSim.input); no reply, the world's updates are it.

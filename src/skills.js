@@ -8,8 +8,7 @@
 // cast() returns the action that runs while the skill plays: { t, dur, canMove, moveMult, lockFacing,
 // tick(dt, action), end() } (see Player.update), plus dest: a place to tell the others instead of `at`.
 import * as THREE from 'three';
-import { heightAt, isWalkable } from './world.js';
-import { inDungeon, wallAt } from './dungeon.js';
+import { heightAt, isWalkable, wallAt } from './world.js';
 import { hdr } from './fx.js';
 import { lerp, rand, TAU } from './util.js';
 
@@ -40,7 +39,7 @@ export function reachable(from, to, max) {
   if (len < 0.01) return best;
   for (let s = 0.3; s <= d + 1e-6; s += 0.3) {
     const x = from.x + (dx / len) * s, z = from.z + (dz / len) * s;
-    if (inDungeon(x, z) && wallAt(x, z)) break;
+    if (wallAt(x, z)) break;
     if (isWalkable(x, z, 0.4)) best = new THREE.Vector3(x, heightAt(x, z), z);
   }
   return best;
@@ -470,7 +469,7 @@ export const SKILLS = {
           to = null;
           for (const off of [0, 0.9, -0.9, 1.8, -1.8, Math.PI]) {
             const x = target.pos.x + Math.sin(base + off) * r, z = target.pos.z + Math.cos(base + off) * r;
-            if (isWalkable(x, z, 0.4) && !(inDungeon(x, z) && wallAt(x, z))) { to = new THREE.Vector3(x, heightAt(x, z), z); break; }
+            if (isWalkable(x, z, 0.4) && !wallAt(x, z)) { to = new THREE.Vector3(x, heightAt(x, z), z); break; }
           }
           if (!to) to = reachable(from, target.pos, 12);
         } else {

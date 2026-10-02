@@ -1,5 +1,6 @@
 // The game's side of the shared world (sim/world.js: run by the game server, or by local.js offline).
-// Updates arrive ten times a second. Monsters and other heroes are shown a moment (DELAY) in the past,
+// We're in one place (area) of it at a time; the world numbers our stays (ep), so updates from a place we
+// just left are ignored. Updates arrive ten times a second. Monsters and other heroes are shown a moment (DELAY) in the past,
 // so their movement can be filled in smoothly between updates and what they do happens in step with
 // it. Our own hero is never delayed: we tell the world where it is, what it hit and what it did.
 import { lookOf } from './player.js';
@@ -16,6 +17,7 @@ export class WorldLink {
     this.game = game;
     this.net = null;
     this.pid = 0;
+    this.ep = 0; // which stay in which place the world's updates must be about
     this.inWorld = false;
     this.clock = 0; // s, our own time
     this.offset = null; // ms: our clock minus the world's, from the quickest updates
@@ -34,15 +36,32 @@ export class WorldLink {
     net.on('w', (m) => this.receive(m));
   }
 
-  // Our hero steps into the world (after picking a hero, and again after reconnecting).
+  // Our hero steps into the world (after picking a hero, and again after reconnecting), where it is. If
+  // the world puts it somewhere else (a place it can't be in), we go there.
   async enter() {
     const g = this.game;
     this.reset();
-    const r = await this.net.request('enter', { name: g.character.name, cls: g.character.cls, p: this.state(), k: lookOf(g.player) });
+    const r = await this.net.request('enter', { name: g.character.name, cls: g.character.cls, map: g.places.id, p: this.state(), k: lookOf(g.player) });
     this.reset();
     this.pid = r.pid;
+    this.ep = r.ep ?? 0;
     this.inWorld = true;
     g.chat?.entered(r);
+    if (r.at || (r.map && r.map !== g.places.id)) {
+      const at = r.at || g.player.pos;
+      await g.arrive({ map: r.map, x: at.x, z: at.z, yaw: at.yaw ?? g.player.yaw });
+    }
+    return r;
+  }
+
+  // Through a portal (or, fallen, to where heroes rise): the world moves us; what we saw stays behind.
+  async travel(to, respawn = false) {
+    const r = await this.net.request('travel', { to, respawn });
+    this.ep = r.ep;
+    this.queue = [];
+    this.hits = [];
+    this.game.enemies.clear();
+    this.game.others.clear();
     return r;
   }
 
@@ -65,7 +84,7 @@ export class WorldLink {
 
   // ---------------------------------------------------------------- what the world says
   receive(m) {
-    if (!this.inWorld || !Number.isFinite(m.ts)) return;
+    if (!this.inWorld || !Number.isFinite(m.ts) || (m.ep !== undefined && m.ep !== this.ep)) return;
     const lag = this.clock * 1000 - m.ts;
     // the quickest update gives the truest offset; creep up slowly in case the clocks drift apart
     this.offset = this.offset === null || lag < this.offset ? lag : this.offset + 0.25;
@@ -91,7 +110,7 @@ export class WorldLink {
   dispatch(ev, stale) {
     const g = this.game;
     if (ev[0] === 'd') g.enemies.died(ev); // credit for kills always counts
-    else if (ev[0] === 'L') g.dungeon.onLichDefeated();
+    else if (ev[0] === 'L') g.places.bossDown(ev[1]);
     else if (stale) return;
     else if (ev[0] === 'p') g.others.act(ev[1], ev[2]);
     else g.enemies.event(ev);

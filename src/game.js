@@ -1,5 +1,6 @@
-// Game orchestration: renderer, camera, input, combat resolution, rewards, saving. The monsters and the
-// other heroes live in the shared world (link.js talks to it); our own hero is played right here.
+// Game orchestration: renderer, camera, input, combat resolution, rewards, saving, travel. The monsters
+// and the other heroes live in the shared world (link.js talks to it); our own hero is played right here,
+// in one place at a time (places.js: Emberwood, the lands beyond the waystones, the dungeons).
 import * as THREE from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
@@ -7,6 +8,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { loadAssets, buildIcons } from './assets.js';
 import { buildWorld, heightAt, zoneAt, worldUniforms, POND } from './world.js';
+import { MAPS } from './maps.js';
 import { FX } from './fx.js';
 import { Player } from './player.js';
 import { EnemyManager } from './enemies.js';
@@ -19,7 +21,7 @@ import { monsterXp } from './monsters.js';
 import { Input } from './input.js';
 import { Town } from './town.js';
 import { Quests } from './quests.js';
-import { Dungeon } from './dungeon.js';
+import { Places } from './places.js';
 import { WorldLink } from './link.js';
 import { RemotePlayers } from './others.js';
 import { Chat } from './chat.js';
@@ -128,8 +130,8 @@ export class Game {
     p.setClass(char.cls);
     p.reset();
     if (char.save) p.load(char.save); else p.starterKit();
-    // nothing of the previous hero's world stays behind
-    if (this.dungeon.inside) this.dungeon.setInside(false);
+    // nothing of the previous hero's world stays behind: a hero starts in Emberwood's camp
+    this.places.enter('emberwood');
     this.loot.clear();
     this.projectiles.clear();
     this.town.buyback = [];
@@ -216,11 +218,11 @@ export class Game {
     this.spiritLight.position.copy(this.world.spiritLight);
     this.scene.add(this.spiritLight);
     this.fireAcc = 0;
-    // these four become the nearest torches in the crypt; remember how they were set up
+    // away from Emberwood these four go to the nearest torches and fires; remember how they were set up
     this.staticLights = [...this.fireLights, cl, this.spiritLight].map((light) => ({
       light, pos: light.position.clone(), color: light.color.clone(), distance: light.distance, decay: light.decay, intensity: light.intensity,
     }));
-    this.dungeon = new Dungeon(this); // the crypt under the graveyard
+    this.places = new Places(this); // where we are, and the ways to the other places
     this.traveling = false;
 
     this.bindInput();
@@ -290,45 +292,72 @@ export class Game {
     this.ui.setTouchMode(input.touchMode);
   }
 
-  // E / the action button: whatever is in reach (camp stalls, the crypt door and stairs, chests)
+  // E / the action button: whatever is in reach (camp stalls, waystones, dungeon doors and stairs, chests)
   interact() {
     if (this.town.near) this.town.interact();
-    else this.dungeon.interact();
+    else this.places.interact();
   }
 
-  // Down into the crypt (inside = true) or back up to the graveyard, behind a quick fade.
-  async travel(inside) {
-    if (this.traveling || !this.player.alive) return;
+  // To another place (maps.js) behind a quick fade: through a waystone, a dungeon's door or its stairs, or
+  // (respawn) from where we fell to where heroes rise. The world decides; we draw the place first.
+  async travel(to, { respawn = false } = {}) {
+    const map = MAPS[to], ui = this.ui, p = this.player;
+    if (this.traveling || !map || (!respawn && !p.alive)) return false;
+    if (!respawn && p.level < map.minLevel) { ui.centerMsg(`${map.name} is for heroes of level ${map.minLevel} and up`); return false; }
     this.traveling = true;
-    const ui = this.ui, p = this.player;
     ui.closeInventory();
-    ui.fade(true, inside ? 'Descending into the crypt…' : 'Climbing back to the graveyard…');
-    this.sfx.play('portal');
-    await new Promise((r) => setTimeout(r, 420));
+    this.places.closeTravel();
+    const from = this.places.map;
+    ui.fade(true, respawn ? 'You rise again…' : map.kind === 'dungeon' ? `Descending into ${map.name}…`
+      : from.kind === 'dungeon' ? 'Climbing back up…' : `Traveling to ${map.name}…`);
+    if (!respawn) this.sfx.play('portal');
+    let r;
     try {
-      if (inside) await this.dungeon.load();
+      await Promise.all([this.places.load(to), new Promise((res) => setTimeout(res, 420))]);
+      r = await this.link.travel(to, respawn);
     } catch (err) {
-      console.warn('crypt failed to load', err);
+      console.warn('travel failed', err);
       ui.fade(false);
-      ui.centerMsg('The crypt door will not open (could not load the dungeon)');
+      ui.centerMsg(/load|fetch|network|\.glb/i.test(err.message) ? `Could not load ${map.name}: try again` : err.message);
       this.traveling = false;
-      return;
+      return false;
     }
-    const to = inside ? this.dungeon.arrival : this.dungeon.exitPoint;
-    p.pos.set(to.x, heightAt(to.x, to.z), to.z);
-    p.yaw = p.targetYaw = to.yaw;
+    await this.arrive(r);
+    ui.fade(false);
+    this.traveling = false;
+    return true;
+  }
+
+  // Show the place the world put us in ({ map, x, z, yaw }), with our hero there.
+  async arrive(r) {
+    const p = this.player;
+    await this.places.load(r.map);
+    this.places.enter(r.map);
+    p.pos.set(r.x, heightAt(r.x, r.z), r.z);
+    p.yaw = p.targetYaw = r.yaw ?? 0;
     p.group.position.copy(p.pos);
+    p.group.rotation.y = p.yaw;
     this.camFocus.copy(p.pos);
     this.projectiles.clear();
-    this.dungeon.setInside(inside);
+    this.currentZone = undefined; // (announce where we are)
     this.updateCamera(0);
     // warm up new shaders while the screen is black (in parallel where the GPU driver allows it)
     try {
       if (this.renderer.extensions.has('KHR_parallel_shader_compile')) await this.renderer.compileAsync(this.scene, this.camera);
       else this.renderer.compile(this.scene, this.camera);
     } catch { /* they compile on first draw instead */ }
-    ui.fade(false);
-    this.traveling = false;
+  }
+
+  // "Rise again": where heroes who fall here rise (the camp, or outside the dungeon), full of life.
+  async rise() {
+    const p = this.player, to = this.places.map.respawn;
+    if (!(await this.travel(to.map, { respawn: true }))) {
+      if (to.map !== this.places.id) return; // (can't reach the world: stay down and try again)
+      p.pos.set(to.x, heightAt(to.x, to.z), to.z); // the same place: rise here anyway
+      p.yaw = p.targetYaw = to.yaw;
+      this.camFocus.copy(p.pos);
+    }
+    p.revive();
   }
 
   updateAim() {
@@ -608,43 +637,22 @@ export class Game {
     this.updateAim();
     this.player.update(dt);
     this.town.update(dt);
-    this.dungeon.update(dt);
+    this.places.update(dt);
     this.enemies.update(dt);
     this.others.update(dt);
     this.projectiles.update(dt);
     this.loot.update(dt);
 
-    // ambience: campfires, torches, crystal
-    this.fireAcc += dt * 34;
-    const pp = this.player.pos, inside = this.dungeon.inside;
-    while (this.fireAcc >= 1) {
-      this.fireAcc -= 1;
-      if (inside) {
-        for (const f of this.dungeon.flames) if (f.distanceTo(pp) < 32) this.fx.fire(f, 0.28);
-        continue;
-      }
-      for (const f of this.world.fires) if (f.distanceTo(pp) < 45) this.fx.fire(f, f.y > heightAt(f.x, f.z) + 1 ? 0.55 : 1);
-      for (const f of this.world.spiritFires) if (f.distanceTo(pp) < 45) this.fx.fire(f, 0.6, true);
-    }
-    if (!inside) { // in the crypt these lights belong to the torches (dungeon.js)
-      this.fireLights.forEach((l, i) => { l.intensity = 11 + Math.sin(this.time * 13 + i) * 1.5 + Math.sin(this.time * 7.3 + i * 2) * 1.5; });
-      this.spiritLight.intensity = 9 + Math.sin(this.time * 3.1) * 2 + Math.sin(this.time * 8.7) * 0.8;
-    }
-    const cr = this.world.crystal;
-    cr.rotation.y += dt * 0.9;
-    cr.position.y = heightAt(cr.position.x, cr.position.z) + 2.3 + Math.sin(this.time * 1.6) * 0.18;
-    if (Math.random() < dt * 8) {
-      this.fx.add.emit({ pos: cr.position, count: 1, spread: 0.6, velSpread: 0.4, vel: { x: 0, y: 0.8, z: 0 }, color: new THREE.Color(0xb080ff).multiplyScalar(2.5), size: 0.14, sizeEnd: 0.02, life: 1.6, drag: 0.8 });
-    }
-
+    const pp = this.player.pos, map = this.places.map;
     const zone = zoneAt(pp.x, pp.z);
     if (zone !== this.currentZone) {
       if (zone) this.ui.zoneToast(zone);
+      else if (this.currentZone === undefined) this.ui.zoneToast({ name: map.name, sub: map.sub }); // (just arrived)
       this.currentZone = zone;
-      this.ui.el.zoneName.textContent = zone ? zone.name : 'The Wilds';
+      this.ui.el.zoneName.textContent = zone ? zone.name : map.id === 'emberwood' ? 'The Wilds' : map.name;
     }
     this.ui.setBoss(this.enemies.boss);
-    this.updateSound(rawDt, zone, inside);
+    this.updateSound(rawDt, zone);
 
     this.fx.update(dt);
     this.updateCamera(rawDt);
@@ -654,15 +662,15 @@ export class Game {
   }
 
   // Music follows where you are (and boss fights); ambience follows what's around you.
-  updateSound(dt, zone, inside) {
-    const sfx = this.sfx;
+  updateSound(dt, zone) {
+    const sfx = this.sfx, map = this.places.map, inside = map.kind === 'dungeon';
     if (!sfx.music) return;
-    sfx.music.play(this.enemies.boss ? 'boss' : inside ? 'crypt' : 'world');
+    sfx.music.play(this.enemies.boss ? 'boss' : map.music || 'world');
     const p = this.player.pos;
     let fire = Infinity;
-    this.outdoorFires ||= [...this.world.fires, ...this.world.spiritFires];
-    for (const f of inside ? this.dungeon.flames : this.outdoorFires) fire = Math.min(fire, f.distanceTo(p));
-    sfx.ambience.update(dt, { inside, zone: zone?.id, fire, pond: Math.hypot(p.x - POND.x, p.z - POND.z) });
+    for (const f of this.places.view.fires) fire = Math.min(fire, f.pos.distanceTo(p));
+    const pond = map.id === 'emberwood' ? Math.hypot(p.x - POND.x, p.z - POND.z) : Infinity;
+    sfx.ambience.update(dt, { inside, zone: zone?.id, fire, pond, land: map.kind === 'outdoor' ? map.id : null });
     if (inside !== this.soundInside) { // the crypt echoes
       this.soundInside = inside;
       sfx.setReverb('ambience', inside ? 0.45 : 0.06);

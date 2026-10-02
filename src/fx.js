@@ -145,7 +145,12 @@ export class FX {
     this.soft.emit({ pos, count: 10, spread: 0.5, velSpread: 1, vel: { x: 0, y: 0.8, z: 0 }, color: new THREE.Color(0xcfc6b2), alpha: 0.4, size: 0.7, sizeEnd: 1.5, life: 1.0, drag: 2.5 });
     this.add.emit({ pos: { x: pos.x, y: pos.y + 0.6, z: pos.z }, count: 14, spread: 0.2, velSpread: 0.5, vel: { x: 0, y: 1.6, z: 0 }, color: hdr(eyeHex, 2.2), colorEnd: hdr(eyeHex, 0.2), size: 0.2, sizeEnd: 0.02, life: 1.2, drag: 1 });
   }
-  fire(pos, scale = 1, spirit = false) {
+  // a flame: orange, or spirit-green, or any colour (color: a torch's in an icy or haunted place)
+  fire(pos, scale = 1, spirit = false, color = null) {
+    if (color !== null && color !== 0xff8a3a) {
+      this.add.emit({ pos, count: 1, spread: 0.25 * scale, velSpread: 0.25, vel: { x: 0, y: 1.7 * scale, z: 0 }, color: hdr(color, 2.4), colorEnd: hdr(color, 0.45), size: 0.52 * scale, sizeEnd: 0.1, life: 0.7, drag: 1 });
+      return;
+    }
     if (spirit) {
       this.add.emit({ pos, count: 1, spread: 0.2 * scale, velSpread: 0.2, vel: { x: 0, y: 1.5 * scale, z: 0 }, color: hdr(0x9dffb0, 2.4), colorEnd: hdr(0x10c060, 0.5), size: 0.5 * scale, sizeEnd: 0.08, life: 0.8, drag: 1 });
       return;

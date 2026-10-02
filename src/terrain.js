@@ -56,15 +56,29 @@ export function pathDist(x, z) {
   return d;
 }
 
-// A walled-off area elsewhere in the scene (the crypt dungeon, see crypt-map.js) brings its own
-// floor, walls and zones; the functions below ask it first.
-let region = null;
+// The other places in the same coordinates, far from Emberwood (the dungeons and the lands beyond the
+// waystones, see maps.js), each bring their own ground, walls and zones; the functions below ask them
+// first. { contains(x, z), heightAt(x, z), resolve(pos, r), clear(x, z, r), zoneAt(x, z), wallAt?(x, z) }
+const regions = [];
+let lastRegion = null;
 export function registerRegion(r) {
-  region = r;
+  regions.push(r);
+}
+
+export function regionAt(x, z) {
+  if (lastRegion && lastRegion.contains(x, z)) return lastRegion;
+  for (const r of regions) if (r.contains(x, z)) return (lastRegion = r);
+  return null;
+}
+
+// A dungeon wall here (bolts stop, blinks don't land)?
+export function wallAt(x, z) {
+  return !!regionAt(x, z)?.wallAt?.(x, z);
 }
 
 export function heightAt(x, z) {
-  if (region && region.contains(x, z)) return region.floorY;
+  const region = regionAt(x, z);
+  if (region) return region.heightAt(x, z);
   let h = 1.35 + fbm(x * 0.028, z * 0.028, 4) * 2.3 + noise2(x * 0.13, z * 0.13) * 0.18;
   h = 0.8 + Math.log1p(Math.exp((h - 0.8) * 3)) / 3; // soft floor → flat meadows in lowlands
   const dc = Math.hypot(x, z);
@@ -77,7 +91,8 @@ export function heightAt(x, z) {
 }
 
 export function zoneAt(x, z) {
-  if (region && region.contains(x, z)) return region.zoneAt(x, z);
+  const region = regionAt(x, z);
+  if (region) return region.zoneAt(x, z);
   for (const zn of ZONES) if (Math.hypot(x - zn.x, z - zn.z) < zn.r) return zn;
   return null;
 }
@@ -98,7 +113,8 @@ export function addCollider(x, z, r) {
 
 // Push a circle at pos (anything with x and z) out of whatever it overlaps.
 export function resolveCollision(pos, radius) {
-  if (region && region.contains(pos.x, pos.z)) {
+  const region = regionAt(pos.x, pos.z);
+  if (region) {
     region.resolve(pos, radius);
   } else {
     const d = Math.hypot(pos.x, pos.z);
@@ -127,7 +143,8 @@ export function resolveCollision(pos, radius) {
 }
 
 export function isWalkable(x, z, radius = 0.6) {
-  if (region && region.contains(x, z)) {
+  const region = regionAt(x, z);
+  if (region) {
     if (!region.clear(x, z, radius)) return false;
   } else {
     if (Math.hypot(x, z) > WORLD_RADIUS - 3) return false;
@@ -234,6 +251,7 @@ function planProps(rng) {
   put('bench', -2.1, -1.1, { rotY: -1.05 });
   crate(-7.2, 1.2, 0.3); crate(-7.9, 2.2, 0.8, 0.7); barrel(7.4, -1.2); barrel(8.0, -0.3);
   put('signpost', 2.6, -9);
+  put('waystone', 5.5, 5.5, {}, 0.9); // to the other lands (maps.js WAYSTONE)
   // palisade ring with gaps for paths
   for (let i = 0; i < 64; i++) {
     const a = (i / 64) * Math.PI * 2;

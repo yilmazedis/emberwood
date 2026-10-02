@@ -42,7 +42,8 @@ export class Ambience {
     b.g.gain.setTargetAtTime(level, this.ctx.currentTime, lag);
   }
 
-  // env: { inside, zone, fire (m to the nearest flame), pond (m to the pond) }
+  // env: { inside, zone, fire (m to the nearest flame), pond (m to the pond), land: a land beyond the
+  // waystones (frostfang: howling wind; cinderfall: a low rumble; shadowmere: crows), or null }
   update(dt, env) {
     if (!this.beds) {
       this.beds = {
@@ -52,22 +53,22 @@ export class Ambience {
         fire: this.bed('lowpass', 320, 0.6),
       };
     }
-    const { inside, zone, fire, pond } = env, t = this.ctx.currentTime;
-    const spooky = zone === 'graveyard' || zone === 'stones';
+    const { inside, zone, fire, pond, land = null } = env, t = this.ctx.currentTime;
+    const spooky = zone === 'graveyard' || zone === 'stones' || land === 'shadowmere';
     if ((this.timers.wind -= dt) <= 0) { // mostly a soft breath; now and then a gust swells and fades
       const gusting = Math.random() < 0.3;
       this.timers.wind = gusting ? 2.5 + Math.random() * 2 : 4 + Math.random() * 6;
       this.gust = gusting ? 0.9 + Math.random() * 0.6 : 0.3 + Math.random() * 0.3;
       this.beds.wind.f.frequency.setTargetAtTime((inside ? 160 : 260) + this.gust * (inside ? 200 : 380), t, 1.8);
     }
-    this.set('wind', (inside ? 0.07 : spooky ? 0.13 : 0.1) * this.gust, 1.6);
-    this.set('rumble', inside ? 0.28 : 0, 1.5);
+    this.set('wind', (inside ? 0.07 : land === 'frostfang' ? 0.19 : spooky ? 0.13 : 0.1) * this.gust, 1.6);
+    this.set('rumble', inside ? 0.28 : land === 'cinderfall' ? 0.14 : 0, 1.5);
     this.set('water', !inside && pond < 18 ? 0.1 * (1 - pond / 18) : 0);
     const near = Math.max(0, 1 - fire / 8);
     this.set('fire', 0.05 * near, 0.3); // a faint roar: the crackles carry the fire
     if (near > 0 && Math.random() < dt * 10 * near) this.crackle(near);
-    if (!inside && !spooky && (this.timers.bird -= dt) <= 0) { this.timers.bird = 2.5 + Math.random() * 7; this.bird(); }
-    if (!inside && zone === 'graveyard' && (this.timers.crow -= dt) <= 0) { this.timers.crow = 9 + Math.random() * 14; this.crow(); }
+    if (!inside && !spooky && !land && (this.timers.bird -= dt) <= 0) { this.timers.bird = 2.5 + Math.random() * 7; this.bird(); }
+    if (!inside && (zone === 'graveyard' || land === 'shadowmere') && (this.timers.crow -= dt) <= 0) { this.timers.crow = 9 + Math.random() * 14; this.crow(); }
     if (inside && (this.timers.drip -= dt) <= 0) { this.timers.drip = 1 + Math.random() * 3.5; this.drip(); }
   }
 

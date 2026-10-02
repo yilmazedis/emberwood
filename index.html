@@ -41,11 +41,19 @@
 <link rel="modulepreload" href="src/character.js">
 <link rel="modulepreload" href="src/player.js">
 <link rel="modulepreload" href="src/skills.js">
-<link rel="modulepreload" href="src/crypt-map.js">
+<link rel="modulepreload" href="src/dungeon-map.js">
+<link rel="modulepreload" href="src/outdoor-map.js">
+<link rel="modulepreload" href="src/maps/crypt.js">
+<link rel="modulepreload" href="src/maps/frostfang.js">
+<link rel="modulepreload" href="src/maps/cinderfall.js">
+<link rel="modulepreload" href="src/maps/shadowmere.js">
+<link rel="modulepreload" href="src/maps.js">
 <link rel="modulepreload" href="src/monsters.js">
 <link rel="modulepreload" href="src/sim/world.js">
 <link rel="modulepreload" href="src/enemies.js">
 <link rel="modulepreload" href="src/dungeon.js">
+<link rel="modulepreload" href="src/lands.js">
+<link rel="modulepreload" href="src/places.js">
 <link rel="modulepreload" href="src/combat.js">
 <link rel="modulepreload" href="src/town.js">
 <link rel="modulepreload" href="src/ui.js">
@@ -173,6 +181,13 @@
 
   <div id="tooltip" class="hidden"></div>
 
+  <!-- a waystone's travel menu (src/places.js) -->
+  <div id="travel" class="panel hidden">
+    <header><span>Waystone <small>travel to another land</small></span><button class="close" data-close="travel" aria-label="Close">×</button></header>
+    <div id="travel-list"></div>
+    <p class="set-note">Each land's dungeon is a copy of your own: your party shares it, nobody else comes in.</p>
+  </div>
+
   <div id="help" class="panel hidden">
     <header><span>Controls</span><button class="close" data-close="help">×</button></header>
     <ul class="desk-only">
@@ -184,6 +199,7 @@
       <li><kbd>E</kbd> Trade with Wren the merchant, open your stash, or read the notice board (in camp)</li>
       <li>Accept quests at the notice board, then come back to claim the reward. The golden <b>!</b> means something is waiting.</li>
       <li>The crypt door in the graveyard leads down to a dungeon and its boss, <b>Morvain the Lich</b>. Step out of his violet circles!</li>
+      <li>The <b>waystone</b> in camp takes you to other lands (from level 8): Frostfang, Cinderfall and Shadowmere, each with its own boss and dungeon. Dungeons are a copy of your own (your party's).</li>
       <li><kbd>Enter</kbd> Chat with everyone in the world (Enter again to send, Esc to cancel)</li>
       <li><kbd>Mouse wheel</kbd> Zoom</li>
       <li><kbd>Esc</kbd> Settings: music, sound, graphics, leave the game · <kbd>M</kbd> mute</li>
@@ -200,6 +216,7 @@
       <li><b>In camp</b>: tap <b>Trade</b> above Wren the merchant, <b>Open</b> above your stash chest, or <b>Read</b> at the notice board.</li>
       <li>Accept quests at the notice board, then come back to claim the reward. The golden <b>!</b> means something is waiting.</li>
       <li>The crypt door in the graveyard leads down to a dungeon and its boss, <b>Morvain the Lich</b>. Step out of his violet circles!</li>
+      <li>The <b>waystone</b> in camp takes you to other lands (from level 8): Frostfang, Cinderfall and Shadowmere, each with its own boss and dungeon. Dungeons are a copy of your own (your party's).</li>
       <li><b>Chat</b>: talk to everyone in the world.</li>
       <li>Walk over loot to pick it up. The camp is safe and heals you fast.</li>
       <li>Other heroes fight the same monsters: everyone who hits one gets the XP, and their own loot.</li>

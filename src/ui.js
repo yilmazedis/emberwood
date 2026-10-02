@@ -4,8 +4,7 @@ import { Assets } from './assets.js';
 import { RARITY, itemLines, COMPARE_STATS } from './items.js';
 import { xpForLevel, STASH_SIZE, MAX_LEVEL } from './player.js';
 import { ALE_PRICE } from './town.js';
-import { ZONES, TOWN, CRYPT } from './world.js';
-import { ROOMS } from './dungeon.js';
+import { TOWN } from './world.js';
 import { CLASSES } from './classes.js';
 import { rand } from './util.js';
 
@@ -552,6 +551,7 @@ export class UI {
   // Esc: close whatever is open, otherwise open the settings
   escape() {
     if (this.settingsOpen) return this.closeSettings();
+    if (this.game.places?.travelOpen) return this.game.places.closeTravel();
     if (this.invOpen || !this.el.help.classList.contains('hidden')) {
       this.closeInventory();
       this.togglePanel('help', false);
@@ -798,27 +798,25 @@ export class UI {
   }
 
   // ---------------------------------------------------------------- minimap
-  // Where a quest's dashed ring goes on the current map (the crypt quest points at its door from outside).
-  questRing(zoneId, inside) {
-    if (zoneId === 'crypt') return inside ? { x: ROOMS.B.cx, z: ROOMS.B.cz, r: 11 } : { x: CRYPT.x - 2, z: CRYPT.z, r: 3.5 };
-    return inside ? null : ZONES.find((z) => z.id === zoneId) || null;
-  }
-
   drawMinimap() {
-    const g = this.game, ctx = this.mm, S = 180, inside = g.dungeon.inside;
-    const base = inside ? g.dungeon.minimap : g.world.minimap, R = base.range, ox = base.cx || 0, oz = base.cz || 0;
+    const g = this.game, ctx = this.mm, S = 180, places = g.places, map = places.map, inside = map.kind === 'dungeon';
+    const base = places.view.minimap, R = base.range, ox = base.cx || 0, oz = base.cz || 0;
     const m = (x, z) => [((x - ox + R) / (2 * R)) * S, ((z - oz + R) / (2 * R)) * S];
     const onMap = ([x, y]) => x > -8 && x < S + 8 && y > -8 && y < S + 8;
-    ctx.clearRect(0, 0, S, S);
-    ctx.drawImage(base.canvas, 0, 0, S, S);
-    if (!inside) { // camp marker
-      const [cx, cy] = m(0, 0);
-      ctx.fillStyle = '#ffcf6a';
-      ctx.strokeStyle = '#3a2a14';
+    const diamond = ([x, y], r, fill, stroke) => {
+      ctx.fillStyle = fill;
+      ctx.strokeStyle = stroke;
       ctx.lineWidth = 1.5;
       ctx.beginPath();
-      ctx.moveTo(cx, cy - 5); ctx.lineTo(cx + 5, cy); ctx.lineTo(cx, cy + 5); ctx.lineTo(cx - 5, cy); ctx.closePath();
+      ctx.moveTo(x, y - r); ctx.lineTo(x + r, y); ctx.lineTo(x, y + r); ctx.lineTo(x - r, y); ctx.closePath();
       ctx.fill(); ctx.stroke();
+    };
+    ctx.clearRect(0, 0, S, S);
+    ctx.drawImage(base.canvas, 0, 0, S, S);
+    if (!inside) { // the camp, its waystone and the dungeon doors
+      diamond(m(map.camp.x, map.camp.z), 5, '#ffcf6a', '#3a2a14');
+      diamond(m(map.waystone.x, map.waystone.z), 3.5, '#7fe0ff', '#0a2a3a');
+      for (const p of map.portals) if (p.id !== 'waystone') diamond(m(p.x, p.z), 3.5, '#c79aff', '#1a0a2a');
     }
     // quest targets: a dashed gold ring on the zone; a gold "!" on the board when it has news
     ctx.save();
@@ -826,7 +824,7 @@ export class UI {
     ctx.strokeStyle = 'rgba(255, 210, 90, 0.95)';
     ctx.lineWidth = 1.6;
     for (const { q } of g.quests.tracked()) {
-      const zone = q.state === 'active' && this.questRing(q.def.zone, inside);
+      const zone = q.state === 'active' && places.questRing(q.def.zone);
       if (!zone) continue;
       const [zx, zy] = m(zone.x, zone.z);
       ctx.beginPath();
@@ -834,7 +832,7 @@ export class UI {
       ctx.stroke();
     }
     ctx.restore();
-    if (g.quests.markerVisible() && !inside) {
+    if (g.quests.markerVisible() && map.id === 'emberwood') {
       const [bx, by] = m(TOWN.board.x, TOWN.board.z);
       ctx.font = '900 12px Inter, sans-serif';
       ctx.textAlign = 'center';

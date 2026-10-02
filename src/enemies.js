@@ -12,6 +12,8 @@ import { rand, angleDiff, yawTo, lerp, clamp, TAU, has } from './util.js';
 export { ENEMY_TYPES, SPAWNS } from './monsters.js';
 
 const UP = new THREE.Vector3(0, 1, 0);
+// what the log calls a boss: Morvain, Hrimgar, Forgemaster Kaldur…
+const shortName = (d) => d.name.split(/,| the /)[0];
 const JUMP = 5; // m between two updates: a blink, not a walk (no sliding across)
 const lerpAngle = (a, b, t) => a + angleDiff(a, b) * t;
 
@@ -80,7 +82,7 @@ export class Enemy {
       this.obj.scale.setScalar(rising ? 0.01 : d.size);
     } else {
       this.h = new Humanoid(d.model, { scale: d.scale || 1, tint: d.tint ?? null });
-      this.h.equip('r', d.weapon, d.weaponGlow ?? null);
+      this.h.equip(d.archer ? 'l' : 'r', d.weapon, d.weaponGlow ?? null); // (a bow in the left hand)
       if (d.offhand) this.h.equip('l', d.offhand);
       else if (this.type === 'bandit' && this.id % 2) this.h.equip('l', 'shield_round'); // (the same for everyone)
       if (d.eyes) this.h.setGlow('Glow', d.eyes, 2.6);
@@ -239,17 +241,17 @@ export class Enemy {
         this.attack = { kind: 'cast', t: 0, dur: 1, hitAt: 0.5, hit: false, target: ev[2], n: ev[3] };
         this.h?.anim.play('Throw', { timeScale: 1.4 });
         break;
-      case 'u': // the Lich raises the dead (the world spawns them)
+      case 'u': // a boss calls for help: the Lich raises the dead, a jarl calls his raiders (the world spawns them)
         this.attack = { kind: 'summon', t: 0, dur: 1.5, hitAt: 0.8, hit: false };
-        this.h?.anim.play('Use_Item', { timeScale: 0.9 });
-        g.dungeon.pulse(1.6);
+        this.h?.anim.play(this.def.kind === 'caster' ? 'Use_Item' : 'Interact', { timeScale: 0.9 });
+        g.places.pulse(1.6);
         g.sfx.play('summon', this.vol());
-        g.ui.log('<b>Morvain</b> calls the dead to rise!', 'bad');
+        g.ui.log(`<b>${shortName(this.def)}</b> ${this.def.summons?.[0]?.includes('skeleton') || this.def.lich ? 'calls the dead to rise!' : 'calls for help!'}`, 'bad');
         break;
       case 'o': // the Lich draws grave circles…
         this.attack = { kind: 'circles', t: 0, dur: 1.1, hitAt: 0.5, hit: false };
         this.h?.anim.play('Interact', { timeScale: 1.2 });
-        g.dungeon.pulse(0.8);
+        g.places.pulse(0.8);
         break;
       case 'O': { // …here (x, z pairs); they erupt a moment later
         const s = ev[2] || [];
@@ -312,7 +314,7 @@ export class Enemy {
     const n = Math.max(1, Math.min(7, a.n | 0));
     for (let i = 0; i < n; i++) {
       const dir = aim.clone().applyAxisAngle(UP, (i - (n - 1) / 2) * 0.2); // the Lich fans out a volley
-      g.projectiles.spawn({ from: hand.clone(), dir, owner: 'enemy', dmg: this.dmg, speed: d.lich ? 12 : 11, color: d.bolt || 0xb070ff, radius: 0.35, range: d.lich ? 20 : 16, size: 0.3 });
+      g.projectiles.spawn({ from: hand.clone(), dir, owner: 'enemy', dmg: this.dmg, speed: d.lich ? 12 : d.archer ? 17 : 11, color: d.bolt || 0xb070ff, radius: 0.35, range: d.lich ? 20 : 16, size: d.archer ? 0.18 : 0.3, small: d.archer });
     }
   }
 
@@ -347,10 +349,10 @@ export class Enemy {
     this.h?.setGlow('Glow', 0xff5ad8, 4);
     if (quiet) return;
     const vol = this.vol();
-    g.ui.log('<b>Morvain</b> is enraged!', 'bad');
+    g.ui.log(`<b>${shortName(this.def)}</b> is enraged!`, 'bad');
     g.sfx.play('enrage', vol);
     g.fx.ring(this.pos, 0.5, 6, 0xff5ad8, 0.7);
-    g.dungeon.pulse(2);
+    g.places.pulse(2);
     g.shake(0.4 * vol);
   }
 

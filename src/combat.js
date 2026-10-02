@@ -6,8 +6,7 @@
 // slime or dive into a bump; they end on a monster, a wall or at their range).
 import * as THREE from 'three';
 import { cloneItem } from './assets.js';
-import { heightAt, resolveCollision } from './world.js';
-import { inDungeon, wallAt } from './dungeon.js';
+import { heightAt, resolveCollision, wallAt } from './world.js';
 import { RARITY, BASES } from './items.js';
 import { buildGearModel } from './gear.js';
 import { hdr } from './fx.js';
@@ -70,7 +69,7 @@ export class Projectiles {
         }
       }
       if (!hit && !p.glide && p.pos.y < heightAt(p.pos.x, p.pos.z) + 0.05) hit = 'ground';
-      if (!hit && inDungeon(p.pos.x, p.pos.z) && wallAt(p.pos.x, p.pos.z)) hit = 'ground'; // crypt walls stop bolts
+      if (!hit && wallAt(p.pos.x, p.pos.z)) hit = 'ground'; // dungeon walls stop bolts
       if (hit || p.traveled > p.range) {
         this.explode(p, hit);
         g.scene.remove(p.mesh);
@@ -227,7 +226,7 @@ export class LootManager {
       if (!l.landed) {
         l.vel.y -= 16 * dt;
         gp.addScaledVector(l.vel, dt);
-        if (inDungeon(gp.x, gp.z)) resolveCollision(gp, 0.35); // don't land inside a crypt wall
+        resolveCollision(gp, 0.35); // don't land inside a wall or a rock
         l.obj.rotation.y += dt * 8;
         if (gp.y <= ground && l.vel.y < 0) {
           gp.y = ground;

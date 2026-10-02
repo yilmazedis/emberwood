@@ -1,24 +1,28 @@
-// Packs the KayKit Dungeon pieces the crypt uses (every model named in src/crypt-map.js) into one
-// binary glTF, assets/dungeon/crypt.glb, so the game makes a single request instead of ~80 (the host
-// is slow to answer each one). The pieces share one material and texture, which are stored once.
+// Packs the KayKit Dungeon pieces the dungeons use (every model named in src/dungeon-map.js and the maps
+// in src/maps/) into one binary glTF, assets/dungeon/dungeon.glb, so the game makes a single request
+// instead of ~100 (the host is slow to answer each one). The pieces share one material and texture, which
+// are stored once.
 //
 //   node tools/pack-dungeon.mjs "<KayKit_Dungeon_Pack_1.1_FREE>/Assets/gltf"
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, readdirSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SRC = process.argv[2];
-const OUT = join(ROOT, 'assets/dungeon/crypt.glb');
+const OUT = join(ROOT, 'assets/dungeon/dungeon.glb');
 if (!SRC) {
   console.error('usage: node tools/pack-dungeon.mjs <KayKit Dungeon pack>/Assets/gltf');
   process.exit(1);
 }
 
-// every model crypt-map.js names: put('…'), banner('…'), model: '…' and the quoted wall/floor variants
-const code = readFileSync(join(ROOT, 'src/crypt-map.js'), 'utf8');
+// every model the dungeons name: put('…'), banner('…'), model: '…' and the quoted wall/floor variants (the
+// lands' put('…') props are drawn in code, so names the pack doesn't have are left out)
+const code = ['src/dungeon-map.js', ...readdirSync(join(ROOT, 'src/maps')).map((f) => `src/maps/${f}`)]
+  .map((f) => readFileSync(join(ROOT, f), 'utf8')).join('\n');
 const names = [...new Set([...code.matchAll(/(?:put|banner)\('(\w+)'|model: '(\w+)'|'((?:wall|floor)\w*)'/g)]
-  .map((m) => m[1] || m[2] || m[3]))].sort();
+  .map((m) => m[1] || m[2] || m[3]))].filter((n) => existsSync(join(SRC, `${n}.gltf`))).sort();
+console.log(`${names.length} pieces`);
 
 const out = {
   asset: { version: '2.0', generator: 'emberwood tools/pack-dungeon.mjs' },

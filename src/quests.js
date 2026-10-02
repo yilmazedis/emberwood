@@ -43,6 +43,61 @@ export const MAIN_QUESTS = [
     goal: { kind: 'kill', type: 'lich', count: 1 },
     reward: { gold: 500, xp: 1500, item: { minRarity: 'legendary', boost: 2 } },
   },
+  // beyond the waystones
+  {
+    id: 'm7', title: 'The Frozen North', level: 12, zone: 'ff_raiders',
+    text: 'The waystone in camp now reaches Frostfang. Frostborn raiders gather in the snow: break their war band.',
+    goal: { kind: 'kill', family: 'frostborn', count: 10 },
+    reward: { gold: 600, xp: 1500, item: { minRarity: 'magic', boost: 2 } },
+  },
+  {
+    id: 'm8', title: 'Hrimgar the Frost Jarl', level: 21, zone: 'ff_hold',
+    text: "The raiders answer to Hrimgar, who holds court at the far end of Frostfang. Take his hold.",
+    goal: { kind: 'kill', type: 'frost_jarl', count: 1 },
+    reward: { gold: 1200, xp: 6000, item: { minRarity: 'legendary' } },
+  },
+  {
+    id: 'm9', title: 'Rimeheart', level: 24, zone: 'rimeheart',
+    text: 'Below the ice, in Rimeheart Caverns, Vorrak the Rime King raises frozen dead. End him.',
+    goal: { kind: 'kill', type: 'rime_king', count: 1 },
+    reward: { gold: 1600, xp: 9000, item: { minRarity: 'legendary', boost: 2 } },
+  },
+  {
+    id: 'm10', title: 'Ash and Ember', level: 26, zone: 'cf_flats',
+    text: 'The waystone opens on Cinderfall, a land of ash and lava. Drive back the ash bandits and their kin.',
+    goal: { kind: 'kill', family: 'ashen', count: 12 },
+    reward: { gold: 1800, xp: 10000, item: { minRarity: 'rare' } },
+  },
+  {
+    id: 'm11', title: 'The Ashen King', level: 38, zone: 'cf_throne',
+    text: 'Vulkhar the Ashen King sits on his throne between the fire pits. Cast him down.',
+    goal: { kind: 'kill', type: 'ashen_king', count: 1 },
+    reward: { gold: 3000, xp: 25000, item: { minRarity: 'legendary' } },
+  },
+  {
+    id: 'm12', title: 'The Molten Forge', level: 42, zone: 'forge',
+    text: 'Forgemaster Kaldur still arms the wastes from the Molten Forge. Put out his fires.',
+    goal: { kind: 'kill', type: 'forgemaster', count: 1 },
+    reward: { gold: 3600, xp: 32000, item: { minRarity: 'legendary', boost: 2 } },
+  },
+  {
+    id: 'm13', title: 'Into the Dusk', level: 42, zone: 'sm_marsh',
+    text: 'Shadowmere lies beyond the last waystone, a marsh where the dead walk at twilight. Thin out its shades.',
+    goal: { kind: 'kill', family: 'shade', count: 12 },
+    reward: { gold: 3200, xp: 25000, item: { minRarity: 'rare', boost: 2 } },
+  },
+  {
+    id: 'm14', title: 'The Hollow King', level: 56, zone: 'sm_throne',
+    text: 'Malakar the Hollow King commands the dead of Shadowmere from his throne of bones. Shatter him.',
+    goal: { kind: 'kill', type: 'hollow_king', count: 1 },
+    reward: { gold: 5000, xp: 60000, item: { minRarity: 'legendary' } },
+  },
+  {
+    id: 'm15', title: 'The Queen of the Abyss', level: 60, zone: 'abyss',
+    text: 'At the bottom of the Abyssal Vault waits Nyxara, Queen of the Abyss, who began all of this. Finish it.',
+    goal: { kind: 'kill', type: 'abyss_queen', count: 1 },
+    reward: { gold: 8000, xp: 100000, item: { minRarity: 'legendary', boost: 3 } },
+  },
 ];
 
 // Bounty templates: {n} is rolled from `n` (for gold: about n kills' worth). Rewards scale with the
@@ -56,12 +111,34 @@ const BOUNTIES = [
   { key: 'loot', minLevel: 1, title: 'Treasure Hunter', text: 'Find {n} magic or better items out in the wilds.', goal: { kind: 'loot', minRarity: 'magic' }, n: [1, 3], value: 1.5 },
   { key: 'lich', minLevel: 7, title: 'Lich Bane', text: 'Morvain has risen again in the crypt. Destroy him once more.', goal: { kind: 'kill', type: 'lich' }, n: [1, 1], zone: 'crypt', value: 2.5, item: { minRarity: 'rare' } },
   { key: 'brute', minLevel: 5, title: 'Brute Force', text: 'Grok is back in his lair. Take him down again.', goal: { kind: 'kill', type: 'brute' }, n: [1, 1], zone: 'lair', value: 2, item: { minRarity: 'rare' } },
+  // beyond the waystones
+  { key: 'frostborn', minLevel: 10, title: 'Northern Raiders', text: 'Frostborn raiders harry the outposts in the snow. Defeat {n}.', goal: { kind: 'kill', family: 'frostborn' }, n: [6, 10], zone: 'ff_raiders', value: 2.2, item: { minRarity: 'magic' } },
+  { key: 'jarl', minLevel: 18, title: 'Jarl Slayer', text: 'Hrimgar the Frost Jarl has taken his hold again. Bring him down.', goal: { kind: 'kill', type: 'frost_jarl' }, n: [1, 1], zone: 'ff_hold', value: 2.8, item: { minRarity: 'rare' } },
+  { key: 'rimeking', minLevel: 20, title: 'Cold Crown', text: 'Vorrak the Rime King has risen in Rimeheart Caverns. Destroy him once more.', goal: { kind: 'kill', type: 'rime_king' }, n: [1, 1], zone: 'rimeheart', value: 3, item: { minRarity: 'rare' } },
+  { key: 'ashen', minLevel: 22, title: 'Ash and Bone', text: 'Ash bandits and their kind rule the wastes of Cinderfall. Defeat {n}.', goal: { kind: 'kill', family: 'ashen' }, n: [6, 10], zone: 'cf_flats', value: 2.4, item: { minRarity: 'magic' } },
+  { key: 'vulkhar', minLevel: 34, title: 'Kingslayer', text: 'Vulkhar the Ashen King sits his throne again. Unseat him.', goal: { kind: 'kill', type: 'ashen_king' }, n: [1, 1], zone: 'cf_throne', value: 3, item: { minRarity: 'rare' } },
+  { key: 'kaldur', minLevel: 38, title: 'Quench the Forge', text: 'The Molten Forge burns again. Defeat Forgemaster Kaldur.', goal: { kind: 'kill', type: 'forgemaster' }, n: [1, 1], zone: 'forge', value: 3.2, item: { minRarity: 'rare' } },
+  { key: 'shade', minLevel: 40, title: 'Shades of Dusk', text: 'Bog lurkers, night stalkers and death knights haunt Shadowmere. Defeat {n}.', goal: { kind: 'kill', family: 'shade' }, n: [6, 10], zone: 'sm_marsh', value: 2.6, item: { minRarity: 'magic' } },
+  { key: 'malakar', minLevel: 52, title: 'Hollow Crown', text: 'Malakar the Hollow King has gathered his bones again. Scatter them.', goal: { kind: 'kill', type: 'hollow_king' }, n: [1, 1], zone: 'sm_throne', value: 3.2, item: { minRarity: 'rare' } },
+  { key: 'nyxara', minLevel: 56, title: 'Abyssal Queen', text: 'Nyxara stirs at the bottom of the Abyssal Vault. Send her back.', goal: { kind: 'kill', type: 'abyss_queen' }, n: [1, 1], zone: 'abyss', value: 3.5, item: { minRarity: 'rare' } },
 ];
 
-const ZONE_LEVEL = { meadow: 1, bandits: 3, stones: 4, graveyard: 5, lair: 6, crypt: 8 };
+const ZONE_LEVEL = {
+  meadow: 1, bandits: 3, stones: 4, graveyard: 5, lair: 6, crypt: 8,
+  ff_raiders: 13, ff_hold: 21, rimeheart: 22, cf_flats: 24, cf_throne: 38, forge: 40, sm_marsh: 42, sm_throne: 56, abyss: 58,
+};
 const RARITY_RANK = { common: 0, magic: 1, rare: 2, legendary: 3 };
-const FAMILY_LABEL = { slime: 'Slimes', bandit: 'Bandits', cultist: 'Cultists', skeleton: 'Skeletons' };
-const familyOf = (type) => (type.startsWith('slime') ? 'slime' : type.startsWith('skeleton') ? 'skeleton' : type);
+const FAMILY_LABEL = { slime: 'Slimes', bandit: 'Bandits', cultist: 'Cultists', skeleton: 'Skeletons', frostborn: 'Frostborn', ashen: 'Ashen foes', shade: 'Shades' };
+const FAMILY = {
+  frost_scout: 'frostborn', frost_raider: 'frostborn', raider_berserker: 'frostborn', ice_witch: 'frostborn', frost_archer: 'frostborn',
+  ash_bandit: 'ashen', cinder_cultist: 'ashen', ash_knight: 'ashen', molten_brute: 'ashen', pyre_archer: 'ashen',
+  bog_lurker: 'shade', night_stalker: 'shade', shadow_archer: 'shade', death_knight: 'shade', wraith: 'shade',
+};
+const familyOf = (type) => (type.startsWith('slime') ? 'slime' : type.startsWith('skeleton') ? 'skeleton' : FAMILY[type] || type);
+const BOSS_LABEL = {
+  brute: 'Grok defeated', lich: 'Morvain destroyed', frost_jarl: 'Hrimgar defeated', rime_king: 'Vorrak destroyed', ashen_king: 'Vulkhar defeated',
+  forgemaster: 'Kaldur defeated', hollow_king: 'Malakar destroyed', abyss_queen: 'Nyxara destroyed',
+};
 
 export class Quests {
   constructor(game) {
@@ -216,7 +293,7 @@ export class Quests {
 
   goalLabel(q) {
     const goal = q.def.goal;
-    if (goal.kind === 'kill') return goal.type === 'brute' ? 'Grok defeated' : goal.type === 'lich' ? 'Morvain destroyed' : `${FAMILY_LABEL[goal.family]} slain`;
+    if (goal.kind === 'kill') return goal.type ? BOSS_LABEL[goal.type] || 'Defeated' : `${FAMILY_LABEL[goal.family]} slain`;
     if (goal.kind === 'gold') return 'Gold picked up';
     return 'Magic+ items found';
   }
