@@ -312,7 +312,10 @@ const handlers = {
     if (mine && mine.leader !== c.char.id) throw new Oops('Only the party leader can invite.');
     if (mine && mine.members.size >= MAX_PARTY) throw new Oops(`A party has at most ${MAX_PARTY} heroes.`);
     if (partyOf(them.char.id)) throw new Oops(`${them.char.name} is already in a party.`);
-    invites.set(them.char.id, { from: c.char.id, at: Date.now() });
+    const now = Date.now();
+    if (now - (c.invitedAt || 0) < 3000) throw new Oops('Wait a moment before inviting again.'); // (no invitation spam)
+    c.invitedAt = now;
+    invites.set(them.char.id, { from: c.char.id, at: now });
     const p = world.players.get(c.pid);
     them.send({ t: 'partyInvite', from: c.char.name, c: c.char.cls, l: p?.level || 1 });
     return { t: 'invited', name: them.char.name };

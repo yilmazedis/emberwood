@@ -32,13 +32,32 @@ automated tests). Three.js loads from a CDN, so you need an internet connection.
   drops, the game keeps going and reconnects by itself.
 - **The shared world:** the monsters live on the server (`src/sim/world.js`): they spawn, wander, chase the nearest
   hero and attack, the same for everybody. You see the other heroes nearby in their class and gear, with a name tag
-  and life bar, and what they do (swings, skills, ale, falling and rising). Everyone who hits a monster gets the kill's
-  XP and quest credit and rolls their **own** loot, which only they see, so nobody steals anyone's drops. Whether a
-  monster's blow, bolt or slam lands is decided by the game of the hero it's aimed at (it knows where that hero
-  really stands, so dodging works); the server keeps the monsters' life. Morvain's crypt is shared by everyone for now.
+  and life bar, and what they do (swings, skills, ale, falling and rising). Whether a monster's blow, bolt or slam
+  lands is decided by the game of the hero it's aimed at (it knows where that hero really stands, so dodging works);
+  the server keeps the monsters' life and shares out each kill (below). Loot is rolled by the game it's given to, and
+  only that hero sees it.
+- **Places** (`src/maps.js`): Emberwood, three lands beyond the waystones, a dungeon in each, and the Arena. Each is
+  its own area on the server, far from the others in the same coordinates, and only areas with heroes in them move
+  on, so a new land costs nothing while it's empty. Dungeons are a private **copy per party** (or lone hero), kept
+  for five minutes once empty. The server decides travel: you must stand at the waystone, door or stairs, and be
+  of the place's level; updates carry a stay number (`ep`) so nothing from the place you left leaks in.
+- **Kills are shared:** the heroes who hurt a monster form teams (a party, or a lone hero). The XP is split between
+  teams by damage dealt; a party's part goes to its members within 60 m by level, plus 20% per extra member, so
+  grouping pays. The team that dealt the most gets the loot; party members take turns. Everyone credited counts the
+  kill for their quests.
+- **Parties:** up to 8. Tap a hero's name (or `/invite Name`) to invite; the party frame shows each member's level,
+  life and land; `/p` is the party's chat; `/kick`, `/leave`, and the leader can pass the lead. A party shares one
+  copy of each dungeon. Parties live on the server (a restart ends them); a member who drops out keeps their place
+  for five minutes.
+- **The Arena:** by waystone, from level 5. In its pit every hero but your party is a foe: a blow goes through the
+  server (both in the pit, within reach, not party) to the victim's game, which takes it with its own armor (70%
+  of the damage a monster would take; stuns on heroes are halved). Falling there costs no gold. Wins and losses are
+  kept per hero (`arena.json` in the data folder) for the champions' board in the arena's yard.
 - **Chat:** one world channel (Enter, or the Chat button on phones); nearby heroes also show it in a bubble.
   Last 20 lines are shown to heroes who arrive.
-- **Coming next:** parties with their own copy of the crypt, and trading.
+- **Levels:** up to 60. Quick to 10; after that each level asks for more kills of your own level (about 60 at 20,
+  200 at 40, nearly 400 at 59). Monsters' life and damage, and what armor takes, grow faster past 10 with the gear.
+- **Coming next:** trading between heroes.
 
 The server (`server/`, Node built-ins only) speaks JSON over one WebSocket at `/ws` and shows `{"ok":true,…}` at
 `/status`. Ten times a second it moves the world on and sends each hero's game what's around it: monsters and heroes
@@ -52,8 +71,11 @@ To back up, copy that folder.
 
 Live at https://emberwood.kerimcaglar.com, on DirectAdmin + LiteSpeed shared hosting.
 
-- **Order:** `git pull`, then Restart the game server (most updates change both). Players get the new game when
-  they reload. The host only really starts (or restarts) the Node app when an ordinary web request reaches it, and a
+- **Order:** `git pull`, then Restart the game server (most updates change both). Open games notice the new version
+  within a few minutes (or at once, through the game server) and show a **Refresh** banner: refreshing saves the hero
+  first. When the server's language changed (`PROTOCOL` in `src/sim/world.js`), games reconnecting to the restarted
+  server save and reload by themselves. The version is a hash of the game's files in `version.json`
+  (`tools/stamp-version.mjs`; `node tools/stamp-version.mjs --install` adds a pre-commit hook that keeps it current). The host only really starts (or restarts) the Node app when an ordinary web request reaches it, and a
   WebSocket doesn't count: so the game knocks on `/status` while it connects (and tries again once the server is
   up), and the server knocks on its own door every few minutes while anyone is connected. To check a restart by
   hand, open https://gameserver.kerimcaglar.com/status: `uptimeS` starts again from 0.
@@ -68,7 +90,8 @@ Live at https://emberwood.kerimcaglar.com, on DirectAdmin + LiteSpeed shared hos
   After a `git pull` that changes `server/` (or `src/classes.js`), press Restart for the app.
 - **Slow host, slow phones:** the host takes a second or two to answer each request, so the game asks for few:
   every code file at once (`modulepreload` links in `index.html`: list new modules there too), the item models packed
-  into one file, the crypt in another. A model download that gets no data for 20 s is dropped and asked for again
+  into one file (`tools/pack-items.mjs`), every dungeon's pieces in another (`tools/pack-dungeon.mjs`, fetched on the
+  way to a dungeon door). When a pack changes, give its address a new `?v=` so no stale copy is used. A model download that gets no data for 20 s is dropped and asked for again
   (3 tries), and the game waits up to 20 s for the game server, then tries once more by itself.
 - **Hosting test:** `tools/hosting-test` measures whether a host can run the server (see its README). Hyperion passed
   with caveats: it is shared and overloaded, so expect the occasional stutter; a small VPS would remove it.
@@ -92,7 +115,7 @@ the same code, without the damage (their game deals it).
 
 ## Controls
 
-**Desktop:** WASD to move · left click to attack (hold to keep swinging) · 1–4 skills · Q ale (heal) · I bag · E use what's in reach (merchant, stash, notice board, the crypt door, chests) · Enter chat · mouse wheel to zoom · Esc settings · M mute
+**Desktop:** WASD to move · left click to attack (hold to keep swinging) · 1–4 skills · Q ale (heal) · I bag · E use what's in reach (merchant, stash, notice board, waystones, dungeon doors, chests) · Enter chat (`/p` party, `/invite Name`) · click a hero's name to invite them · mouse wheel to zoom · Esc settings · M mute
 
 **Phones and tablets** (switches automatically on the first touch): a floating joystick on the left half of the screen
 (push a little to walk, fully to run), a hold-to-attack sword button and skill buttons on the right. On touch screens,
@@ -114,7 +137,21 @@ a hall of bones, a chapel, an ossuary and a vault full of skeletons, two chests 
 the sanctum of **Morvain the Lich**. He fires bolt volleys, drops violet grave circles that erupt a moment later
 (step out!), raises skeletons at 70% and 40% life, blinks away when you stand on top of him, and is enraged below
 30%. When he falls, his minions crumble and the hoard behind him opens. The stairs in the first room lead back up.
-The story's last quest sends you down there.
+The story then goes on through the other lands.
+
+**Beyond the waystones:** the waystone in camp takes you (from level 8) to three more lands, each with five zones,
+its own monsters (tinted KayKit models: raiders, ice witches, frost archers, ash knights, cinder cultists, wraiths,
+death knights, night stalkers…), weather, a camp with a waystone back, a boss who calls for help at 70% and 40% life
+and rages below 30%, and the door of a dungeon with chests and a boss's hoard:
+
+| Land | Levels | Boss | Dungeon (levels, boss) |
+|---|---|---|---|
+| Frostfang Highlands (snow) | 10 – 22 | Hrimgar the Frost Jarl | Rimeheart Caverns (20 – 24, Vorrak the Rime King) |
+| Cinderfall Wastes (ash and lava) | 22 – 40 | Vulkhar the Ashen King | The Molten Forge (38 – 42, Forgemaster Kaldur) |
+| Shadowmere (twilight marsh) | 40 – 58 | Malakar the Hollow King | The Abyssal Vault (56 – 60, Nyxara, Queen of the Abyss) |
+
+The lands' shapes are in `src/maps/*.js` (an `OutdoorMap` or `DungeonMap` each, shared with the server); `lands.js`,
+`dungeon.js` and `arena.js` draw them, and `places.js` switches between them.
 
 ## Sound and settings
 
