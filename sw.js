@@ -1,9 +1,11 @@
 // Service worker: makes Emberwood installable and playable offline.
-//  - Code (html/js/css/manifest): network first, so a `git pull` on the server reaches players
-//    immediately; the cached copy is used only when offline.
-//  - Models, textures, fonts, three.js from the CDN: cache first (they rarely change), refreshed
-//    in the background.
+//  - The site's own code (html/js/css/manifest): network first, so a `git pull` on the server reaches
+//    players at once; but when the host is slow to answer (PATIENCE), the saved copy is used and the new
+//    one kept for next time (the update banner says so); offline, the saved copy.
+//  - Everything from the CDNs (the game's code and models from jsDelivr, pinned to a version; three.js,
+//    fonts): cache first, refreshed in the background.
 const CACHE = 'emberwood-v1';
+const PATIENCE = 3500; // ms
 const SHELL = ['./', 'index.html', 'style.css', 'manifest.webmanifest', 'icons/icon-192.png'];
 const CDN_HOSTS = ['cdn.jsdelivr.net', 'fonts.googleapis.com', 'fonts.gstatic.com'];
 
@@ -51,14 +53,17 @@ self.addEventListener('fetch', (event) => {
     // always ask the server (cache: 'no-cache' revalidates), whatever caching headers the host sends, so
     // an update reaches players straight away; a navigation can't be re-made with options, so use its URL
     const fresh = req.mode === 'navigate' ? fetch(req.url, { cache: 'no-cache', credentials: 'same-origin' }) : fetch(req, { cache: 'no-cache' });
-    event.respondWith(
-      fresh
-        .then((res) => {
-          if (res.ok) caches.open(CACHE).then((c) => c.put(req, res.clone()));
-          return res;
-        })
-        .catch(() => caches.match(req, { ignoreSearch: true }).then((r) => r || caches.match('./'))),
-    );
+    const saved = fresh.then((res) => {
+      if (res.ok) { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(req, copy)); }
+      return res;
+    });
+    event.waitUntil(saved.catch(() => {})); // (finish saving it even if the page got the old copy)
+    event.respondWith((async () => {
+      const cached = (await caches.match(req, { ignoreSearch: true })) || (req.mode === 'navigate' ? await caches.match('./') : undefined);
+      const net = saved.catch(() => cached || caches.match('./'));
+      if (!cached) return net;
+      return Promise.race([net, new Promise((r) => setTimeout(() => r(cached), PATIENCE))]);
+    })());
     return;
   }
 
