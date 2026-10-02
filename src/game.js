@@ -377,7 +377,8 @@ export class Game {
     const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -this.player.pos.y);
     if (!ray.intersectPlane(plane, this.aimPoint)) this.aimPoint.copy(this.player.pos);
     let best = null, bestT = Infinity;
-    for (const e of this.enemies.list) {
+    for (const o of this.others.list) o.hover = false;
+    for (const e of this.foes) {
       e.hover = false;
       if (!e.alive || e.state === 'spawn') continue;
       const c = e.center;
@@ -400,7 +401,7 @@ export class Game {
     if (this.hover && this.hover.alive) return { target: this.hover, point: this.hover.pos.clone() };
     const dirYaw = yawTo(this.aimPoint.x - p.x, this.aimPoint.z - p.z);
     let best = null, bd = Infinity;
-    for (const e of this.enemies.list) {
+    for (const e of this.foes) {
       if (!e.alive || e.state === 'spawn') continue;
       const dx = e.pos.x - p.x, dz = e.pos.z - p.z, d = Math.hypot(dx, dz);
       if (d > assist + e.radius) continue;
@@ -415,7 +416,7 @@ export class Game {
     const stick = this.input.stick;
     const facing = stick.lengthSq() > 0.04 ? yawTo(stick.x, stick.y) : pl.yaw;
     let best = null, bestScore = Infinity;
-    for (const e of this.enemies.list) {
+    for (const e of this.foes) {
       if (!e.alive || e.state === 'spawn') continue;
       const dx = e.pos.x - p.x, dz = e.pos.z - p.z, d = Math.hypot(dx, dz) - e.radius;
       if (d > range) continue;
@@ -452,7 +453,7 @@ export class Game {
   meleeHit({ range, arc, mult, knock, eff = null, critBonus = 0 }) {
     const p = this.player;
     let n = 0;
-    for (const e of this.enemies.list) {
+    for (const e of this.foes) {
       if (!e.alive || e.state === 'spawn') continue;
       const dx = e.pos.x - p.pos.x, dz = e.pos.z - p.pos.z, d = Math.hypot(dx, dz);
       if (d > range + e.radius) continue;
@@ -471,7 +472,7 @@ export class Game {
   areaHit({ at, radius, mult, knock = 0.4, eff = null, spell = false }) {
     const p = this.player, from = at.clone();
     let n = 0;
-    for (const e of this.enemies.list) {
+    for (const e of this.foes) {
       if (!e.alive || e.state === 'spawn' || Math.hypot(e.pos.x - at.x, e.pos.z - at.z) > radius + e.radius) continue;
       this.damageEnemy(e, p.rollDamage(mult, spell), from, knock, eff);
       n++;
@@ -479,16 +480,33 @@ export class Game {
     return n;
   }
 
+  // What our attacks can hit: the monsters, and in the arena's pit the heroes there who aren't in our party.
+  get foes() {
+    if (!this.pvp) return this.enemies.list;
+    return [...this.enemies.list, ...this.others.list.filter((o) => o.hostile)];
+  }
+
   // A skill that only stuns or taunts (no damage): shown now, and the world applies it.
   affectEnemy(e, eff) {
     if (!e.alive) return;
+    if (e.isHero) { if (eff.stun || eff.slow) { this.link.hitHero(e, 0, false, eff); e.applyStatus(eff); } return; }
     this.link.hit(e, 0, false, 0, this.player.pos, eff);
     e.applyStatus(eff);
   }
 
   // Our hit lands: shown now, and sent to the world, which keeps the monster's score (eff: see link.hit).
+  // On another hero (the arena), the world passes it to their game, which takes it with its own armor.
   damageEnemy(e, { amount, crit }, fromPos, knock = 0.4, eff = null) {
     if (!e.alive) return;
+    if (e.isHero) {
+      this.link.hitHero(e, amount, crit, eff);
+      if (eff) e.applyStatus(eff);
+      e.hurt();
+      this.ui.floater(new THREE.Vector3(e.pos.x, e.pos.y + e.height + 0.1, e.pos.z), String(Math.round(amount * 0.7)), crit ? 'crit' : '');
+      this.fx.sparks(e.center, crit ? 0xffe070 : 0xfff0c0, crit ? 22 : 10, crit ? 7 : 5);
+      this.sfx.play(crit ? 'crit' : 'hit');
+      return;
+    }
     this.link.hit(e, amount, crit, knock, fromPos, eff);
     if (eff) e.applyStatus(eff);
     e.hurt(amount);
@@ -521,6 +539,35 @@ export class Game {
       this.shake(0.5 * this.volAt(at));
     } else if (chance(d.drop)) {
       this.loot.dropItem(randomItem(level, { boost: level * 0.1, table: d.loot }), at);
+    }
+  }
+
+  // Another hero's blow in the arena, from the world: [H, victim, damage, crit, by, { s: stun, w: slow s, f: slow factor }].
+  heroHit([, victim, dmg, crit, by, looks]) {
+    if (victim === this.link.pid) {
+      if (!this.player.alive || !this.pvp) return;
+      this.damagePlayer(Number(dmg) || 0, null);
+      if (looks) this.player.applyStatus(looks);
+      return;
+    }
+    if (by === this.link.pid) return; // (ours: shown when we struck)
+    const o = this.others.byId.get(victim);
+    if (!o) return;
+    this.ui.floater(o.headPos, String(dmg), crit ? 'crit other' : 'other');
+    o.hurt();
+    if (looks) o.applyStatus(looks);
+  }
+
+  // [K, winner, loser]: a hero fell to another in the arena.
+  heroDown([, winner, loser]) {
+    if (winner === this.link.pid) {
+      const o = this.others.byId.get(loser);
+      this.ui.centerMsg(`You defeated ${o ? o.name : 'your foe'}!`);
+      this.sfx.play('quest');
+      this.fx.levelUp(this.player.pos);
+    } else if (loser === this.link.pid) {
+      const o = this.others.byId.get(winner);
+      if (o) this.deathNote = `${o.name} won this one. No gold is lost in the arena.`;
     }
   }
 
@@ -660,6 +707,7 @@ export class Game {
 
     const pp = this.player.pos, map = this.places.map;
     const zone = zoneAt(pp.x, pp.z);
+    this.pvp = !!(map.pvp && zone?.pvp && this.player.alive); // in the arena's pit: other heroes are fair game
     if (zone !== this.currentZone) {
       if (zone) this.ui.zoneToast(zone);
       else if (this.currentZone === undefined) this.ui.zoneToast({ name: map.name, sub: map.sub }); // (just arrived)

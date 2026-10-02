@@ -137,6 +137,9 @@ export class Player {
     this.cd = { attack: 0, potion: 0 };
     for (const sk of this.skills) this.cd[sk.id] = 0;
     this.buffs = {}; // id -> seconds left (skills.js BUFFS)
+    this.stunT = 0; // another hero's skill in the arena: stunned (can't act) / slowed
+    this.slowT = 0;
+    this.slowBy = 1;
     this.auras = {}; // their looks, the same for every hero (skills.js auraTick)
     this.action = null;
     this.queued = null;
@@ -396,7 +399,7 @@ export class Player {
 
   useSkill(i) {
     const g = this.game, sk = this.skills[i];
-    if (!this.alive || !sk) return;
+    if (!this.alive || !sk || this.stunT > 0) return;
     if (this.level < sk.level) { g.ui.centerMsg(`${sk.name} unlocks at level ${sk.level}`); return; }
     if (this.cd[sk.id] > 0) return;
     if (this.mp < sk.mp) { g.ui.noMana(); return; }
@@ -445,16 +448,34 @@ export class Player {
     g.sfx.play('heal');
   }
 
+  // Another hero stunned or slowed us (the arena): { s: stun s, w: slow s, f: slow factor }.
+  applyStatus(looks) {
+    const s = Number(looks.s) || 0, w = Number(looks.w) || 0;
+    if (s > 0) {
+      this.stunT = Math.max(this.stunT, Math.min(1.5, s));
+      this.action = null;
+      this.queued = null;
+      this.h.swing = null;
+    }
+    if (w > 0) {
+      this.slowT = Math.max(this.slowT, Math.min(6, w));
+      this.slowBy = Math.max(0.3, Math.min(1, Number(looks.f) || 0.6));
+    }
+  }
+
   die() {
     const g = this.game;
     this.alive = false;
+    this.stunT = 0;
+    this.slowT = 0;
     this.action = null;
     this.queued = null;
     this.h.swing = null;
     this.h.armsOut = 0;
     this.h.model.rotation.y = 0;
     this.h.anim.play('Death_A', { hold: true });
-    const lost = Math.floor(this.gold * 0.1);
+    const arena = g.places.map.kind === 'arena';
+    const lost = arena ? 0 : Math.floor(this.gold * 0.1); // (the arena takes no gold)
     this.gold -= lost;
     g.sfx.play('death');
     g.link.act({ k: 'de' });
@@ -489,6 +510,13 @@ export class Player {
     }
     if (lapsed) this.recompute();
     auraTick(this, dt);
+    this.stunT = Math.max(0, this.stunT - dt);
+    this.slowT = Math.max(0, this.slowT - dt);
+    this.h.frost = this.slowT > 0 ? Math.min(1, this.slowT * 2) : 0;
+    if (this.stunT > 0 && Math.random() < dt * 16) { // dizzy stars
+      const ang = g.time * 6, y = this.pos.y + 2.55;
+      g.fx.add.emit({ pos: { x: this.pos.x + Math.cos(ang) * 0.45, y, z: this.pos.z + Math.sin(ang) * 0.45 }, count: 1, spread: 0.05, velSpread: 0.1, vel: { x: -Math.sin(ang) * 1.2, y: 0.1, z: Math.cos(ang) * 1.2 }, color: new THREE.Color(0xffe066).multiplyScalar(2.4), size: 0.16, sizeEnd: 0.04, life: 0.45, drag: 0.5 });
+    }
     if (!this.alive) {
       this.h.update(dt);
       return;
@@ -511,9 +539,9 @@ export class Player {
     const len = Math.min(1, ax.length());
     let speed = 0;
     const spawning = this.h.anim.oneName === 'Spawn_Ground';
-    if (len > 0.01 && (!this.action || this.action.canMove) && !spawning) {
+    if (len > 0.01 && (!this.action || this.action.canMove) && !spawning && this.stunT <= 0) {
       const mx = ax.x / len, mz = ax.y / len;
-      speed = s.moveSpeed * (this.action?.moveMult ?? 1) * Math.max(0.35, len);
+      speed = s.moveSpeed * (this.action?.moveMult ?? 1) * Math.max(0.35, len) * (this.slowT > 0 ? this.slowBy : 1);
       this.pos.x += mx * speed * dt;
       this.pos.z += mz * speed * dt;
       if (!this.action?.lockFacing) this.targetYaw = yawTo(mx, mz);
@@ -539,7 +567,7 @@ export class Player {
         const q = this.queued;
         this.queued = null;
         q.fn();
-      } else if (g.input.attacking && !g.inputBlocked && this.cd.attack <= 0) {
+      } else if (g.input.attacking && !g.inputBlocked && this.cd.attack <= 0 && this.stunT <= 0) {
         this.basicAttack();
       }
     }

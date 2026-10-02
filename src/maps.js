@@ -1,5 +1,5 @@
-// Every place a hero can be: Emberwood (the first land), the lands beyond the waystones, and a dungeon in
-// each (a private copy per party or lone hero). Shared by the game and the game server: where each place
+// Every place a hero can be: Emberwood (the first land), the lands beyond the waystones, a dungeon in
+// each (a private copy per party or lone hero), and the Arena, where heroes fight heroes. Shared by the game and the game server: where each place
 // lies, its levels, where you arrive and where you rise after falling there, its monsters, and its ways
 // out (portals: the waystones, dungeon doors and stairs). Plain data.
 //   look: the light, fog and sky there (the game's); music: its theme
@@ -9,10 +9,11 @@ import { crypt, CRYPT_SPAWNS } from './maps/crypt.js';
 import { frostfang, FROSTFANG_SPAWNS, rimeheart, RIMEHEART_SPAWNS } from './maps/frostfang.js';
 import { cinderfall, CINDERFALL_SPAWNS, forge, FORGE_SPAWNS } from './maps/cinderfall.js';
 import { shadowmere, SHADOWMERE_SPAWNS, abyss, ABYSS_SPAWNS } from './maps/shadowmere.js';
+import { arena, ARENA } from './maps/arena.js';
 
 export const START = 'emberwood';
 export const WAYSTONE = { x: 5.5, z: 5.5 }; // Emberwood's, in camp
-export const LANDS = ['emberwood', 'frostfang', 'cinderfall', 'shadowmere']; // the waystones' destinations
+export const LANDS = ['emberwood', 'frostfang', 'cinderfall', 'shadowmere', 'arena']; // the waystones' destinations
 const PORTAL_REACH = 6; // m: how close the server wants you to a portal you use
 
 // In front of a door that faces `yaw`, `d` metres out.
@@ -91,6 +92,15 @@ export const MAPS = {
     look: { ...DUNGEON_LOOK, fog: 0x0a0610, hemiSky: 0xa898d0, hemiGround: 0x241a30, sun: 0xc0a8ff, flame: 0xb070ff, tint: 0xd8c8f0, circle: 0xff4ad8 },
     from: 'shadowmere', at: before(shadowmere.door, 3.6), respawn: { map: 'shadowmere', ...campSpot(shadowmere) },
   }),
+};
+
+MAPS.arena = {
+  id: 'arena', name: 'The Arena', sub: 'Hero against hero · from level 5', kind: 'arena', pvp: true, levels: [5, 60], minLevel: 5, music: 'world',
+  spawns: [], contains: arena.contains,
+  camp: { x: ARENA.cx, z: ARENA.cz + 35, r: 8 }, waystone: arena.waystone, board: arena.board,
+  arrive: arena.arrive, respawn: { map: 'arena', ...arena.arrive },
+  look: { fog: 0xdccdb0, near: 70, far: 170, hemiSky: 0xfff0d8, hemiGround: 0x8a6a4a, hemi: 1.25, sun: 0xfff0d0, sunI: 2.6, sky: [0x4a8ad8, 0xb8d4ec, 0xead8bc] },
+  portals: [{ id: 'waystone', ...arena.waystone, to: LANDS, name: 'Waystone', title: 'Travel to another land', action: 'Travel' }],
 };
 
 function campSpot(om) {

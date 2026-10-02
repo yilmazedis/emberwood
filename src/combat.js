@@ -56,7 +56,7 @@ export class Projectiles {
 
       let hit = null;
       if (p.owner !== 'enemy') {
-        for (const e of g.enemies.list) {
+        for (const e of p.owner === 'player' ? g.foes : g.enemies.list) {
           if (!e.alive || e.state === 'spawn') continue;
           const dx = e.pos.x - p.pos.x, dz = e.pos.z - p.pos.z;
           // (the projectile's own size counts: a bolt at chest height still hits a knee-high slime)
@@ -100,7 +100,7 @@ export class Projectiles {
       if (p.owner !== 'player') return; // someone else's: their game deals the damage
       if (!p.small) g.shake(0.25);
       const targets = p.aoe
-        ? g.enemies.list.filter((e) => e.alive && e.state !== 'spawn' && Math.hypot(e.pos.x - p.pos.x, e.pos.z - p.pos.z) < p.aoe + e.radius)
+        ? g.foes.filter((e) => e.alive && e.state !== 'spawn' && Math.hypot(e.pos.x - p.pos.x, e.pos.z - p.pos.z) < p.aoe + e.radius)
         : hit && hit !== 'ground' ? [hit] : [];
       for (const e of targets) g.damageEnemy(e, g.player.rollDamage(p.mult, p.spell !== false), p.pos, p.small ? 0.2 : 0.8);
     } else {

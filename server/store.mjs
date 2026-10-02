@@ -64,6 +64,7 @@ export function flush() {
     if (acc) writeJSON(fileOf(lower), acc);
   }
   dirty.clear();
+  if (arenaDirty) { arenaDirty = false; writeJSON(ARENA, arena); }
 }
 setInterval(flush, 5000).unref();
 
@@ -87,6 +88,32 @@ export function removeCharacter(acc, id) {
   writeJSON(NAMES, names);
   writeJSON(fileOf(acc.lower), acc);
   return true;
+}
+
+// ---------------------------------------------------------------- the arena's champions
+// Fights won and lost in the arena, by character: { id: { n: name, c: class, l: level, k: won, d: lost } }.
+const ARENA = path.join(DATA_DIR, 'arena.json');
+const arena = readJSON(ARENA, {});
+let arenaDirty = false;
+setInterval(() => { if (arenaDirty) { arenaDirty = false; writeJSON(ARENA, arena); } }, 5000).unref();
+
+export function arenaResult(winner, loser) {
+  for (const [ch, key] of [[winner, 'k'], [loser, 'd']]) {
+    const e = arena[ch.id] || (arena[ch.id] = { n: ch.name, c: ch.cls, l: 1, k: 0, d: 0 });
+    Object.assign(e, { n: ch.name, c: ch.cls, l: ch.level || e.l });
+    e[key]++;
+  }
+  arenaDirty = true;
+}
+
+export function arenaTop(n = 10) {
+  return Object.values(arena).filter((e) => e.k > 0).sort((a, b) => b.k - a.k || a.d - b.d).slice(0, n);
+}
+
+export const arenaOf = (id) => arena[id] || null;
+
+export function forgetArena(id) {
+  if (arena[id]) { delete arena[id]; arenaDirty = true; }
 }
 
 export function saveCharacter(acc, id, save) {

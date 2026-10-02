@@ -502,6 +502,13 @@ export class UI {
   }
 
   showDeath(show) {
+    if (show) { // what falling costs here, and where you rise
+      const map = this.game.places.map, arena = map.kind === 'arena';
+      $('death-title').textContent = arena ? 'Defeated' : 'You have fallen';
+      $('death-text').textContent = this.game.deathNote || (arena ? 'No gold is lost in the arena.' : 'Your gold pouch feels lighter…');
+      $('respawn').textContent = arena ? 'Back to the yard' : map.kind === 'dungeon' ? 'Rise again outside' : 'Rise again at camp';
+      this.game.deathNote = null;
+    }
     this.el.death.classList.toggle('hidden', !show);
   }
 

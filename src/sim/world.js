@@ -26,6 +26,8 @@ const INSTANCE_TTL = 300; // seconds an empty dungeon copy is kept (come back fo
 const HERO_RADIUS = 0.5;
 const SHARE_RANGE = 60; // party members this near a kill share it
 const PARTY_BONUS = 0.2; // each extra member in range adds this much to the party's XP
+const PVP_SCALE = 0.7; // heroes hit heroes a little softer than monsters (fights last a few exchanges)
+const PVP_CREDIT = 10; // seconds: a hero who falls this soon after another's blow was defeated by them
 const r2 = (v) => Math.round(v * 100) / 100;
 const r1 = (v) => Math.round(v * 10) / 10;
 const r3 = (v) => Math.round(v * 1000) / 1000;
@@ -637,6 +639,7 @@ export class WorldSim {
     p.ep++;
     p.knownM.clear();
     p.knownP.clear();
+    p.lastHit = null;
   }
 
   // Hero pid goes to map `to`: through a portal it stands at (a waystone, a dungeon's door or stairs), or,
@@ -663,11 +666,13 @@ export class WorldSim {
   }
 
   // A hero's game reports in: p = [x, z, yaw, move (0 still, 1 walk, 2 run), speed, alive, life 0..1,
-  // away], h = hits [[monster, damage, crit, knockback, fromX, fromZ, effects?]], a = actions for the
-  // others to see ({ k: kind, … }), k = looks ({ lv: level, w: weapon, … }).
+  // away], h = hits [[monster, damage, crit, knockback, fromX, fromZ, effects?]], ph = hits on other heroes
+  // in the arena [[hero, damage, crit, effects?]], a = actions for the others to see ({ k: kind, … }),
+  // k = looks ({ lv: level, w: weapon, … }).
   input(pid, m) {
     const p = this.players.get(pid);
     if (!p || !m || typeof m !== 'object') return;
+    const wasAlive = p.alive;
     if (Array.isArray(m.p) && m.p.length >= 3) {
       const [x, z, yaw, mode, sp, alive, hp, away] = m.p.map(Number);
       // (only where it is: a position from before a journey is left behind)
@@ -688,6 +693,16 @@ export class WorldSim {
       p.lookVer++;
     }
     if (Array.isArray(m.h)) for (const h of m.h.slice(0, 40)) this.hit(p, h);
+    if (Array.isArray(m.ph)) for (const h of m.ph.slice(0, 20)) this.hitHero(p, h);
+    // fell in the arena right after another hero's blow: theirs is the win
+    if (wasAlive && !p.alive && p.lastHit && this.time - p.lastHit.at < PVP_CREDIT) {
+      const by = this.players.get(p.lastHit.by);
+      p.lastHit = null;
+      if (by && by.area === p.area) {
+        p.area.events.push({ all: true, ev: ['K', by.pid, p.pid] });
+        this.onHeroDown?.(by, p);
+      }
+    }
     if (Array.isArray(m.a)) {
       for (const a of m.a.slice(0, 8)) {
         if (a && typeof a === 'object' && typeof a.k === 'string' && JSON.stringify(a).length < 240) p.area?.events.push({ pid: p.pid, ev: ['p', p.pid, a] });
@@ -710,6 +725,27 @@ export class WorldSim {
     const looks = eff ? { ...(eff.stun && { s: eff.stun }), ...(eff.slow && { w: eff.slow[1] }), ...(eff.taunt && { t: eff.taunt }) } : 0;
     m.emit(looks ? ['h', m.id, dmg, h[2] ? 1 : 0, p.pid, looks] : ['h', m.id, dmg, h[2] ? 1 : 0, p.pid]);
     if (m.hp <= 0) m.die(p);
+  }
+
+  // In the arena's pit: hero p hits hero h[0] (not in p's party). The blow goes to the victim's game, which
+  // takes it with its own armor (everyone nearby sees the number); the world remembers who struck last.
+  hitHero(p, h) {
+    if (!Array.isArray(h) || p.budget < 1 || !p.area?.map.pvp || !p.alive) return;
+    const o = this.players.get(h[0]);
+    if (!o || o === p || o.area !== p.area || !o.alive || o.away || (p.party && p.party === o.party)) return;
+    if (!zoneAt(p.x, p.z)?.pvp || !zoneAt(o.x, o.z)?.pvp) return; // both in the pit
+    if (Math.hypot(o.x - p.x, o.z - p.z) > 30) return;
+    let dmg = Math.round(Number(h[1]));
+    const eff = cleanEffects(h[3]);
+    if (!(dmg >= 0) || (dmg === 0 && !eff)) return;
+    p.budget--;
+    dmg = Math.round(Math.min(dmg, 100 + 150 * p.level) * PVP_SCALE);
+    o.lastHit = { by: p.pid, at: this.time };
+    // (a stun on a hero is short: half, and at most 1.5 s)
+    const looks = eff ? { ...(eff.stun && { s: Math.min(1.5, eff.stun * 0.5) }), ...(eff.slow && { w: eff.slow[1], f: eff.slow[0] }) } : null;
+    const ev = ['H', o.pid, dmg, h[2] ? 1 : 0, p.pid];
+    if (looks && Object.keys(looks).length) ev.push(looks);
+    p.area.events.push({ hero: o.pid, ev });
   }
 
   // Advance the world by dt seconds, then hand each hero's game its update: deliver(pid, message).
@@ -771,6 +807,7 @@ export class WorldSim {
     for (const e of area.events) {
       if (e.all) ev.push(e.ev);
       else if (e.mid !== undefined) { if (me.knownM.has(e.mid) || e.to?.includes(me.pid)) ev.push(e.ev); }
+      else if (e.hero !== undefined) { if (e.hero === me.pid || me.knownP.has(e.hero)) ev.push(e.ev); } // (a blow to a hero)
       else if (e.pid !== me.pid && me.knownP.has(e.pid)) ev.push(e.ev);
     }
     if (m.length) out.m = m;

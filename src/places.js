@@ -7,6 +7,7 @@ import { MAPS, LANDS, START } from './maps.js';
 import { heightAt, ZONES } from './world.js';
 import { LandView } from './lands.js';
 import { DungeonView, fetchPack } from './dungeon.js';
+import { ArenaView } from './arena.js';
 import { FLOOR_Y } from './dungeon-map.js';
 
 const REACH = 2.4; // how close the hero must stand to use something
@@ -96,7 +97,7 @@ export class Places {
   viewOf(id) {
     if (!this.views[id]) {
       const m = MAPS[id];
-      this.views[id] = m.kind === 'dungeon' ? new DungeonView(this.game, m) : new LandView(this.game, m);
+      this.views[id] = m.kind === 'dungeon' ? new DungeonView(this.game, m) : m.kind === 'arena' ? new ArenaView(this.game, m) : new LandView(this.game, m);
     }
     return this.views[id];
   }
@@ -285,7 +286,7 @@ export class Places {
       const door = here.portals.find((p) => p.to === dungeonOf.id);
       return door ? { x: door.x, z: door.z, r: 3.5 } : null;
     }
-    if (here.kind === 'dungeon') return null;
+    if (here.kind !== 'outdoor') return null;
     const zones = here.outdoor ? here.outdoor.zones : ZONES;
     return zones?.find((z) => z.id === zoneId) || null;
   }

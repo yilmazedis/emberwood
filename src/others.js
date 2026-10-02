@@ -1,9 +1,11 @@
 // Other heroes in the world, as the world reports them: their class's model in their gear, a name tag
 // with their life, smooth movement between updates, and what they do (swings, skills, ale, falling and
-// rising) played out. Only for show: their own games deal their damage and take their hits.
+// rising) played out. Only for show: their own games deal their damage and take their hits. In the
+// arena's pit they're foes (all but our party): our attacks treat them like monsters (game.foes) and the
+// blows go to their games through the world.
 import * as THREE from 'three';
 import { Humanoid } from './character.js';
-import { heightAt } from './world.js';
+import { heightAt, zoneAt } from './world.js';
 import { applyEquipmentVisuals, equipmentFromLook, boltAction } from './player.js';
 import { SKILLS, auraTick } from './skills.js';
 import { CLASSES } from './classes.js';
@@ -28,6 +30,10 @@ export class RemotePlayer {
     this.samples = [];
     this.hp = 1;
     this.away = false;
+    this.hostile = false; // in the pit with us, and not in our party
+    this.hover = false;
+    this.stunT = 0;
+    this.slowT = 0;
     this.action = null;
     this.auras = {}; // buffs' looks (skills.js)
     this.sample(ts, r.u);
@@ -61,6 +67,25 @@ export class RemotePlayer {
 
   get headPos() {
     return new THREE.Vector3(this.pos.x, this.pos.y + 2.7, this.pos.z);
+  }
+
+  // ---- as a foe in the arena: the same shape as a monster to our attacks (see game.foes)
+  get isHero() { return true; }
+  get state() { return 'chase'; }
+  get height() { return 2.4; }
+  get center() { return new THREE.Vector3(this.pos.x, this.pos.y + 1.2, this.pos.z); }
+
+  // our blow lands (their game takes it; the world tells everyone the number)
+  hurt() {
+    this.h.hitFlash(0xffffff, 1);
+  }
+
+  // stunned or slowed by a skill: { stun, slow: [f, s] } from our hit, or { s, w } from the world
+  applyStatus(eff) {
+    if (!eff || !this.alive) return;
+    const stun = Number(eff.stun ?? eff.s) || 0, slow = Number(Array.isArray(eff.slow) ? eff.slow[1] : eff.w) || 0;
+    if (stun > 0) this.stunT = Math.max(this.stunT, Math.min(1.5, stun));
+    if (slow > 0) this.slowT = Math.max(this.slowT, Math.min(6, slow));
   }
 
   vol() {
@@ -134,7 +159,19 @@ export class RemotePlayer {
       }
     }
     auraTick(this, dt);
+    this.statusLooks(dt);
+    this.h.highlight = this.hover ? 1 : 0;
     this.h.update(dt);
+  }
+
+  statusLooks(dt) {
+    this.stunT = Math.max(0, this.stunT - dt);
+    this.slowT = Math.max(0, this.slowT - dt);
+    if (this.stunT > 0 && Math.random() < dt * 16) {
+      const ang = this.game.time * 6, y = this.pos.y + 2.55;
+      this.game.fx.add.emit({ pos: { x: this.pos.x + Math.cos(ang) * 0.45, y, z: this.pos.z + Math.sin(ang) * 0.45 }, count: 1, spread: 0.05, velSpread: 0.1, vel: { x: -Math.sin(ang) * 1.2, y: 0.1, z: Math.cos(ang) * 1.2 }, color: new THREE.Color(0xffe066).multiplyScalar(2.4), size: 0.16, sizeEnd: 0.04, life: 0.45, drag: 0.5 });
+    }
+    this.h.frost = this.slowT > 0 ? Math.min(1, this.slowT * 2) : 0;
   }
 
   fall() {
@@ -254,6 +291,14 @@ export class RemotePlayers {
   }
 
   update(dt) {
-    for (const o of this.list) o.update(dt);
+    const g = this.game;
+    for (const o of this.list) {
+      o.update(dt);
+      const hostile = !!g.pvp && o.alive && !g.party.has(o.id) && !!zoneAt(o.pos.x, o.pos.z)?.pvp;
+      if (hostile !== o.hostile) {
+        o.hostile = hostile;
+        o.plate?.el.classList.toggle('hostile', hostile);
+      }
+    }
   }
 }

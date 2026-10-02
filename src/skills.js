@@ -113,7 +113,7 @@ export const SKILLS = {
               a.pos.x = lerp(from.x, to.x, k);
               a.pos.z = lerp(from.z, to.z, k);
               // stop at the first enemy in the way
-              if (g.enemies.list.some((e) => e.alive && e.state !== 'spawn' && Math.hypot(e.pos.x - a.pos.x, e.pos.z - a.pos.z) < e.radius + 0.9)) s.dash = s.t;
+              if (g.foes.some((e) => e.alive && e.state !== 'spawn' && Math.hypot(e.pos.x - a.pos.x, e.pos.z - a.pos.z) < e.radius + 0.9)) s.dash = s.t;
             }
             if (Math.random() < 0.7) g.fx.dust(a.pos, 1);
             return;
@@ -447,7 +447,7 @@ export const SKILLS = {
       a.aura('smoke', BUFFS.smoke.dur);
       if (real) {
         a.addBuff('smoke');
-        for (const e of g.enemies.list) {
+        for (const e of g.foes) {
           if (e.alive && e.state !== 'spawn' && Math.hypot(e.pos.x - p.x, e.pos.z - p.z) < 4 + e.radius) g.affectEnemy(e, { stun: 2 });
         }
       }

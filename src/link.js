@@ -24,6 +24,7 @@ export class WorldLink {
     this.renderT = 0; // ms, world time: the moment monsters and heroes are shown at
     this.queue = []; // { ts, ev }: events waiting for their moment
     this.hits = [];
+    this.heroHits = [];
     this.acts = [];
     this.lookDirty = false;
     this.sendT = 0;
@@ -75,6 +76,7 @@ export class WorldLink {
     this.queue = [];
     this.offset = null;
     this.hits = [];
+    this.heroHits = [];
     this.acts = [];
     this.lastKey = '';
     this.moveT = -IDLE_EVERY;
@@ -111,6 +113,8 @@ export class WorldLink {
     const g = this.game;
     if (ev[0] === 'd') g.enemies.died(ev); // credit for kills always counts
     else if (ev[0] === 'L') g.places.bossDown(ev[1]);
+    else if (ev[0] === 'H') g.heroHit(ev); // (a blow in the arena: ours to take even if late)
+    else if (ev[0] === 'K') g.heroDown(ev);
     else if (stale) return;
     else if (ev[0] === 'p') g.others.act(ev[1], ev[2]);
     else g.enemies.event(ev);
@@ -129,9 +133,10 @@ export class WorldLink {
       this.moveT = this.clock;
     }
     if (this.hits.length) { msg.h = this.hits; this.hits = []; }
+    if (this.heroHits.length) { msg.ph = this.heroHits; this.heroHits = []; }
     if (this.acts.length) { msg.a = this.acts; this.acts = []; }
     if (this.lookDirty) { msg.k = lookOf(this.game.player); this.lookDirty = false; }
-    if (msg.p || msg.h || msg.a || msg.k) this.net.send('u', msg);
+    if (msg.p || msg.h || msg.ph || msg.a || msg.k) this.net.send('u', msg);
   }
 
   // Right now, not at the next turn (e.g. the app is going to the background).
@@ -155,6 +160,14 @@ export class WorldLink {
     const h = [e.id, dmg, crit ? 1 : 0, r2(knock), r2(from.x), r2(from.z)];
     if (eff) h.push(eff);
     this.hits.push(h);
+  }
+
+  // Our hero hit another hero in the arena's pit (their game takes the blow). eff: { stun, slow }
+  hitHero(o, dmg, crit, eff = null) {
+    if (!this.inWorld) return;
+    const h = [o.id, dmg, crit ? 1 : 0];
+    if (eff) h.push(eff);
+    this.heroHits.push(h);
   }
 
   // Something the others should see our hero do: { k: kind, … } (see others.js)

@@ -43,6 +43,14 @@ const heroes = new Map(); // character id -> the connection playing it
 
 // ---------------------------------------------------------------- the world
 const world = new WorldSim();
+// a hero beat another in the arena: the champions' board counts it, and the arena hears of it
+world.onHeroDown = (winner, loser) => {
+  const cw = inWorld.get(winner.pid), cl = inWorld.get(loser.pid);
+  if (!cw?.char || !cl?.char) return;
+  store.arenaResult({ ...cw.char, level: winner.level }, { ...cl.char, level: loser.level });
+  const msg = { t: 'chat', s: 1, x: `⚔ ${cw.char.name} defeated ${cl.char.name} in the Arena!` };
+  for (const p of winner.area.players) inWorld.get(p.pid)?.send(msg);
+};
 const inWorld = new Map(); // hero id in the world (pid) -> connection
 let lastPid = 0;
 const chatLog = []; // the last things said, for heroes who just arrived
@@ -241,7 +249,7 @@ const handlers = {
   deleteChar(c, m) {
     const acc = needAccount(c);
     const id = String(m.id);
-    if (acc.characters.some((x) => x.id === id)) leaveParty(id);
+    if (acc.characters.some((x) => x.id === id)) { leaveParty(id); store.forgetArena(id); }
     if (c.char && c.char.id === m.id) { leaveWorld(c, true); dropHero(c); c.char = null; }
     if (!store.removeCharacter(acc, String(m.id))) throw new Oops('No such character.');
     return { t: 'chars', chars: charList(acc) };
@@ -285,6 +293,12 @@ const handlers = {
     announce(`${c.char.name} has entered Emberwood.`, c);
     if (party) setTimeout(() => partyChanged(c.char?.id), 0); // (after the reply: its game knows its pid)
     return { t: 'entered', pid: c.pid, chat: chatLog.slice(-20), online: inWorld.size, ...where };
+  },
+
+  // The arena's champions (most fights won), and how we're doing.
+  arenaBoard(c) {
+    const me = c.char ? store.arenaOf(c.char.id) : null;
+    return { t: 'arenaBoard', top: store.arenaTop(10), me: me ? { k: me.k, d: me.d } : { k: 0, d: 0 } };
   },
 
   // ---- parties

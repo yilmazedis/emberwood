@@ -113,7 +113,7 @@ export class Party {
   render() {
     const show = this.id && this.members.length > 1;
     this.el.classList.toggle('hidden', !show);
-    if (!show) { this.list.innerHTML = ''; return; }
+    if (!show) { this.list.innerHTML = ''; this.fit(); return; }
     $('party-count').textContent = `${this.members.length} / ${MAX_PARTY}`;
     const here = this.game.places?.id;
     this.list.innerHTML = this.members.map((m) => {
@@ -124,6 +124,13 @@ export class Party {
         <div class="pm-top"><b>${esc(m.n)}</b><i>${m.l}</i>${where ? `<span>${esc(where)}</span>` : ''}</div>
         <div class="pm-hp"><b style="transform:scaleX(${Math.max(0, Math.min(1, life || 0)).toFixed(3)})"></b></div></div>`;
     }).join('');
+    this.fit();
+  }
+
+  // On phones the frame sits where the quest tracker was: the tracker moves down by its height.
+  fit() {
+    const h = this.el.classList.contains('hidden') ? 0 : this.el.offsetHeight + 6;
+    document.body.style.setProperty('--party-h', `${h}px`);
   }
 
   // (our own life bar moves every frame; the others' come with the server's updates)

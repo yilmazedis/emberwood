@@ -47,12 +47,14 @@
 <link rel="modulepreload" href="src/maps/frostfang.js">
 <link rel="modulepreload" href="src/maps/cinderfall.js">
 <link rel="modulepreload" href="src/maps/shadowmere.js">
+<link rel="modulepreload" href="src/maps/arena.js">
 <link rel="modulepreload" href="src/maps.js">
 <link rel="modulepreload" href="src/monsters.js">
 <link rel="modulepreload" href="src/sim/world.js">
 <link rel="modulepreload" href="src/enemies.js">
 <link rel="modulepreload" href="src/dungeon.js">
 <link rel="modulepreload" href="src/lands.js">
+<link rel="modulepreload" href="src/arena.js">
 <link rel="modulepreload" href="src/places.js">
 <link rel="modulepreload" href="src/combat.js">
 <link rel="modulepreload" href="src/town.js">
@@ -193,6 +195,14 @@
 
   <div id="tooltip" class="hidden"></div>
 
+  <!-- the arena's champions (src/arena.js) -->
+  <div id="arena-board" class="panel hidden">
+    <header><span>Champions <small>of the Arena</small></span><button class="close" aria-label="Close">×</button></header>
+    <div id="arena-rows"></div>
+    <div id="arena-me"></div>
+    <p class="set-note">In the pit every hero but your party is fair game. Falling here costs no gold.</p>
+  </div>
+
   <!-- a waystone's travel menu (src/places.js) -->
   <div id="travel" class="panel hidden">
     <header><span>Waystone <small>travel to another land</small></span><button class="close" data-close="travel" aria-label="Close">×</button></header>
@@ -212,6 +222,7 @@
       <li>Accept quests at the notice board, then come back to claim the reward. The golden <b>!</b> means something is waiting.</li>
       <li>The crypt door in the graveyard leads down to a dungeon and its boss, <b>Morvain the Lich</b>. Step out of his violet circles!</li>
       <li>The <b>waystone</b> in camp takes you to other lands (from level 8): Frostfang, Cinderfall and Shadowmere, each with its own boss and dungeon. Dungeons are a copy of your own (your party's).</li>
+      <li>The <b>Arena</b> (by waystone, from level 5): in its pit, heroes fight heroes, all but their own party. No gold is lost there; the champions' board counts the wins.</li>
       <li><kbd>Enter</kbd> Chat with everyone in the world (Enter again to send, Esc to cancel)</li>
       <li><kbd>Mouse wheel</kbd> Zoom</li>
       <li><kbd>Esc</kbd> Settings: music, sound, graphics, leave the game · <kbd>M</kbd> mute</li>
@@ -229,6 +240,7 @@
       <li>Accept quests at the notice board, then come back to claim the reward. The golden <b>!</b> means something is waiting.</li>
       <li>The crypt door in the graveyard leads down to a dungeon and its boss, <b>Morvain the Lich</b>. Step out of his violet circles!</li>
       <li>The <b>waystone</b> in camp takes you to other lands (from level 8): Frostfang, Cinderfall and Shadowmere, each with its own boss and dungeon. Dungeons are a copy of your own (your party's).</li>
+      <li>The <b>Arena</b> (by waystone, from level 5): in its pit, heroes fight heroes, all but their own party. No gold is lost there.</li>
       <li><b>Chat</b>: talk to everyone in the world.</li>
       <li>Walk over loot to pick it up. The camp is safe and heals you fast.</li>
       <li>Hunting together? Tap a hero's name to <b>invite them to a party</b>. Up to 8: you share the XP of kills near you (more for each member), take turns on the loot, and share a copy of each dungeon. <b>/p</b> in chat talks to the party.</li>
@@ -259,8 +271,8 @@
   <div id="fade"><span></span></div>
 
   <div id="death" class="hidden">
-    <h1>You have fallen</h1>
-    <p>Your gold pouch feels lighter…</p>
+    <h1 id="death-title">You have fallen</h1>
+    <p id="death-text">Your gold pouch feels lighter…</p>
     <button id="respawn">Rise again at camp</button>
   </div>
 
