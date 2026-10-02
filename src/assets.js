@@ -22,18 +22,35 @@ export const ITEM_MODELS = [
   'Skeleton_Shield_Small_B', 'Skeleton_Shield_Large_B', 'shield_round_barbarian', 'bow_withString', // (monsters' gear)
 ];
 
+// The game's files sit next to its code: on the live site that's jsDelivr's CDN (index.html loads the code
+// from there, because the host is slow to serve files), elsewhere the site itself, which is also the
+// fallback if the CDN fails.
+export const BASE = new URL('../', import.meta.url).href;
+const SITE = new URL('./', document.baseURI).href;
+
 // Downloads are patient with slow connections but not with stuck ones: a download that gets no data
-// for STALL ms is dropped and asked for again, up to TRIES times. (The host can be slow to answer, and
-// phones drop requests; one stuck request used to leave the game on "Loading models" for good.)
+// for STALL ms is dropped and asked for again, up to TRIES times, and then once from the site if the
+// CDN was failing. (Phones drop requests; one stuck request used to leave the game on "Loading models".)
+// path: relative to the game's root, e.g. 'assets/items/items.glb'.
 const STALL = 20000, TRIES = 3;
 
-async function download(url, onProgress) {
+export async function download(path, onProgress = () => {}) {
+  try {
+    return await downloadFrom(BASE + path, onProgress);
+  } catch (err) {
+    if (BASE === SITE) throw err;
+    console.warn(`${path}: the CDN failed, trying the site`, err);
+    return downloadFrom(SITE + path, onProgress);
+  }
+}
+
+async function downloadFrom(url, onProgress) {
   for (let attempt = 1; ; attempt++) {
     const ctrl = new AbortController();
     let timer = setTimeout(() => ctrl.abort(), STALL);
     try {
       // a retry gets its own address, so it doesn't queue behind the stuck one
-      const res = await fetch(attempt === 1 ? url : `${url}?try=${attempt}`, { signal: ctrl.signal });
+      const res = await fetch(attempt === 1 ? url : `${url}${url.includes('?') ? '&' : '?'}try=${attempt}`, { signal: ctrl.signal });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const total = Number(res.headers.get('content-length')) || 0;
       const reader = res.body.getReader(), parts = [];
@@ -64,7 +81,7 @@ export async function loadAssets(onProgress) {
   const files = [
     ...CHARACTERS.map((c) => [`assets/characters/${c}.glb`, (g) => { Assets.chars[c] = g; }]),
     ...ANIMATIONS.map((a) => [`assets/animations/${a}.glb`, (g) => { for (const clip of g.animations) Assets.clips[clip.name] = clip; }]),
-    ['assets/items/items.glb?v=2', (g) => { // (?v=: a new pack is a new address, so no stale copy is used)
+    ['assets/items/items.glb?v=2', (g) => { // (?v=: a new pack is a new address on the site too, so no stale copy is used)
       for (const root of [...g.scene.children]) {
         root.traverse((o) => { if (o.isMesh) o.castShadow = true; });
         Assets.items[root.userData.model] = root;

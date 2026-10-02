@@ -16,7 +16,6 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css">
 <script type="importmap">
 {
   "imports": {
@@ -25,57 +24,50 @@
   }
 }
 </script>
-<!-- every module of the game, asked for at once (otherwise the browser finds them level by level, and the
-     host is slow to answer each request); a module missing here still loads, just a little later -->
-<link rel="modulepreload" href="src/main.js">
-<link rel="modulepreload" href="src/util.js">
-<link rel="modulepreload" href="src/items.js">
-<link rel="modulepreload" href="src/gear.js">
-<link rel="modulepreload" href="src/classes.js">
-<link rel="modulepreload" href="src/assets.js">
-<link rel="modulepreload" href="src/noise.js">
-<link rel="modulepreload" href="src/terrain.js">
-<link rel="modulepreload" href="src/world.js">
-<link rel="modulepreload" href="src/fx.js">
-<link rel="modulepreload" href="src/animator.js">
-<link rel="modulepreload" href="src/character.js">
-<link rel="modulepreload" href="src/player.js">
-<link rel="modulepreload" href="src/skills.js">
-<link rel="modulepreload" href="src/dungeon-map.js">
-<link rel="modulepreload" href="src/outdoor-map.js">
-<link rel="modulepreload" href="src/maps/crypt.js">
-<link rel="modulepreload" href="src/maps/frostfang.js">
-<link rel="modulepreload" href="src/maps/cinderfall.js">
-<link rel="modulepreload" href="src/maps/shadowmere.js">
-<link rel="modulepreload" href="src/maps/arena.js">
-<link rel="modulepreload" href="src/maps.js">
-<link rel="modulepreload" href="src/monsters.js">
-<link rel="modulepreload" href="src/sim/world.js">
-<link rel="modulepreload" href="src/enemies.js">
-<link rel="modulepreload" href="src/dungeon.js">
-<link rel="modulepreload" href="src/lands.js">
-<link rel="modulepreload" href="src/arena.js">
-<link rel="modulepreload" href="src/places.js">
-<link rel="modulepreload" href="src/combat.js">
-<link rel="modulepreload" href="src/town.js">
-<link rel="modulepreload" href="src/ui.js">
-<link rel="modulepreload" href="src/doll.js">
-<link rel="modulepreload" href="src/music.js">
-<link rel="modulepreload" href="src/ambience.js">
-<link rel="modulepreload" href="src/audio.js">
-<link rel="modulepreload" href="src/input.js">
-<link rel="modulepreload" href="src/quests.js">
-<link rel="modulepreload" href="src/link.js">
-<link rel="modulepreload" href="src/others.js">
-<link rel="modulepreload" href="src/chat.js">
-<link rel="modulepreload" href="src/party.js">
-<link rel="modulepreload" href="src/settings.js">
-<link rel="modulepreload" href="src/game.js">
-<link rel="modulepreload" href="src/net.js">
-<link rel="modulepreload" href="src/local.js">
-<link rel="modulepreload" href="src/account.js">
-<link rel="modulepreload" href="src/version.js">
-<link rel="modulepreload" href="src/update.js">
+<!-- The game's code, styles and models come from jsDelivr's CDN on the live site, pinned to this version's tag
+     (the host is slow to serve files); anywhere else, or if the CDN fails, from here. tools/stamp-version.mjs
+     writes the tag and the module list. Every module is asked for at once: otherwise the browser finds them
+     level by level. -->
+<style id="boot-style">html, body { margin: 0; background: #0e0b08; } body > * { visibility: hidden; }</style>
+<script type="module">
+  const CDN = 'https://cdn.jsdelivr.net/gh/yilmazedis/emberwood@ew-35e346322be5/';
+  const MODULES = ['account.js', 'ambience.js', 'animator.js', 'arena.js', 'assets.js', 'audio.js', 'character.js', 'chat.js', 'classes.js', 'combat.js', 'doll.js', 'dungeon-map.js', 'dungeon.js', 'enemies.js', 'fx.js', 'game.js', 'gear.js', 'input.js', 'items.js', 'lands.js', 'link.js', 'local.js', 'main.js', 'maps.js', 'maps/arena.js', 'maps/cinderfall.js', 'maps/crypt.js', 'maps/frostfang.js', 'maps/shadowmere.js', 'monsters.js', 'music.js', 'net.js', 'noise.js', 'others.js', 'outdoor-map.js', 'party.js', 'places.js', 'player.js', 'quests.js', 'settings.js', 'sim/world.js', 'skills.js', 'terrain.js', 'town.js', 'ui.js', 'update.js', 'util.js', 'version.js', 'world.js'];
+  const q = new URLSearchParams(location.search); // (?nocdn: everything from here; ?cdn: from the CDN anywhere)
+  const live = (location.hostname === 'emberwood.kerimcaglar.com' || q.has('cdn')) && !q.has('nocdn');
+  const show = () => document.getElementById('boot-style')?.remove(); // (the page stays hidden until it's styled)
+  setTimeout(show, 25000);
+  const styles = (base) => new Promise((resolve, reject) => {
+    const l = document.createElement('link');
+    l.rel = 'stylesheet';
+    l.href = `${base}style.css`;
+    l.onload = resolve;
+    l.onerror = () => { l.remove(); reject(new Error(`${l.href} did not load`)); };
+    document.head.append(l);
+  });
+  const code = (base) => {
+    for (const m of MODULES) {
+      const l = document.createElement('link');
+      l.rel = 'modulepreload';
+      l.href = `${base}src/${m}`;
+      document.head.append(l);
+    }
+    return import(`${base}src/main.js`);
+  };
+  if (live) {
+    try {
+      await styles(CDN);
+      show();
+      await code(CDN);
+    } catch (err) {
+      console.warn('the CDN failed: loading from the site', err);
+      styles('./').then(show, show);
+      await code('./');
+    }
+  } else {
+    styles('./').then(show, show);
+    await code('./');
+  }
+</script>
 </head>
 <body>
 <div id="game"></div>
@@ -330,6 +322,5 @@
   <button id="update-later" class="ghost">Later</button>
 </div>
 
-<script type="module" src="src/main.js"></script>
 </body>
 </html>

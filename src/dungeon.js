@@ -8,10 +8,11 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { CELL, WALL, CUT_Y, FLOOR_Y } from './dungeon-map.js';
 import { randomItem } from './items.js';
+import { download } from './assets.js';
 import { hdr } from './fx.js';
 import { randInt, chance } from './util.js';
 
-const PACK = 'assets/dungeon/dungeon.glb';
+const PACK = 'assets/dungeon/dungeon.glb'; // (from the CDN on the live site: assets.js download)
 const CHEST_REFILL = 5 * 60 * 1000;
 
 // ---------------------------------------------------------------- the pack (shared by every dungeon)
@@ -19,9 +20,7 @@ let packData = null; // the download
 let packModels = null; // parsed: model name -> root
 export function fetchPack() {
   if (!packData) {
-    packData = fetch(PACK)
-      .then((r) => { if (!r.ok) throw new Error(`${PACK}: ${r.status}`); return r.arrayBuffer(); })
-      .catch((err) => { packData = null; throw err; });
+    packData = download(PACK).catch((err) => { packData = null; throw err; });
   }
   return packData;
 }
