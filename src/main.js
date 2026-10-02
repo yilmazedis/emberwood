@@ -96,6 +96,8 @@ function attachWorld(net) {
   game.net = net;
   game.link.attach(net);
   net.on('chat', (m) => game.chat.receive(m));
+  net.on('party', (m) => game.party.receive(m));
+  net.on('partyInvite', (m) => game.party.invited(m));
 }
 
 game.onLeave = (why) => {

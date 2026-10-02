@@ -66,6 +66,7 @@
 <link rel="modulepreload" href="src/link.js">
 <link rel="modulepreload" href="src/others.js">
 <link rel="modulepreload" href="src/chat.js">
+<link rel="modulepreload" href="src/party.js">
 <link rel="modulepreload" href="src/settings.js">
 <link rel="modulepreload" href="src/game.js">
 <link rel="modulepreload" href="src/net.js">
@@ -105,6 +106,17 @@
   <div id="zone-toast"></div>
   <div id="center-msg"></div>
 
+  <!-- your party (src/party.js) -->
+  <div id="party" class="panel hidden">
+    <div id="party-head"><span>Party</span> <small id="party-count"></small><button id="party-leave" class="ghost" title="Leave the party">Leave</button></div>
+    <div id="party-list"></div>
+  </div>
+  <!-- someone invites you to their party -->
+  <div id="invite" class="panel hidden" role="dialog">
+    <div id="invite-text"></div>
+    <div class="row"><button id="invite-yes">Join</button><button id="invite-no" class="ghost">No thanks</button></div>
+  </div>
+
   <div id="minimap-wrap" class="panel"><canvas id="minimap" width="180" height="180"></canvas><div id="zone-name"></div></div>
 
   <div id="log"></div>
@@ -114,7 +126,7 @@
     <div id="chat-head"><span>World chat</span> <small id="chat-online"></small><kbd class="desk-only">Enter</kbd></div>
     <div id="chat-log"></div>
     <form id="chat-form" class="hidden" autocomplete="off">
-      <input id="chat-input" maxlength="160" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="send" placeholder="Say something to everyone…">
+      <input id="chat-input" maxlength="160" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="send" placeholder="Say something to everyone… (/p party, /help)">
       <button type="submit">Send</button>
     </form>
   </div>
@@ -204,7 +216,7 @@
       <li><kbd>Mouse wheel</kbd> Zoom</li>
       <li><kbd>Esc</kbd> Settings: music, sound, graphics, leave the game · <kbd>M</kbd> mute</li>
       <li>Walk over loot to pick it up. The camp is safe and heals you fast.</li>
-      <li>Other heroes fight the same monsters: everyone who hits one gets the XP, and their own loot.</li>
+      <li>Hunting together? Click a hero's name to <b>invite them to a party</b> (or type <kbd>/invite Name</kbd>). Up to 8: you share the XP of kills near you (more for each member), take turns on the loot, and share a copy of each dungeon. <kbd>/p</kbd> talks to the party.</li>
     </ul>
     <ul class="touch-only">
       <li><b>Left thumb</b> anywhere on the left side: move. Push a little to walk, all the way to run.</li>
@@ -219,7 +231,7 @@
       <li>The <b>waystone</b> in camp takes you to other lands (from level 8): Frostfang, Cinderfall and Shadowmere, each with its own boss and dungeon. Dungeons are a copy of your own (your party's).</li>
       <li><b>Chat</b>: talk to everyone in the world.</li>
       <li>Walk over loot to pick it up. The camp is safe and heals you fast.</li>
-      <li>Other heroes fight the same monsters: everyone who hits one gets the XP, and their own loot.</li>
+      <li>Hunting together? Tap a hero's name to <b>invite them to a party</b>. Up to 8: you share the XP of kills near you (more for each member), take turns on the loot, and share a copy of each dungeon. <b>/p</b> in chat talks to the party.</li>
     </ul>
   </div>
 

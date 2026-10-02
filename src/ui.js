@@ -348,6 +348,7 @@ export class UI {
     const el = document.createElement('div');
     el.className = `plate player c-${rp.cls}`;
     el.innerHTML = '<div class="bubble"></div><div class="pn"><span></span><i></i></div><div class="hpb"><b></b></div>';
+    el.querySelector('.pn').addEventListener('click', (e) => { e.stopPropagation(); this.game.playerMenu(rp); });
     this.el.plates.appendChild(el);
     const p = { el, ent: rp, kind: 'player', bar: el.querySelector('.hpb b'), bubble: el.querySelector('.bubble'), max: 46 };
     this.plates.push(p);
@@ -360,6 +361,7 @@ export class UI {
     const el = rp.plate.el;
     el.querySelector('.pn span').textContent = rp.name; // (text, never HTML: names come from other players)
     el.querySelector('.pn i').textContent = `Lv ${rp.level}`;
+    el.classList.toggle('party', !!this.game.party?.has(rp.id));
   }
 
   // A chat bubble over a hero's head for a few seconds (our own hero gets an empty plate for it).
@@ -849,12 +851,12 @@ export class UI {
       ctx.fillStyle = RARITY[l.data.rarity].color;
       ctx.fillRect(pt[0] - 2, pt[1] - 2, 4, 4);
     }
-    for (const o of g.others.list) { // other heroes
+    for (const o of g.others.list) { // other heroes (party members green)
       const [x, y] = m(o.pos.x, o.pos.z);
       if (!onMap([x, y])) continue;
       ctx.beginPath();
       ctx.arc(x, y, 3.2, 0, Math.PI * 2);
-      ctx.fillStyle = o.alive ? '#5fd4ff' : '#4a6a78';
+      ctx.fillStyle = !o.alive ? '#4a6a78' : g.party.has(o.id) ? '#7dff9a' : '#5fd4ff';
       ctx.fill();
       ctx.strokeStyle = '#06222c';
       ctx.lineWidth = 1.2;

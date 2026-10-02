@@ -1,6 +1,7 @@
 // World chat: everyone in Emberwood reads it, and heroes nearby also show it in a bubble over their
 // heads. Enter (or the Chat button on phones) opens the line, Enter sends, Esc closes. Recent lines
-// stay on screen for a while; the whole conversation shows while the line is open.
+// stay on screen for a while; the whole conversation shows while the line is open. A line starting
+// with / is a command: /p (party chat), /invite, /kick, /leave (see command).
 import { CLASSES } from './classes.js';
 import { has } from './util.js';
 
@@ -57,10 +58,38 @@ export class Chat {
     this.input.value = '';
     this.close();
     if (!text) return;
+    if (text.startsWith('/')) this.command(text);
+    else this.say(text);
+  }
+
+  async say(text, to = null) {
     try {
-      await this.game.net.request('chat', { text });
+      await this.game.net.request('chat', to ? { text, to } : { text });
     } catch (err) {
       this.line({ text: err.message, sys: true });
+    }
+  }
+
+  command(text) {
+    const [cmd, ...rest] = text.slice(1).split(/\s+/), arg = rest.join(' ').trim(), party = this.game.party;
+    switch (cmd.toLowerCase()) {
+      case 'p': case 'party':
+        if (arg) this.say(arg, 'party');
+        break;
+      case 'invite': case 'inv':
+        if (arg) party.invite(arg);
+        else this.line({ text: 'Who? /invite Name', sys: true });
+        break;
+      case 'leave':
+        if (party.id) party.leave(); else this.line({ text: 'You are not in a party.', sys: true });
+        break;
+      case 'kick': {
+        const m = party.members.find((x) => x.n.toLowerCase() === arg.toLowerCase());
+        if (m) party.kick(m.id); else this.line({ text: `Nobody called ${arg} is in your party.`, sys: true });
+        break;
+      }
+      default:
+        this.line({ text: 'Commands: /p message (party chat) · /invite Name · /kick Name · /leave (the party)', sys: true });
     }
   }
 
@@ -71,10 +100,11 @@ export class Chat {
     this.setOnline(r.online);
   }
 
-  // A message from the server: { i: hero id, n: name, c: class, x: text } or { s: 1, x: text, o: online }
+  // A message from the server: { i: hero id, n: name, c: class, x: text, p: 1 if to the party } or
+  // { s: 1, x: text, o: online, p }
   receive(m) {
     if (m.s) {
-      this.line({ text: m.x, sys: true });
+      this.line({ text: String(m.x || ''), sys: true, party: !!m.p });
       this.setOnline(m.o);
       return;
     }
@@ -85,7 +115,7 @@ export class Chat {
   }
 
   add(m, old) {
-    this.line({ name: String(m.n || '?'), cls: has(CLASSES, m.c) ? m.c : '', text: String(m.x || ''), old, me: m.i === this.game.link.pid });
+    this.line({ name: String(m.n || '?'), cls: has(CLASSES, m.c) ? m.c : '', text: String(m.x || ''), old, me: m.i === this.game.link.pid, party: !!m.p });
   }
 
   setOnline(n) {
@@ -93,10 +123,11 @@ export class Chat {
   }
 
   // text only (never HTML): it comes from other players
-  line({ name = '', cls = '', text, sys = false, old = false, me = false }) {
+  line({ name = '', cls = '', text, sys = false, old = false, me = false, party = false }) {
     const d = document.createElement('div');
     if (sys) d.className = 'sys';
     if (me) d.className = 'me';
+    if (party) d.classList.add('party');
     if (name) {
       const b = document.createElement('b');
       b.className = `c-${cls}`;

@@ -510,17 +510,20 @@ export class EnemyManager {
     this.byId.get(ev[1])?.event(ev);
   }
 
-  // [d, id, x, z, credited heroes, killer, type, level]: it fell. If we helped, our share comes now.
+  // [d, id, x, z, credits: [[hero, XP share, loot]], killer, type, level]: it fell. If we have a share
+  // (we hurt it, or our party did nearby), it comes now.
   died(ev) {
-    const [, id, x, z, who, , type, level] = ev;
+    const [, id, x, z, credits, , type, level] = ev;
     const e = this.byId.get(id), g = this.game;
     if (e) {
       e.die();
       e.predicted = 0;
     }
-    if (!Array.isArray(who) || !who.includes(g.link.pid) || !has(ENEMY_TYPES, type)) return;
+    const mine = Array.isArray(credits) && credits.find((c) => (Array.isArray(c) ? c[0] : c) === g.link.pid);
+    if (!mine || !has(ENEMY_TYPES, type)) return;
+    const share = Array.isArray(mine) ? clamp(Number(mine[1]) || 0, 0, 3) : 1, loot = Array.isArray(mine) ? mine[2] === 1 : true;
     const pos = e ? e.pos.clone() : new THREE.Vector3(x, heightAt(x, z), z);
-    g.rewardKill({ type, level, def: ENEMY_TYPES[type], pos, height: e ? e.height : 2 });
+    g.rewardKill({ type, level, def: ENEMY_TYPES[type], pos, height: e ? e.height : 2, share, loot });
   }
 
   update(dt) {

@@ -1,5 +1,5 @@
-// Emberwood game server: accounts, characters and the shared world (src/sim/world.js: monsters, other
-// heroes) over one WebSocket (/ws), plus a /status page. Messages are JSON objects
+// Emberwood game server: accounts, characters, the shared world (src/sim/world.js: monsters, other
+// heroes, every place in maps.js) and parties over one WebSocket (/ws), plus a /status page. Messages are JSON objects
 // { t: type, rq?: request number, ... }; a reply carries re: that number. The world sends each hero's
 // game an update ten times a second ({ t: 'w', ... }), and chat ({ t: 'chat', ... }) as it happens.
 import http from 'node:http';
@@ -39,6 +39,7 @@ setInterval(() => { const now = Date.now(); for (const [ip, ts] of attempts) if 
 const online = new Map(); // account (lower case) -> connection
 
 const charList = (acc) => acc.characters.map(({ id, name, cls, level }) => ({ id, name, cls, level }));
+const heroes = new Map(); // character id -> the connection playing it
 
 // ---------------------------------------------------------------- the world
 const world = new WorldSim();
@@ -58,6 +59,100 @@ function leaveWorld(c, quiet = false) {
   inWorld.delete(c.pid);
   c.pid = null;
   if (!quiet && c.char) announce(`${c.char.name} has left.`);
+  if (c.char) partyChanged(c.char.id);
+}
+
+// No longer playing this hero (another one, signed out, or gone): its party keeps a place for it a while.
+function dropHero(c) {
+  const id = c.char?.id;
+  if (!id || heroes.get(id) !== c) return;
+  heroes.delete(id);
+  const party = partyOf(id);
+  if (party) { party.members.get(id).gone = Date.now(); sendParty(party); }
+}
+
+// ---------------------------------------------------------------- parties
+// Up to 8 heroes, led by the one who invited the first. Members share the XP and loot of kills near
+// them (WorldSim.credits) and one copy of each dungeon, and have their own chat. Parties live only on
+// the server (a restart ends them); a member who drops out keeps their place for a few minutes.
+const MAX_PARTY = 8;
+const GONE_FOR = 5 * 60000;
+const INVITE_FOR = 60000;
+const parties = new Map(); // id -> { id, leader: character id, members: Map(character id -> { name, cls, level, gone }) }
+const memberOf = new Map(); // character id -> party id
+const invites = new Map(); // invited character id -> { from: character id, party, at }
+let lastParty = 0;
+const partyOf = (id) => parties.get(memberOf.get(id)) || null;
+
+// What the members' games show: who's in it, their level, life, where they are, and who leads.
+function partyView(party) {
+  return {
+    t: 'party', id: party.id, leader: party.leader,
+    members: [...party.members.entries()].map(([id, m]) => {
+      const c = heroes.get(id), p = c?.pid ? world.players.get(c.pid) : null;
+      return { id, n: m.name, c: m.cls, l: p?.level || m.level, i: c?.pid || 0, m: p?.area?.map.id || null, h: p ? Math.round(p.hp * 100) / 100 : 0, a: p?.alive ? 1 : 0, on: c ? 1 : 0 };
+    }),
+  };
+}
+
+function sendParty(party) {
+  const msg = partyView(party), text = JSON.stringify(msg);
+  party.sent = text;
+  for (const id of party.members.keys()) heroes.get(id)?.send(msg);
+}
+
+// (a member's hero entered or left the world: its place in the world now follows the party)
+function partyChanged(id) {
+  const party = partyOf(id), c = heroes.get(id);
+  if (c?.pid) world.setParty(c.pid, party ? party.id : 0);
+  if (party) sendParty(party);
+}
+
+function partySay(party, text) {
+  const msg = { t: 'chat', s: 1, p: 1, x: text };
+  for (const id of party.members.keys()) heroes.get(id)?.send(msg);
+}
+
+function leaveParty(id, why = 'left') {
+  const party = partyOf(id);
+  if (!party) return;
+  const m = party.members.get(id);
+  party.members.delete(id);
+  memberOf.delete(id);
+  const c = heroes.get(id);
+  c?.send({ t: 'party', id: 0, members: [] });
+  if (c?.pid) world.setParty(c.pid, 0);
+  partySay(party, `${m.name} ${why === 'kicked' ? 'was removed from' : why === 'gone' ? 'dropped out of' : 'left'} the party.`);
+  if (party.members.size < 2) return disband(party);
+  if (party.leader === id) party.leader = [...party.members.keys()].find((k) => heroes.has(k)) || [...party.members.keys()][0];
+  sendParty(party);
+}
+
+function disband(party) {
+  for (const id of party.members.keys()) {
+    memberOf.delete(id);
+    const c = heroes.get(id);
+    c?.send({ t: 'party', id: 0, members: [] });
+    if (c?.pid) world.setParty(c.pid, 0);
+  }
+  parties.delete(party.id);
+}
+
+// Every second: life and whereabouts (only when something changed); and those gone too long leave.
+setInterval(() => {
+  const now = Date.now();
+  for (const party of [...parties.values()]) {
+    for (const [id, m] of [...party.members]) if (!heroes.has(id) && now - (m.gone || now) > GONE_FOR) leaveParty(id, 'gone');
+    if (!parties.has(party.id)) continue;
+    if (JSON.stringify(partyView(party)) !== party.sent) sendParty(party);
+  }
+  for (const [id, inv] of invites) if (now - inv.at > INVITE_FOR) invites.delete(id);
+}, 1000).unref();
+
+function findHero(name) {
+  const lower = String(name || '').trim().toLowerCase();
+  for (const c of heroes.values()) if (c.char?.name.toLowerCase() === lower) return c;
+  return null;
 }
 
 // Ten times a second: the world moves on and every hero's game hears about its surroundings.
@@ -145,7 +240,9 @@ const handlers = {
 
   deleteChar(c, m) {
     const acc = needAccount(c);
-    if (c.char && c.char.id === m.id) c.char = null;
+    const id = String(m.id);
+    if (acc.characters.some((x) => x.id === id)) leaveParty(id);
+    if (c.char && c.char.id === m.id) { leaveWorld(c, true); dropHero(c); c.char = null; }
     if (!store.removeCharacter(acc, String(m.id))) throw new Oops('No such character.');
     return { t: 'chars', chars: charList(acc) };
   },
@@ -155,7 +252,17 @@ const handlers = {
     const ch = acc.characters.find((x) => x.id === m.id);
     if (!ch) throw new Oops('No such character.');
     leaveWorld(c);
+    dropHero(c);
     c.char = ch;
+    const before = heroes.get(ch.id);
+    if (before && before !== c) before.char = null; // (an older connection of the same account)
+    heroes.set(ch.id, c);
+    const party = partyOf(ch.id);
+    if (party) {
+      const mem = party.members.get(ch.id);
+      mem.gone = 0;
+      mem.level = ch.level;
+    }
     return { t: 'char', char: { id: ch.id, name: ch.name, cls: ch.cls, save: ch.save } };
   },
 
@@ -172,10 +279,82 @@ const handlers = {
     if (!c.char) throw new Oops('Pick a hero first.');
     leaveWorld(c, true);
     c.pid = ++lastPid;
-    const where = world.join(c.pid, { name: c.char.name, cls: c.char.cls, key: c.char.id, map: String(m.map || ''), p: m.p, k: m.k });
+    const party = partyOf(c.char.id); // (given to join: a dungeon it's in is the party's)
+    const where = world.join(c.pid, { name: c.char.name, cls: c.char.cls, key: c.char.id, party: party?.id || 0, map: String(m.map || ''), p: m.p, k: m.k });
     inWorld.set(c.pid, c);
     announce(`${c.char.name} has entered Emberwood.`, c);
+    if (party) setTimeout(() => partyChanged(c.char?.id), 0); // (after the reply: its game knows its pid)
     return { t: 'entered', pid: c.pid, chat: chatLog.slice(-20), online: inWorld.size, ...where };
+  },
+
+  // ---- parties
+  // Invite a hero (by name) into our party; a new party is made when they say yes.
+  partyInvite(c, m) {
+    if (!c.pid) throw new Oops('Step into the world first.');
+    const them = findHero(m.name);
+    if (!them?.pid) throw new Oops(`Nobody called ${String(m.name || '').slice(0, 20)} is in the world.`);
+    if (them === c) throw new Oops('You are always in your own party.');
+    const mine = partyOf(c.char.id);
+    if (mine && mine.leader !== c.char.id) throw new Oops('Only the party leader can invite.');
+    if (mine && mine.members.size >= MAX_PARTY) throw new Oops(`A party has at most ${MAX_PARTY} heroes.`);
+    if (partyOf(them.char.id)) throw new Oops(`${them.char.name} is already in a party.`);
+    invites.set(them.char.id, { from: c.char.id, at: Date.now() });
+    const p = world.players.get(c.pid);
+    them.send({ t: 'partyInvite', from: c.char.name, c: c.char.cls, l: p?.level || 1 });
+    return { t: 'invited', name: them.char.name };
+  },
+
+  partyAnswer(c, m) {
+    if (!c.char) throw new Oops('Pick a hero first.');
+    const inv = invites.get(c.char.id);
+    invites.delete(c.char.id);
+    if (!inv || Date.now() - inv.at > INVITE_FOR) throw new Oops('That invitation ran out.');
+    const host = heroes.get(inv.from);
+    if (!m.yes) {
+      host?.send({ t: 'chat', s: 1, p: 1, x: `${c.char.name} said no to your party.` });
+      return { t: 'answered' };
+    }
+    if (!host) throw new Oops('They are not in the world any more.');
+    if (partyOf(c.char.id)) throw new Oops('You are already in a party.');
+    let party = partyOf(inv.from);
+    if (!party) {
+      party = { id: ++lastParty, leader: inv.from, members: new Map(), sent: '' };
+      parties.set(party.id, party);
+      party.members.set(inv.from, { name: host.char.name, cls: host.char.cls, level: host.char.level || 1, gone: 0 });
+      memberOf.set(inv.from, party.id);
+      partyChanged(inv.from);
+    }
+    if (party.members.size >= MAX_PARTY) throw new Oops('That party is full.');
+    party.members.set(c.char.id, { name: c.char.name, cls: c.char.cls, level: c.char.level || 1, gone: 0 });
+    memberOf.set(c.char.id, party.id);
+    partySay(party, `${c.char.name} joined the party.`);
+    partyChanged(c.char.id);
+    return { t: 'answered' };
+  },
+
+  partyLeave(c) {
+    if (c.char) leaveParty(c.char.id);
+    return { t: 'left' };
+  },
+
+  partyKick(c, m) {
+    const party = c.char && partyOf(c.char.id);
+    if (!party || party.leader !== c.char.id) throw new Oops('Only the party leader can do that.');
+    const id = String(m.id || '');
+    if (!party.members.has(id) || id === c.char.id) throw new Oops('They are not in your party.');
+    leaveParty(id, 'kicked');
+    return { t: 'kicked' };
+  },
+
+  partyLead(c, m) {
+    const party = c.char && partyOf(c.char.id);
+    if (!party || party.leader !== c.char.id) throw new Oops('Only the party leader can do that.');
+    const id = String(m.id || '');
+    if (!party.members.has(id)) throw new Oops('They are not in your party.');
+    party.leader = id;
+    partySay(party, `${party.members.get(id).name} leads the party now.`);
+    sendParty(party);
+    return { t: 'led' };
   },
 
   // Through a waystone, a dungeon's door or its stairs (or, fallen, back to where heroes rise).
@@ -197,6 +376,7 @@ const handlers = {
     return { t: 'exited' };
   },
 
+  // to: 'party' for the party's own channel
   chat(c, m) {
     if (!c.pid) throw new Oops('Step into the world to chat.');
     const text = String(m.text || '').replace(/[\p{Cc}\p{Cf}]/gu, '').replace(/\s+/g, ' ').trim().slice(0, 160);
@@ -205,6 +385,13 @@ const handlers = {
     c.said = (c.said || []).filter((t) => now - t < 10000);
     if (c.said.length >= 6) throw new Oops('Slow down a little.');
     c.said.push(now);
+    if (m.to === 'party') {
+      const party = partyOf(c.char.id);
+      if (!party) throw new Oops('You are not in a party.');
+      const msg = { t: 'chat', i: c.pid, n: c.char.name, c: c.char.cls, x: text, ts: now, p: 1 };
+      for (const id of party.members.keys()) heroes.get(id)?.send(msg);
+      return { t: 'said' };
+    }
     const msg = { t: 'chat', i: c.pid, n: c.char.name, c: c.char.cls, x: text, ts: now };
     chatLog.push(msg);
     if (chatLog.length > 50) chatLog.shift();
@@ -214,6 +401,7 @@ const handlers = {
 
   logout(c) {
     leaveWorld(c);
+    dropHero(c);
     if (c.acc && online.get(c.acc.lower) === c) online.delete(c.acc.lower);
     c.acc = null;
     c.char = null;
@@ -266,6 +454,7 @@ const sockets = attachWebSocket(server, {
     c.onmessage = (text) => handle(c, text);
     c.onclose = () => {
       leaveWorld(c);
+      dropHero(c);
       if (c.acc && online.get(c.acc.lower) === c) online.delete(c.acc.lower);
     };
   },

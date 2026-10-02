@@ -7,8 +7,8 @@
 // Each hero's game says where its hero is, what it hit and what it did; ten times a second the world
 // tells every game where the monsters and other heroes around it are, and what happened. Whether a
 // monster's blow lands is decided by the game of the hero it swings at (that game knows where its hero
-// really stands, so dodging works), and so are XP and loot: everyone who hit a monster gets credit for
-// the kill and rolls their own loot.
+// really stands, so dodging works). A kill's XP and loot are shared out here (see credits: parties
+// share theirs) and each hero's game rolls what it was given.
 // Plain numbers only (no three.js), so Node runs it as is.
 import { ENEMY_TYPES, monsterHp } from '../monsters.js';
 import { planWorld, zoneAt, resolveCollision, isWalkable, randomWalkablePoint } from '../terrain.js';
@@ -24,8 +24,11 @@ const SEE_PLAYERS = 80; // … and about other heroes
 const ACTIVE = 90; // monsters further than this from every hero rest
 const INSTANCE_TTL = 300; // seconds an empty dungeon copy is kept (come back for what you left)
 const HERO_RADIUS = 0.5;
+const SHARE_RANGE = 60; // party members this near a kill share it
+const PARTY_BONUS = 0.2; // each extra member in range adds this much to the party's XP
 const r2 = (v) => Math.round(v * 100) / 100;
 const r1 = (v) => Math.round(v * 10) / 10;
+const r3 = (v) => Math.round(v * 1000) / 1000;
 
 // What a skill does besides damage, from a hero's game, checked: { stun: s, slow: [speed factor, s],
 // taunt: s } (null if nothing sensible).
@@ -76,7 +79,7 @@ class Monster {
     this.speed = 0;
     this.target = null;
     this.sight = new Map(); // hero -> { at, clear }: line-of-sight checks in the crypt, 5 per second
-    this.hitters = new Map(); // pid -> when they last hit it: everyone here gets credit for the kill
+    this.hitters = new Map(); // pid -> damage dealt: they (and their parties) share the kill
     this.raised = []; // a boss's calls for help so far (at 70% and 40% life)
     this.enraged = false; // bosses below 30% life
     if (d.lich) {
@@ -402,7 +405,7 @@ class Monster {
   hurt(amount, fx, fz, knock, by, eff) {
     const d = this.def;
     this.hp -= amount;
-    this.hitters.set(by.pid, this.sim.time);
+    this.hitters.set(by.pid, (this.hitters.get(by.pid) || 0) + Math.max(1, amount)); // (a taunt counts a little)
     if (this.state === 'idle' || this.state === 'return') this.aggro(by, true);
     else if (this.target !== by && (!this.fair(this.target) || this.dist(by) < this.dist(this.target))) this.target = by;
     if (!d.boss && knock > 0 && Number.isFinite(fx) && Number.isFinite(fz)) {
@@ -430,15 +433,50 @@ class Monster {
     }
   }
 
-  // credit: false when it just crumbles (the Lich's minions when he falls)
+  // credit: false when it just crumbles (a boss's minions when it falls)
   die(by, credit = true) {
     this.state = 'dead';
     this.deadT = 0;
     this.attack = null;
     this.hp = 0;
-    const who = credit ? [...this.hitters.keys()].filter((pid) => this.sim.players.get(pid)?.area === this.area) : [];
-    this.emit(['d', this.id, r2(this.x), r2(this.z), who, by ? by.pid : 0, this.type, this.level], who);
+    const credits = credit ? this.credits() : [];
+    this.emit(['d', this.id, r2(this.x), r2(this.z), credits, by ? by.pid : 0, this.type, this.level], credits.map((c) => c[0]));
     if (this.def.boss) this.area.bossDown(this);
+  }
+
+  // Who gets what for this kill: [[hero, XP share, loot 0/1], …]. The heroes who hurt it form teams: a
+  // party (with its members nearby, hit or not) or a lone hero. The XP is split between teams by the
+  // damage each dealt; a party's part goes to its members by their level, plus a bonus for each extra
+  // member (grouping pays). The team that dealt the most gets the loot; a party's members take turns.
+  // Everyone credited counts the kill for their quests.
+  credits() {
+    const sim = this.sim, teams = new Map();
+    let total = 0;
+    for (const [pid, dmg] of this.hitters) {
+      const p = sim.players.get(pid);
+      if (!p || p.area !== this.area) continue;
+      const key = p.party ? `p${p.party}` : `h${pid}`;
+      let t = teams.get(key);
+      if (!t) teams.set(key, (t = { party: p.party, dmg: 0, heroes: [p] }));
+      t.dmg += dmg;
+      total += dmg;
+    }
+    let best = null;
+    for (const t of teams.values()) {
+      if (!best || t.dmg > best.dmg) best = t;
+      if (t.party) {
+        t.heroes = [...this.area.players].filter((o) => o.party === t.party
+          && (this.hitters.has(o.pid) || (o.alive && Math.hypot(o.x - this.x, o.z - this.z) < SHARE_RANGE)));
+      }
+    }
+    const out = [];
+    for (const t of teams.values()) {
+      const n = t.heroes.length, pool = (t.dmg / total) * (1 + PARTY_BONUS * (n - 1));
+      const levels = t.heroes.reduce((sum, h) => sum + h.level, 0);
+      const looter = t !== best ? null : t.party ? t.heroes[sim.turn(t.party) % n] : t.heroes[0];
+      for (const h of t.heroes) out.push([h.pid, r3((pool * h.level) / levels), h === looter ? 1 : 0]);
+    }
+    return out;
   }
 }
 
@@ -524,6 +562,20 @@ export class WorldSim {
     this.lastId = 0;
     this.players = new Map(); // pid -> hero
     this.areas = new Map(); // key -> Area: a land by its id, a dungeon copy by `<dungeon>:<party or hero>`
+    this.turns = new Map(); // party -> whose turn it is for loot (a counter)
+  }
+
+  // Whose turn for a party's loot (round robin).
+  turn(party) {
+    const n = this.turns.get(party) || 0;
+    this.turns.set(party, n + 1);
+    return n;
+  }
+
+  // Hero pid's party (0: none; the server keeps the parties). Their next dungeon is the party's copy.
+  setParty(pid, party) {
+    const p = this.players.get(pid);
+    if (p) p.party = party || 0;
   }
 
   area(key, map) {
@@ -543,14 +595,14 @@ export class WorldSim {
     return this.area(`${map.id}:${p.party ? `p${p.party}` : `h${p.key}`}`, map);
   }
 
-  // A hero enters the world. info: { name, cls, key: the character's id, map, p, k } (p: position etc.,
+  // A hero enters the world. info: { name, cls, key: the character's id, party, map, p, k } (p: position etc.,
   // k: looks, see input). Its game says where it is; a place it can't be (or can't be yet) sends it to
   // Emberwood's camp. Returns { map, ep, at? } (at: where it was put instead).
   join(pid, info) {
     this.leave(pid);
     const p = {
       pid, key: String(info.key || pid), name: info.name, cls: info.cls, level: 1, look: {}, lookVer: 1,
-      x: 0, z: 3.5, yaw: Math.PI, mode: 0, sp: 0, alive: true, hp: 1, away: false, party: 0,
+      x: 0, z: 3.5, yaw: Math.PI, mode: 0, sp: 0, alive: true, hp: 1, away: false, party: Number(info.party) || 0,
       area: null, ep: 0, inWorld: true, knownM: new Map(), knownP: new Map(), budget: 40,
     };
     this.players.set(pid, p);

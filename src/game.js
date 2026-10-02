@@ -25,6 +25,8 @@ import { Places } from './places.js';
 import { WorldLink } from './link.js';
 import { RemotePlayers } from './others.js';
 import { Chat } from './chat.js';
+import { Party, MAX_PARTY } from './party.js';
+import { CLASSES } from './classes.js';
 import { loadSettings, saveSettings } from './settings.js';
 import { angleDiff, yawTo, randInt, rand, chance, clamp } from './util.js';
 
@@ -143,6 +145,7 @@ export class Game {
     p.group.rotation.y = p.yaw;
     this.camFocus.copy(p.pos);
     this.ui.showDeath(false);
+    this.party.reset(); // (the server tells us if this hero is in one)
     this.quests.ensure();
     this.ui.setCharacter(char);
     this.renderer.compile(this.scene, this.camera); // the new model's shaders, before the first frame
@@ -159,6 +162,7 @@ export class Game {
     if (this.onTitle) return;
     this.save(true);
     this.link.exit();
+    this.party.reset();
     this.chat.close();
     this.ui.closeSettings(true);
     this.ui.closeInventory();
@@ -197,6 +201,7 @@ export class Game {
     this.enemies = new EnemyManager(this); // the monsters the world tells us about
     this.others = new RemotePlayers(this); // … and the other heroes
     this.chat = new Chat(this);
+    this.party = new Party(this);
 
     this.player.starterKit();
     this.player.pos.set(0, heightAt(0, 3.5), 3.5);
@@ -421,6 +426,15 @@ export class Game {
     return { target: null, point: new THREE.Vector3(p.x + Math.sin(facing) * 4, p.y, p.z + Math.cos(facing) * 4) };
   }
 
+  // Tapped another hero's name: invite them to our party.
+  playerMenu(rp) {
+    const party = this.party, esc = (s) => String(s).replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
+    const actions = [];
+    if (!party.has(rp.id) && party.leading && party.members.length < MAX_PARTY && !this.offline) actions.push(['Invite to party', () => party.invite(rp.name)]);
+    const note = party.has(rp.id) ? ' · in your party' : '';
+    this.ui.openMenu(rp.plate.el, `<div class="tt-name">${esc(rp.name)}</div><div class="tt-type">Level ${rp.level} ${CLASSES[rp.cls].name}${note}</div>`, actions);
+  }
+
   // Keys and buttons don't move the hero while a menu has them (the world doesn't wait online).
   get inputBlocked() {
     return this.paused || this.chat.isOpen;
@@ -486,15 +500,16 @@ export class Game {
     this.sfx.play(crit ? 'crit' : 'hit');
   }
 
-  // The world says a monster we hit has fallen: everyone who helped gets this — XP, quest progress and
-  // their own loot (nobody else sees it).
-  rewardKill({ type, level, def: d, pos, height }) {
+  // The world says a monster has fallen and we get a share (sim/world.js credits): XP (share: of the
+  // whole), quest progress, and, if it's our turn (loot), the loot, which only we see.
+  rewardKill({ type, level, def: d, pos, height, share = 1, loot = true }) {
     const p = this.player;
     const levelGap = p.level - level;
-    const xp = Math.max(1, Math.round(monsterXp(d, level) * clamp(1 - (levelGap - 2) * 0.2, 0.2, 1.2)));
+    const xp = Math.max(1, Math.round(monsterXp(d, level) * clamp(1 - (levelGap - 2) * 0.2, 0.2, 1.2) * share));
     p.gainXp(xp);
     this.ui.floater(new THREE.Vector3(pos.x, pos.y + height + 0.6, pos.z), `+${xp} XP`, 'xp');
     this.quests.onEvent('kill', { type });
+    if (!loot) return;
     const at = pos.clone();
     if (chance(0.75)) this.loot.dropGold(Math.round(randInt(d.gold[0], d.gold[1]) * (1 + 0.2 * (level - 1))), at);
     if (chance(d.boss ? 1 : 0.07)) this.loot.dropPotion(at);
@@ -657,6 +672,7 @@ export class Game {
     this.fx.update(dt);
     this.updateCamera(rawDt);
     this.ui.update(rawDt);
+    this.party.update();
     this.doll.update(rawDt);
     this.composer.render();
   }

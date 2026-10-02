@@ -36,6 +36,7 @@ export class LocalWorld {
       this.sim.leave(1);
       return { t: 'exited' };
     }
+    if (t.startsWith('party')) throw new Error('Parties need the game server (play online).');
     if (t === 'chat') {
       const text = String(data.text || '').trim().slice(0, 160);
       if (text) this.emit('chat', { t: 'chat', i: 1, n: this.who?.name, c: this.who?.cls, x: text, ts: Math.round(this.time * 1000) });

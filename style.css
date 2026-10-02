@@ -676,3 +676,40 @@ body.touch #ui:has(#boss:not(.hidden)) #chat:not(.open) { top: calc(104px + var(
 #travel .l-cinderfall { --land: #ff6a1a; }
 #travel .l-shadowmere { --land: #9a6aff; }
 #travel .set-note { margin: 10px 0 2px; }
+
+/* ------------------------------------------------------------------ your party (src/party.js) */
+#party { position: absolute; right: calc(16px + var(--sar)); top: calc(244px + var(--sat)); width: 196px; padding: 6px 8px 7px; }
+#party-head { display: flex; align-items: center; gap: 6px; font: 800 12.5px Cinzel, serif; color: var(--gold); margin-bottom: 4px; }
+#party-head small { font: 600 11px Inter, sans-serif; color: var(--muted); }
+#party-head button { margin-left: auto; padding: 2px 6px; font-size: 11px; background: none; border-color: transparent; color: var(--muted); }
+#party-list { display: grid; gap: 4px; }
+.pm { cursor: pointer; padding: 3px 5px; border-radius: 6px; background: rgba(0, 0, 0, 0.22); border: 1px solid transparent; }
+.pm:hover, .pm.selected { border-color: var(--edge); }
+.pm-top { display: flex; align-items: baseline; gap: 5px; font: 700 12px Inter, sans-serif; white-space: nowrap; overflow: hidden; }
+.pm-top b { color: var(--cls, #fff); overflow: hidden; text-overflow: ellipsis; }
+.pm-top i { font-style: normal; font-size: 10.5px; color: #d8cdb8; }
+.pm-top span { margin-left: auto; font-size: 10px; font-weight: 600; color: #8fe0ff; overflow: hidden; text-overflow: ellipsis; }
+.pm.lead .pm-top b::before { content: '♛ '; color: var(--gold); }
+.pm-hp { height: 5px; margin-top: 2px; border-radius: 3px; background: rgba(0, 0, 0, 0.55); overflow: hidden; }
+.pm-hp b { display: block; height: 100%; background: linear-gradient(#8dff9a, #2fae48); transform-origin: left; transition: transform 0.2s; }
+.pm.off { opacity: 0.5; }
+.pm.off .pm-top span { color: var(--muted); }
+.pm.down .pm-hp b { background: #6a2a24; }
+.pm.me { background: rgba(255, 220, 150, 0.06); }
+body.touch #party { top: calc(176px + var(--sat)); width: 160px; padding: 4px 6px 5px; }
+body.touch .pm-top { font-size: 11px; }
+@media (max-height: 520px) { body.touch #party { top: calc(140px + var(--sat)); } body.touch .pm { padding: 1px 4px; } body.touch .pm-hp { height: 4px; margin-top: 1px; } }
+
+/* an invitation */
+#invite { position: absolute; left: 50%; top: calc(64px + var(--sat)); transform: translateX(-50%); z-index: 26; width: min(360px, calc(100vw - 24px)); padding: 12px 14px; font: 600 13px/1.4 Inter, sans-serif; text-align: center; }
+#invite b { color: var(--cls, var(--gold)); }
+#invite .row { display: flex; gap: 8px; justify-content: center; margin-top: 10px; }
+#invite #invite-yes { color: var(--gold); border-color: var(--edge-hi); font-weight: 700; min-width: 90px; }
+#invite .ghost { background: none; border-color: transparent; color: var(--muted); }
+
+/* party members over their heads, and party chat */
+.plate.player .pn { pointer-events: auto; cursor: pointer; }
+.plate.player.party .pn span::before { content: '◆ '; color: #7dff9a; font-size: 9px; vertical-align: 1px; }
+.plate.player.party .hpb { outline: 1px solid rgba(125, 255, 154, 0.55); }
+#chat-log div.party, #chat-log div.party b { color: #9dffb2; }
+#chat-log div.party::before { content: 'Party · '; font-weight: 800; color: #6ad884; }
