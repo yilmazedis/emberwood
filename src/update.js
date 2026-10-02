@@ -1,7 +1,7 @@
 // A new version of the game is out (the site was updated): say so, with a Refresh button. version.json
 // changes with every update of the game's code (tools/stamp-version.mjs); the game checks it every few
 // minutes, whenever it comes back to the screen, and when the game server says the site changed.
-// Refreshing is up to the player (their hero is saved first, and they come back where they were).
+// Refreshing is up to the player (their hero is saved first, and they sign straight back in).
 // An update that changes how the game talks to the server can't wait: main.js reloads for that itself.
 import { VERSION } from './version.js';
 
