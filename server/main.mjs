@@ -3,6 +3,7 @@
 // { t: type, rq?: request number, ... }; a reply carries re: that number. The world sends each hero's
 // game an update ten times a second ({ t: 'w', ... }), and chat ({ t: 'chat', ... }) as it happens.
 import http from 'node:http';
+import fs from 'node:fs';
 import { attachWebSocket } from './ws.mjs';
 import * as store from './store.mjs';
 import { hashPassword, checkPassword, makeToken, readToken } from './auth.mjs';
@@ -162,7 +163,7 @@ const handlers = {
     const acc = needAccount(c);
     if (!c.char) throw new Oops('No character in play.');
     store.saveCharacter(acc, c.char.id, checkSave(m.save));
-    return null;
+    return { t: 'saved' }; // (only sent when the game asked for an answer: before a reload)
   },
 
   // The hero steps into the world (its game sends where it stands and how it looks).
@@ -237,7 +238,7 @@ const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://local');
   if (url.pathname === '/status' || url.pathname === '/') {
     res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' });
-    res.end(JSON.stringify({ ok: true, game: 'Emberwood', protocol: PROTOCOL, online: online.size, world: inWorld.size, uptimeS: Math.round((Date.now() - started) / 1000) }));
+    res.end(JSON.stringify({ ok: true, game: 'Emberwood', protocol: PROTOCOL, version: siteVersion, online: online.size, world: inWorld.size, uptimeS: Math.round((Date.now() - started) / 1000) }));
     return;
   }
   res.writeHead(404, { 'Content-Type': 'text/plain' });
@@ -277,5 +278,19 @@ server.on('upgrade', learnAddress);
 setInterval(() => {
   if (selfUrl && sockets.size) fetch(selfUrl, { cache: 'no-store' }).catch(() => { /* the next one */ });
 }, 4 * 60000).unref();
+
+// ---------------------------------------------------------------- the website was updated
+// The site and this server share a folder: a `git pull` changes version.json (tools/stamp-version.mjs),
+// and every open game is told at once, so it can offer a Refresh.
+const VERSION_FILE = new URL('../version.json', import.meta.url);
+const readVersion = () => { try { return String(JSON.parse(fs.readFileSync(VERSION_FILE, 'utf8')).v || ''); } catch { return ''; } };
+let siteVersion = readVersion();
+setInterval(() => {
+  const v = readVersion();
+  if (!v || v === siteVersion) return;
+  siteVersion = v;
+  console.log(`site updated to ${v}`);
+  for (const c of sockets) if (c.open) c.send({ t: 'update', v });
+}, 30000).unref();
 
 server.listen(PORT, () => console.log(`Emberwood server on port ${PORT}, data in ${store.DATA_DIR}`));

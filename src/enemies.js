@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import { Humanoid } from './character.js';
 import { heightAt } from './world.js';
-import { ENEMY_TYPES } from './monsters.js';
+import { ENEMY_TYPES, monsterDmg } from './monsters.js';
 import { STATES } from './sim/world.js';
 import { rand, angleDiff, yawTo, lerp, clamp, TAU, has } from './util.js';
 
@@ -53,7 +53,7 @@ export class Enemy {
     this.level = r.l;
     this.maxHp = r.mh;
     this.hp = r.h;
-    this.dmg = d.dmg * (1 + 0.22 * (this.level - 1));
+    this.dmg = monsterDmg(d, this.level);
     this.radius = d.radius * (d.scale || 1);
     this.height = d.kind === 'slime' ? 1.05 * d.size : 2.45 * (d.scale || 1);
     this.pos = new THREE.Vector3(r.x, heightAt(r.x, r.z), r.z);

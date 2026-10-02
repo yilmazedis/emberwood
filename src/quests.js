@@ -97,7 +97,8 @@ export class Quests {
     if (t.goal.kind === 'gold') n = Math.max(20, Math.round((n * 1.9 * Math.pow(lvl, 1.2)) / 5) * 5);
     // easy bounties in low zones pay at most a couple of levels above the zone
     const rl = t.zone ? Math.min(lvl, ZONE_LEVEL[t.zone] + 2) : lvl;
-    const reward = { gold: Math.round(value * (20 + rl * 8)), xp: Math.round(xpForLevel(rl) * 0.3 * value) };
+    // (XP: a third of a level early on; past level 10 about six kills' worth, or bounties would outpace hunting)
+    const reward = { gold: Math.round(value * (20 + rl * 8)), xp: Math.round(Math.min(xpForLevel(rl) * 0.3, 300 * (1 + 0.25 * (rl - 1))) * value) };
     if (t.item) reward.item = t.item;
     if (t.potions) reward.potions = t.potions;
     return {

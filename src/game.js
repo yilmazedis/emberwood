@@ -15,6 +15,7 @@ import { UI } from './ui.js';
 import { Doll } from './doll.js';
 import { Sfx } from './audio.js';
 import { randomItem } from './items.js';
+import { monsterXp } from './monsters.js';
 import { Input } from './input.js';
 import { Town } from './town.js';
 import { Quests } from './quests.js';
@@ -461,7 +462,7 @@ export class Game {
   rewardKill({ type, level, def: d, pos, height }) {
     const p = this.player;
     const levelGap = p.level - level;
-    const xp = Math.max(1, Math.round(d.xp * (1 + 0.25 * (level - 1)) * clamp(1 - (levelGap - 2) * 0.2, 0.2, 1.2)));
+    const xp = Math.max(1, Math.round(monsterXp(d, level) * clamp(1 - (levelGap - 2) * 0.2, 0.2, 1.2)));
     p.gainXp(xp);
     this.ui.floater(new THREE.Vector3(pos.x, pos.y + height + 0.6, pos.z), `+${xp} XP`, 'xp');
     this.quests.onEvent('kill', { type });
@@ -538,6 +539,20 @@ export class Game {
       try { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); } catch { /* storage unavailable */ }
     } else {
       this.net?.send('save', { save: data });
+    }
+  }
+
+  // Save now and wait until the server has it (before a reload).
+  async saveAndWait() {
+    if (!this.player || !this.character) return;
+    clearTimeout(this.saveTimer);
+    this.saveTimer = null;
+    this.saveDirty = false;
+    const data = this.player.serialize();
+    if (this.character.id === 'local') {
+      try { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); } catch { /* storage unavailable */ }
+    } else if (this.net?.online) {
+      await this.net.request('save', { save: data }, 4000);
     }
   }
 

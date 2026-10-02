@@ -123,7 +123,11 @@ export class Net {
       await new Promise((r) => setTimeout(r, Math.min(15000, 1000 * 2 ** this.retry++)));
       try {
         const v = (await this.connect()).v;
-        if (v > PROTOCOL) { this.session = null; this.emit('signedOut', { msg: 'Emberwood was updated. Reload the page to keep playing.' }); break; }
+        if (v > PROTOCOL) { // the game was updated and the server speaks a newer language: main.js saves and reloads
+          this.reconnecting = false;
+          this.emit('outdated');
+          return;
+        }
         if (v < PROTOCOL) { this.ws.close(); continue; } // the server is still being updated: keep trying
       } catch { continue; } // still unreachable
       try {

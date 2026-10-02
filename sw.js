@@ -30,8 +30,10 @@ self.addEventListener('message', (event) => {
   }));
 });
 
+// (version.json says whether a newer game is out: always from the network, never kept)
 function cacheable(url) {
   const u = new URL(url);
+  if (u.pathname.endsWith('/version.json')) return false;
   return u.origin === self.location.origin || CDN_HOSTS.includes(u.hostname);
 }
 

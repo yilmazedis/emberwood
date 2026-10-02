@@ -9,7 +9,10 @@ import { CLASSES } from './classes.js';
 import { SKILLS, CLASS_SKILLS, BUFFS, auraTick, aimedAt } from './skills.js';
 import { hdr } from './fx.js';
 
-export const xpForLevel = (lvl) => Math.round(60 * Math.pow(lvl, 1.55));
+export const MAX_LEVEL = 60;
+// XP to the next level. Quick up to level 10; after that each level asks for more kills of your own level:
+// about 15 at level 10, 60 at 20, 120 at 30, 200 at 40, 300 at 50 and nearly 400 at 59.
+export const xpForLevel = (lvl) => Math.round(60 * Math.pow(lvl, 1.55) * (1 + 0.16 * Math.max(0, lvl - 9)));
 const _axis = new THREE.Vector2();
 const r2 = (v) => Math.round(v * 100) / 100;
 const _ember = new THREE.Vector3();
@@ -161,7 +164,7 @@ export class Player {
   }
 
   load(s) {
-    this.level = s.level || 1;
+    this.level = Math.min(MAX_LEVEL, s.level || 1);
     this.xp = s.xp || 0;
     this.gold = s.gold || 0;
     this.potions = s.potions ?? 3;
@@ -210,7 +213,7 @@ export class Player {
     s.moveSpeed = 5.6 * (1 + s.moveSpd);
     s.dmgLo = Math.max(1, Math.round(s.dmgMin * (1 + s.dmgPct)));
     s.dmgHi = Math.max(s.dmgLo + 1, Math.round(s.dmgMax * (1 + s.dmgPct)));
-    s.dr = s.armor / (s.armor + 60);
+    s.dr = s.armor / (s.armor + 60 + 8 * Math.max(0, L - 10)); // (armor grows with level: so does what it takes)
     this.stats = s;
     if (this.hp !== undefined) {
       this.hp = Math.min(this.hp, s.maxHp);
@@ -313,12 +316,14 @@ export class Player {
   }
 
   gainXp(n) {
+    if (this.level >= MAX_LEVEL) { this.xp = 0; return; } // (the top, for now)
     this.xp += n;
     let leveled = false;
-    while (this.xp >= xpForLevel(this.level)) {
+    while (this.level < MAX_LEVEL && this.xp >= xpForLevel(this.level)) {
       this.xp -= xpForLevel(this.level);
       this.level++;
       leveled = true;
+      if (this.level >= MAX_LEVEL) this.xp = 0;
       const skill = this.skills.find((s) => s.level === this.level);
       this.game.ui.log(`<b>Level ${this.level}!</b>${skill ? ` New skill: <b>${skill.name}</b> [${skill.key}]` : ''}`, 'lvl');
     }

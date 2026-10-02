@@ -1,8 +1,14 @@
 // The monsters: what each kind is like, and where they live. Plain data, shared by the game (enemies.js
 // draws them) and the game server (sim/world.js runs them).
-//   hp, dmg: at level 1 (+32% life and +22% damage per level); speed m/s; range: attack reach (casters:
+//   hp, dmg: at level 1 (they grow with level: monsterHp, monsterDmg); speed m/s; range: attack reach (casters:
 //   how far they shoot, keeping `keep` metres away); atkCd/atkDur: seconds; aggro: notice distance
 import { CRYPT_SPAWNS } from './crypt-map.js';
+
+// How a monster grows with its level: +32% life and +22% damage a level, and faster past level 10, where
+// heroes' gear grows faster too. XP: +25% a level.
+export const monsterHp = (d, lvl) => Math.round(d.hp * (1 + 0.32 * (lvl - 1)) * (1 + 0.04 * Math.max(0, lvl - 10)));
+export const monsterDmg = (d, lvl) => d.dmg * (1 + 0.22 * (lvl - 1)) * (1 + 0.02 * Math.max(0, lvl - 10));
+export const monsterXp = (d, lvl) => d.xp * (1 + 0.25 * (lvl - 1));
 
 export const ENEMY_TYPES = {
   slime: { name: 'Slime', kind: 'slime', color: 0x7ed957, size: 0.9, hp: 26, dmg: 5, speed: 3.0, range: 1.35, atkCd: 1.4, aggro: 8.5, xp: 12, radius: 0.55, gold: [1, 4], drop: 0.12 },

@@ -3,6 +3,7 @@
 import { CLASSES, CLASS_IDS, MAX_CHARACTERS, NAME_RULE, USER_RULE } from './classes.js';
 import { Assets } from './assets.js';
 import { savedToken, PROTOCOL } from './net.js';
+import { reloadForUpdate } from './update.js';
 
 const LOCAL_SAVE = 'emberwood-save-v1'; // the single-player save from before accounts
 const IMPORTED = 'emberwood-save-imported';
@@ -88,7 +89,10 @@ export class AccountScreen {
     }
     if (hello?.v !== PROTOCOL) { // the game and the server must speak the same language
       this.net.ws?.close();
-      if (hello?.v > PROTOCOL) this.wait('Emberwood has been updated. Reload the page to play.', true, true);
+      if (hello?.v > PROTOCOL) {
+        this.wait('Emberwood has been updated. Loading the new version…');
+        if (!reloadForUpdate()) this.wait('Emberwood has been updated. Reload the page to play.', true, true);
+      }
       else this.wait('The game server is being updated. Try again in a minute.', true);
       return;
     }

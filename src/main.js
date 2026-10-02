@@ -6,6 +6,8 @@ import { Game } from './game.js';
 import { Net } from './net.js';
 import { LocalWorld } from './local.js';
 import { AccountScreen } from './account.js';
+import { UpdateNotice, reloadForUpdate } from './update.js';
+import { savedToken } from './net.js';
 
 const fill = document.getElementById('load-fill');
 const text = document.getElementById('load-text');
@@ -58,6 +60,8 @@ async function goFullscreen() {
 // ---------------------------------------------------------------- boot
 const game = new Game();
 window.game = game; // handy for debugging from the console
+// a newer version of the game is out: offer a Refresh (the hero is saved first)
+const updates = new UpdateNotice({ beforeReload: () => game.saveAndWait() });
 
 // The title screen fades out when a hero enters the world, and comes back on "Leave game".
 let hideT = 0;
@@ -134,6 +138,19 @@ game.init((f, label) => {
   const net = new Net();
   attachWorld(net);
   accounts = new AccountScreen(net, { onPlay: enter });
+  net.on('update', (m) => updates.found(m.v)); // the server noticed the site was updated
+  // back after the server restarted with a newer language than this game speaks: save, then reload
+  net.on('outdated', async () => {
+    game.ui.fade(true, 'Emberwood was updated: reloading…');
+    try {
+      await net.request('resume', { token: savedToken.get() });
+      if (game.character && !game.onTitle) {
+        await net.request('play', { id: game.character.id });
+        await game.saveAndWait();
+      }
+    } catch { /* it saved a few seconds ago anyway */ }
+    if (!reloadForUpdate()) game.kicked('Emberwood was updated. Reload the page to keep playing.');
+  });
   net.on('kicked', (m) => game.kicked(m.msg));
   net.on('signedOut', (m) => game.kicked(m.msg));
   net.on('connection', ({ online }) => {

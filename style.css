@@ -638,3 +638,18 @@ body.touch #ui:has(#boss:not(.hidden)) #chat:not(.open) { top: calc(104px + var(
 /* title screen: who's around */
 .acc-note { margin-top: -4px; font: 600 12px Inter, sans-serif; color: var(--muted); }
 .acc-note:empty { display: none; }
+
+/* ------------------------------------------------------------------ a new version is out (src/update.js) */
+#update {
+  position: fixed; z-index: 60; top: calc(10px + var(--sat, 0px)); left: 50%; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 10px; max-width: calc(100vw - 24px);
+  padding: 8px 10px 8px 14px; font: 600 13px Inter, sans-serif; color: var(--text);
+  background: rgba(24, 18, 11, 0.95); border: 1px solid var(--edge-hi); border-radius: 10px;
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.55), 0 0 18px rgba(240, 207, 122, 0.15);
+  animation: update-in 0.4s ease-out;
+}
+#update span::before { content: '✦ '; color: var(--gold); }
+#update #update-go { color: var(--gold); border-color: var(--edge-hi); font-weight: 700; }
+#update .ghost { background: none; border-color: transparent; color: var(--muted); padding: 7px 6px; }
+@keyframes update-in { from { opacity: 0; transform: translate(-50%, -12px); } }
+@media (max-width: 520px) { #update { font-size: 12px; gap: 6px; } #update span { flex: 1; } }

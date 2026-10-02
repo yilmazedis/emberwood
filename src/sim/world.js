@@ -7,7 +7,7 @@
 // really stands, so dodging works), and so are XP and loot: everyone who hit a monster gets credit for
 // the kill and rolls their own loot.
 // Plain numbers only (no three.js), so Node runs it as is.
-import { ENEMY_TYPES, SPAWNS } from '../monsters.js';
+import { ENEMY_TYPES, SPAWNS, monsterHp } from '../monsters.js';
 import { planWorld, zoneAt, resolveCollision, isWalkable, randomWalkablePoint } from '../terrain.js';
 import { inDungeon, steer, lineClear, ROOMS } from '../crypt-map.js';
 import { rand, clamp, dampAngle, yawTo, TAU } from '../util.js';
@@ -47,7 +47,7 @@ class Monster {
     this.type = slot.type;
     this.def = d;
     this.level = slot.lvl;
-    this.maxHp = Math.round(d.hp * (1 + 0.32 * (this.level - 1)));
+    this.maxHp = monsterHp(d, this.level);
     this.hp = this.maxHp;
     this.radius = d.radius * (d.scale || 1);
     this.crypt = inDungeon(slot.x, slot.z); // walls: path around them, and no seeing through them

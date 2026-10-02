@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { Assets } from './assets.js';
 import { RARITY, itemLines, COMPARE_STATS } from './items.js';
-import { xpForLevel, STASH_SIZE } from './player.js';
+import { xpForLevel, STASH_SIZE, MAX_LEVEL } from './player.js';
 import { ALE_PRICE } from './town.js';
 import { ZONES, TOWN, CRYPT } from './world.js';
 import { ROOMS } from './dungeon.js';
@@ -901,9 +901,14 @@ export class UI {
     this.el.mpFill.style.transform = `scaleX(${Math.max(0, p.mp / s.maxMp).toFixed(3)})`;
     this.el.hpText.textContent = `${Math.ceil(p.hp)} / ${Math.round(s.maxHp)}`;
     this.el.mpText.textContent = `${Math.floor(p.mp)} / ${Math.round(s.maxMp)}`;
-    const need = xpForLevel(p.level);
-    this.el.xpFill.style.transform = `scaleX(${(p.xp / need).toFixed(3)})`;
-    this.el.xpText.textContent = `Level ${p.level} · ${p.xp} / ${need} XP`;
+    if (p.level >= MAX_LEVEL) {
+      this.el.xpFill.style.transform = 'scaleX(1)';
+      this.el.xpText.textContent = `Level ${p.level} · the highest level for now`;
+    } else {
+      const need = xpForLevel(p.level);
+      this.el.xpFill.style.transform = `scaleX(${Math.min(1, p.xp / need).toFixed(3)})`;
+      this.el.xpText.textContent = `Level ${p.level} · ${p.xp} / ${need} XP`;
+    }
     this.el.lvl.textContent = p.level;
     this.updateActionBar();
     this.updatePlates();

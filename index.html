@@ -63,6 +63,8 @@
 <link rel="modulepreload" href="src/net.js">
 <link rel="modulepreload" href="src/local.js">
 <link rel="modulepreload" href="src/account.js">
+<link rel="modulepreload" href="src/version.js">
+<link rel="modulepreload" href="src/update.js">
 </head>
 <body>
 <div id="game"></div>
@@ -278,6 +280,13 @@
     <button id="install" class="hidden">Install as app</button>
     <div id="ios-install" class="hidden">Play it like an app: tap <b>Share</b> <svg class="share-glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M8 7l4-4 4 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M7 10H5v11h14V10h-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg> then <b>Add to Home Screen</b></div>
   </div>
+</div>
+
+<!-- a new version of the game is out (src/update.js) -->
+<div id="update" class="hidden" role="status">
+  <span>A new version of Emberwood is ready.</span>
+  <button id="update-go">Refresh</button>
+  <button id="update-later" class="ghost">Later</button>
 </div>
 
 <script type="module" src="src/main.js"></script>
