@@ -33,7 +33,6 @@ export const frostfang = new OutdoorMap({
     // the outpost: a fire, tents, crates, the waystone, a ring of stakes
     put('campfire', 0, 66, {}, 1.1);
     put('waystone', 6, 61, {}, 0.9);
-    put('tent', -6, 60, { rotY: 0.7, color: 0x7a8fa8 }, 1.5);
     put('tent', 6.5, 71, { rotY: -2.4, color: 0x9a6a4a }, 1.5);
     put('tent', -5.5, 72.5, { rotY: 2.6, color: 0x6f7f8f, s: 0.9 }, 1.35);
     put('crate', -8.5, 66, { rotY: 0.3, s: 0.85 }, 0.55);

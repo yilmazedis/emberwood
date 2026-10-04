@@ -72,6 +72,11 @@ export class Enemy {
     this.enraged = false;
     this.stunT = 0; // what skills did to it, for the looks (the world applies the effects)
     this.slowT = 0;
+    this.dotT = 0; // poisoned or burning
+    this.weakT = 0; // weakened: hits softer (a plague)
+    this.weakBy = 0;
+    this.vulnT = 0; // exposed: takes more from everyone
+    this.vulnBy = 0;
 
     const rising = this.state === 'spawn' && (r.st || 0) < 0.4;
     if (d.kind === 'slime') {
@@ -140,11 +145,12 @@ export class Enemy {
     }
   }
 
-  // Someone else's hit (the world tells us).
-  struck(dmg, crit) {
+  // Someone else's hit (the world tells us); tick: their poison or fire.
+  struck(dmg, crit, tick = false) {
     if (!this.alive) return;
     const g = this.game;
     g.ui.floater(new THREE.Vector3(this.pos.x, this.pos.y + this.height + 0.1, this.pos.z), String(dmg), crit ? 'crit other' : 'other');
+    if (tick) return;
     g.fx.sparks(this.center, crit ? 0xffe070 : 0xfff0c0, crit ? 14 : 6, crit ? 6 : 4);
     if (this.slime) g.fx.goo(this.center, this.def.color, 4);
     const vol = this.vol();
@@ -160,8 +166,9 @@ export class Enemy {
     if (this.h && this.h.anim.oneName !== 'Death_A') this.h.anim.play('Hit_A', { timeScale: 1.6 });
   }
 
-  // Stunned (stars over its head), slowed (frosted) or taunted (it flashes red): { stun, slow: [f, s],
-  // taunt } from our hit, or { s, w, t } (seconds) from someone else's (the world tells us). Bosses shrug
+  // Stunned (stars over its head), slowed (frosted), taunted (it flashes red), poisoned or burning, weakened
+  // or exposed: { stun, slow: [f, s], taunt, dot: [dps, s], weak: [f, s], vuln: [f, s] } from our hit, or
+  // { s, w, t, p, k, kf, v, vf } (seconds, and how much) from someone else's (the world tells us). Bosses shrug
   // most of a stun off, as in the world.
   applyStatus(eff) {
     if (!eff || !this.alive) return;
@@ -172,6 +179,12 @@ export class Enemy {
     }
     if (slow > 0) this.slowT = Math.max(this.slowT, Math.min(6, slow));
     if (Number(eff.taunt ?? eff.t) > 0) this.h?.hitFlash(0xff3a2a, 0.8);
+    const dot = Array.isArray(eff.dot) ? eff.dot[1] : eff.p;
+    if (Number(dot) > 0) { this.dotT = Math.max(this.dotT, Math.min(10, Number(dot))); this.dotKind = Array.isArray(eff.dot) ? eff.dot[2] : eff.pk || 'poison'; }
+    const weak = Array.isArray(eff.weak) ? eff.weak : eff.k ? [eff.kf, eff.k] : null;
+    if (weak && Number(weak[1]) > 0) { this.weakT = Math.min(12, Number(weak[1])); this.weakBy = Math.min(0.5, Number(weak[0]) || 0.3); }
+    const vuln = Array.isArray(eff.vuln) ? eff.vuln : eff.v ? [eff.vf, eff.v] : null;
+    if (vuln && Number(vuln[1]) > 0) { this.vulnT = Math.min(12, Number(vuln[1])); this.vulnBy = Math.min(0.5, Number(vuln[0]) || 0.2); }
   }
 
   cancelAttack() {
@@ -265,11 +278,14 @@ export class Enemy {
       case 'b': this.blinkFx(ev[2], ev[3]); break; // the Lich vanished from (x, z)
       case 'e': this.enrage(); break;
       case 'x': this.cancelAttack(); break; // someone interrupted it
-      case 'h': // a hit: [h, id, damage, crit, by, effects]
+      case 'h': // a hit: [h, id, damage, crit, by, effects] (by 0: poison or fire ticking)
         if (ev[4] !== g.link.pid) {
-          if (ev[2] > 0) this.struck(ev[2], ev[3]);
+          if (ev[2] > 0) this.struck(ev[2], ev[3], ev[4] === 0);
           if (ev[5]) this.applyStatus(ev[5]);
         }
+        break;
+      case 'P': // poison or fire ticking that we put on it: [P, id, damage]
+        if (ev[2] > 0) g.ui.floater(new THREE.Vector3(this.pos.x + rand(-0.3, 0.3), this.pos.y + this.height + 0.1, this.pos.z), String(ev[2]), 'dot');
         break;
       default: break;
     }
@@ -417,6 +433,17 @@ export class Enemy {
   statusLooks(dt) {
     this.stunT = Math.max(0, this.stunT - dt);
     this.slowT = Math.max(0, this.slowT - dt);
+    this.dotT = Math.max(0, this.dotT - dt);
+    this.weakT = Math.max(0, this.weakT - dt);
+    this.vulnT = Math.max(0, this.vulnT - dt);
+    const fx = this.game.fx;
+    if (this.dotT > 0 && Math.random() < dt * 10) { // green bubbles, or flames
+      const burn = this.dotKind === 'burn', c = burn ? 0xff7a2a : 0x8aff4a;
+      fx.add.emit({ pos: { x: this.pos.x + rand(-0.4, 0.4), y: this.pos.y + rand(0.3, this.height), z: this.pos.z + rand(-0.4, 0.4) }, count: 1, spread: 0.1, velSpread: 0.2, vel: { x: 0, y: 1.1, z: 0 }, color: new THREE.Color(c).multiplyScalar(2.2), size: 0.16, sizeEnd: 0.03, life: 0.7, drag: 1 });
+    }
+    if (this.weakT > 0 && Math.random() < dt * 5) {
+      fx.soft.emit({ pos: { x: this.pos.x + rand(-0.4, 0.4), y: this.pos.y + this.height * 0.6, z: this.pos.z + rand(-0.4, 0.4) }, count: 1, spread: 0.2, velSpread: 0.2, vel: { x: 0, y: 0.3, z: 0 }, color: new THREE.Color(0x5a8a3a), alpha: 0.35, size: 0.5, sizeEnd: 1.1, life: 1.2, drag: 1 });
+    }
     if (this.stunT > 0 && Math.random() < dt * 16) { // dizzy stars circling its head
       const ang = this.game.time * 6 + rand(0, 0.5), y = this.pos.y + this.height + 0.15;
       this.game.fx.add.emit({ pos: { x: this.pos.x + Math.cos(ang) * 0.45, y, z: this.pos.z + Math.sin(ang) * 0.45 }, count: 1, spread: 0.05, velSpread: 0.1, vel: { x: -Math.sin(ang) * 1.2, y: 0.1, z: Math.cos(ang) * 1.2 }, color: new THREE.Color(0xffe066).multiplyScalar(2.4), size: 0.16, sizeEnd: 0.04, life: 0.45, drag: 0.5 });
@@ -435,7 +462,7 @@ export class Enemy {
       if (speed > d.speed * 0.6) this.h.anim.setBase('Running_A', speed / (4.6 * s));
       else if (speed > 0.1) this.h.anim.setBase('Walking_A', Math.max(0.6, speed / (1.7 * s)));
       else this.h.anim.setBase('Idle_A');
-      this.h.highlight = this.hover ? 1 : 0;
+      this.h.highlight = this.hover || this.selected ? 1 : 0;
       this.h.update(dt);
       return;
     }
@@ -461,7 +488,7 @@ export class Enemy {
     s.body.position.y = lift;
     s.body.scale.set(1 + sq, 1 - sq * 1.4, 1 + sq);
     this.slimeFlash = Math.max(0, (this.slimeFlash || 0) - dt * 6);
-    s.mat.emissive.copy(s.baseEmissive).addScalar(this.slimeFlash * 0.8 + (this.hover ? 0.12 : 0));
+    s.mat.emissive.copy(s.baseEmissive).addScalar(this.slimeFlash * 0.8 + (this.hover || this.selected ? 0.12 : 0));
     if (this.frost) { s.mat.emissive.g += this.frost * 0.15; s.mat.emissive.b += this.frost * 0.45; }
     if (d.glow && Math.random() < dt * 6) {
       this.game.fx.add.emit({ pos: { x: this.pos.x, y: this.pos.y + 0.9 * d.size, z: this.pos.z }, count: 1, spread: 0.3, velSpread: 0.3, vel: { x: 0, y: 1.4, z: 0 }, color: new THREE.Color(0xffa040).multiplyScalar(3), size: 0.12, sizeEnd: 0.02, life: 0.9, drag: 1 });
@@ -540,6 +567,6 @@ export class EnemyManager {
   // A boss in a fight near our hero (the boss bar and its music).
   get boss() {
     const p = this.game.player.pos;
-    return this.list.find((e) => e.def.boss && e.alive && e.state === 'chase' && Math.hypot(e.pos.x - p.x, e.pos.z - p.z) < 40) || null;
+    return this.list.find((e) => e.def.boss && e.alive && e.state === 'chase' && Math.hypot(e.pos.x - p.x, e.pos.z - p.z) < (e.def.worldBoss ? 60 : 40)) || null;
   }
 }

@@ -36,11 +36,10 @@ export const cinderfall = new OutdoorMap({
   props(m, put, rng) {
     put('campfire', 0, 70, {}, 1.1);
     put('waystone', 6, 65, {}, 0.9);
-    put('tent', -6, 64, { rotY: 0.7, color: 0x8a4a3a }, 1.5);
     put('tent', 6.5, 75, { rotY: -2.4, color: 0x5a4a3a }, 1.5);
     put('crate', -8.5, 70, { rotY: 0.3, s: 0.85 }, 0.55);
-    put('barrel', 8.7, 69.5, {}, 0.45);
-    put('barrel', 9.3, 70.6, {}, 0.45);
+    put('barrel', 9.2, 75.2, {}, 0.45);
+    put('barrel', 9.6, 76.4, {}, 0.45);
     for (let i = 0; i < 40; i++) { // a low wall of black rock around the bastion
       const a = (i / 40) * Math.PI * 2, x = Math.cos(a) * 12.5, z = 70 + Math.sin(a) * 12.5;
       if (m.pathDist(x + m.cx, z + m.cz) < 3.2) continue;

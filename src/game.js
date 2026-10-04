@@ -16,16 +16,19 @@ import { Projectiles, LootManager } from './combat.js';
 import { UI } from './ui.js';
 import { Doll } from './doll.js';
 import { Sfx } from './audio.js';
-import { randomItem } from './items.js';
+import { rollDrop, rollPotion, rollUnique, makeItem, itemName, itemColor } from './items.js';
 import { monsterXp } from './monsters.js';
 import { Input } from './input.js';
-import { Town } from './town.js';
+import { Npcs } from './npcs.js';
+import { Bank } from './bank.js';
 import { Quests } from './quests.js';
+import { BUFFS, ALLY_BUFF_RANGE } from './skills.js';
 import { Places } from './places.js';
 import { WorldLink } from './link.js';
 import { RemotePlayers } from './others.js';
 import { Chat } from './chat.js';
 import { Party, MAX_PARTY } from './party.js';
+import { Trade } from './trade.js';
 import { CLASSES } from './classes.js';
 import { loadSettings, saveSettings } from './settings.js';
 import { angleDiff, yawTo, randInt, rand, chance, clamp } from './util.js';
@@ -125,18 +128,22 @@ export class Game {
     this.onResize();
   }
 
-  // The hero to play: { id, name, cls, save } from the server (or the local one when offline).
+  // The hero to play: { id, name, cls, look, save, bank, rev } from the server (or the local one when offline).
   setCharacter(char) {
-    this.character = { id: char.id, name: char.name, cls: char.cls };
+    this.character = { id: char.id, name: char.name, cls: char.cls, look: char.look || 0 };
+    this.rev = char.rev || 0; // (saves older than a trade are refused: see server)
     const p = this.player;
-    p.setClass(char.cls);
+    p.setClass(char.cls, char.look || 0);
     p.reset();
     if (char.save) p.load(char.save); else p.starterKit();
+    if (char.id === 'local') this.bank.loadLocal(); else this.bank.load(char.bank);
     // nothing of the previous hero's world stays behind: a hero starts in Emberwood's camp
     this.places.enter('emberwood');
     this.loot.clear();
     this.projectiles.clear();
-    this.town.buyback = [];
+    this.tickers = [];
+    this.npcs.buyback = [];
+    this.worldBoss = null;
     p.alive = true;
     p.hp = p.stats.maxHp;
     p.mp = p.stats.maxMp;
@@ -148,6 +155,13 @@ export class Game {
     this.party.reset(); // (the server tells us if this hero is in one)
     this.quests.ensure();
     this.ui.setCharacter(char);
+    if (p.migrated !== undefined) { // a hero from before the four classes
+      setTimeout(() => this.ui.prompt(`<b>Emberwood has changed!</b><br>You are a <b>${CLASSES[p.cls].name}</b> now. Every item has a fixed name and strength, so ${p.migrated ? 'your old items were sold for you (your gold went up) and ' : ''}you have your class's gear for your level. You have <b>${p.freePoints}</b> skill points to spend.`, [
+        ['Open skills', () => this.ui.skills.open(), 'go'], ['Later', () => {}],
+      ], 60000), 1500);
+      delete p.migrated;
+      this.save();
+    }
     this.renderer.compile(this.scene, this.camera); // the new model's shaders, before the first frame
   }
 
@@ -202,12 +216,15 @@ export class Game {
     this.others = new RemotePlayers(this); // … and the other heroes
     this.chat = new Chat(this);
     this.party = new Party(this);
+    this.trade = new Trade(this);
 
+    this.bank = new Bank(this); // the account's shared bank
+    this.quests = new Quests(this); // every land's quests (the state lives on the hero)
     this.player.starterKit();
     this.player.pos.set(0, heightAt(0, 3.5), 3.5);
     this.camFocus.copy(this.player.pos);
-    this.quests = new Quests(this); // story + bounties (reads the saved quest state)
-    this.town = new Town(this); // merchant, stash and notice board in camp (after loading: it reads the saved shop)
+    this.npcs = new Npcs(this); // merchants, bankers, the boards and the anvil in every land's camp
+    this.tickers = []; // things that run a while every frame (burning ground, arrow rain…): fn(dt) → keep going?
 
     // static fire lights (camp + bandit hideout) and the crystal glow
     this.fireLights = this.world.fires.slice(0, 2).map((f) => {
@@ -242,11 +259,10 @@ export class Game {
     this.started = true;
     this.sfx.init();
     this.player.h.anim.play('Spawn_Ground', { timeScale: 1.1 });
-    this.ui.log('Welcome to <b>Emberwood</b>. Slimes roam the meadow to the north.');
-    this.ui.log('Wren the merchant, your stash and the quest notice board are at the north end of camp.');
+    this.ui.log('Welcome to <b>Emberwood</b>. The notice board in camp has quests; the merchants, the banker and Brom\'s anvil are around the fire.');
     this.ui.log(this.input.touchMode
-      ? 'Left thumb moves · hold the sword to attack · skills aim for you'
-      : 'WASD to move · Click to attack · 1–4 skills · Q ale · I bag');
+      ? 'Left thumb moves · tap a foe to target it · tap the sword to attack (again as each blow lands: combo) · Skills: your points'
+      : 'Click to move and attack · Z nearest foe · R attack (press as each blow lands: combo) · 1–8 skills · K skill points · T auto');
     this.last = performance.now();
     this.ui.zoneToast({ name: 'Emberwood', sub: 'A tiny action RPG' });
     this.ui.refreshTracker();
@@ -265,15 +281,21 @@ export class Game {
   bindInput() {
     const input = this.input;
     input.onKey = (code, e) => {
-      if (!this.started || e.repeat || this.onTitle) return;
+      if (!this.started || this.onTitle) return;
+      if (e.repeat && code !== 'KeyR') return;
       if (this.paused && code !== 'Escape' && code !== 'KeyM') return; // settings open: keys go there
       const p = this.player;
       switch (code) {
         case 'Enter': case 'NumpadEnter': this.chat.open(); e.preventDefault(); break;
-        case 'Digit1': case 'Digit2': case 'Digit3': case 'Digit4':
+        case 'Digit1': case 'Digit2': case 'Digit3': case 'Digit4': case 'Digit5': case 'Digit6': case 'Digit7': case 'Digit8':
           p.useSkill(Number(code.slice(-1)) - 1);
           break;
-        case 'KeyQ': p.drinkAle(); break;
+        case 'KeyR': if (e.repeat) p.control.holdAttack(true); else p.control.pressAttack(); break;
+        case 'KeyZ': p.control.cycleTarget(); break;
+        case 'KeyT': p.control.toggleAuto(); break;
+        case 'KeyQ': p.drink('hp'); break;
+        case 'KeyX': p.drink('mp'); break;
+        case 'KeyK': this.ui.skills.toggle(); break;
         case 'KeyI': case 'KeyB': case 'Tab': this.ui.toggleInventory(); e.preventDefault(); break;
         case 'KeyH': this.ui.togglePanel('help'); break;
         case 'KeyE': this.interact(); break;
@@ -282,6 +304,8 @@ export class Game {
         default: break;
       }
     };
+    input.onKeyUp = (code) => { if (code === 'KeyR') this.player.control.holdAttack(false); };
+    this.bindPointer();
     input.bindCanvas(this.renderer.domElement, (dir) => {
       this.zoomTarget = clamp(this.zoomTarget + dir * 0.1, 0.6, 1.5);
       this.settings.zoom = this.zoomTarget;
@@ -297,29 +321,103 @@ export class Game {
     this.ui.setTouchMode(input.touchMode);
   }
 
-  // E / the action button: whatever is in reach (camp stalls, waystones, dungeon doors and stairs, chests)
+  // The mouse and fingers on the world. Mouse: a click on a monster targets it and attacks (held: keeps
+  // attacking), on a hero targets them, on the ground walks there (held: keeps walking toward the cursor);
+  // a right-click on a hero opens what you can do with them. Touch: a tap on a monster or hero targets it (a
+  // hero's menu opens), elsewhere does nothing (the joystick moves).
+  bindPointer() {
+    const canvas = this.renderer.domElement, input = this.input;
+    canvas.addEventListener('pointerdown', (e) => {
+      if (!this.started || this.onTitle || this.paused || this.chat.isOpen) return;
+      const ctl = this.player.control;
+      if (e.pointerType !== 'mouse') { this.tapAt = { x: e.clientX, y: e.clientY, t: performance.now() }; return; }
+      this.updateAim(true);
+      const hit = this.hover;
+      if (e.button === 2) {
+        if (hit?.isHero) this.playerMenu(hit, e.clientX, e.clientY);
+        else if (hit) ctl.clickEntity(hit);
+        return;
+      }
+      if (e.button !== 0) return;
+      if (hit) { ctl.clickEntity(hit, true); this.holdingFoe = !!ctl.isFoe(hit); }
+      else { ctl.clickGround(this.aimPoint); this.walkHold = true; }
+    });
+    const up = (e) => {
+      if (e.pointerType !== 'mouse') {
+        const t = this.tapAt;
+        this.tapAt = null;
+        if (t && performance.now() - t.t < 400 && Math.hypot(e.clientX - t.x, e.clientY - t.y) < 14) this.tap(e.clientX, e.clientY);
+        return;
+      }
+      if (e.button !== 0) return;
+      this.walkHold = false;
+      if (this.holdingFoe) { this.holdingFoe = false; this.player.control.holdAttack(false); }
+    };
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', () => { this.walkHold = false; this.holdingFoe = false; this.player.control.holdAttack(false); });
+    void input;
+  }
+
+  // A tap on the world (touch screens): target what's under the finger.
+  tap(x, y) {
+    const ctl = this.player.control, e = this.pick(x, y);
+    if (!e) return;
+    if (e.isHero) { ctl.setTarget(e); this.playerMenu(e, x, y); }
+    else ctl.clickEntity(e);
+  }
+
+  // The monster or hero under a point on the screen (or the mouse).
+  pick(x, y) {
+    const v = new THREE.Vector2((x / window.innerWidth) * 2 - 1, -(y / window.innerHeight) * 2 + 1);
+    this.raycaster.setFromCamera(v, this.camera);
+    return this.under(this.raycaster.ray, this.input.touchMode ? 1.4 : 1);
+  }
+
+  under(ray, slack = 1) {
+    let best = null, bestT = Infinity;
+    for (const e of [...this.enemies.list, ...this.others.list]) {
+      if (e.isHero ? false : !e.alive || e.state === 'spawn') continue;
+      const c = e.center;
+      const r = Math.max(0.75, e.height * 0.45) * slack;
+      if (ray.distanceSqToPoint(c) < r * r) {
+        const t = ray.origin.distanceTo(c);
+        if (t < bestT) { bestT = t; best = e; }
+      }
+    }
+    return best;
+  }
+
+  // E / the action button: whatever is in reach (people in camp, waystones, dungeon doors and stairs, chests)
   interact() {
-    if (this.town.near) this.town.interact();
+    if (this.npcs.near) this.npcs.interact();
     else this.places.interact();
+  }
+
+  // A camp scroll was read: to the camp of this land (from a dungeon, of the land above it).
+  async toCamp() {
+    const to = this.places.map.respawn;
+    if (!to || this.places.map.kind === 'arena') return;
+    await this.travel(to.map, { camp: true });
   }
 
   // To another place (maps.js) behind a quick fade: through a waystone, a dungeon's door or its stairs, or
   // (respawn) from where we fell to where heroes rise. The world decides; we draw the place first.
-  async travel(to, { respawn = false } = {}) {
+  async travel(to, { respawn = false, camp = false, summon = null } = {}) {
     const map = MAPS[to], ui = this.ui, p = this.player;
     if (this.traveling || !map || (!respawn && !p.alive)) return false;
-    if (!respawn && p.level < map.minLevel) { ui.centerMsg(`${map.name} is for heroes of level ${map.minLevel} and up`); return false; }
+    if (!respawn && !summon && p.level < map.minLevel) { ui.centerMsg(`${map.name} is for heroes of level ${map.minLevel} and up`); return false; }
     this.traveling = true;
     ui.closeInventory();
     this.places.closeTravel();
+    p.control.stopAuto(true);
     const from = this.places.map;
-    ui.fade(true, respawn ? 'You rise again…' : map.kind === 'dungeon' ? `Descending into ${map.name}…`
+    ui.fade(true, respawn ? 'You rise again…' : camp ? 'Back to camp…' : summon ? 'Through the door in space…' : map.kind === 'dungeon' ? `Descending into ${map.name}…`
       : from.kind === 'dungeon' ? 'Climbing back up…' : `Traveling to ${map.name}…`);
     if (!respawn) this.sfx.play('portal');
     let r;
     try {
       await Promise.all([this.places.load(to), new Promise((res) => setTimeout(res, 420))]);
-      r = await this.link.travel(to, respawn);
+      r = await this.link.travel(to, { respawn, camp, summon });
     } catch (err) {
       console.warn('travel failed', err);
       ui.fade(false);
@@ -330,6 +428,7 @@ export class Game {
     await this.arrive(r);
     ui.fade(false);
     this.traveling = false;
+    this.quests.onEvent('visit', { map: r.map });
     return true;
   }
 
@@ -376,21 +475,17 @@ export class Game {
     const ray = this.raycaster.ray;
     const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -this.player.pos.y);
     if (!ray.intersectPlane(plane, this.aimPoint)) this.aimPoint.copy(this.player.pos);
-    let best = null, bestT = Infinity;
     for (const o of this.others.list) o.hover = false;
-    for (const e of this.foes) {
-      e.hover = false;
-      if (!e.alive || e.state === 'spawn') continue;
-      const c = e.center;
-      const r = Math.max(0.75, e.height * 0.45);
-      if (ray.distanceSqToPoint(c) < r * r) {
-        const t = ray.origin.distanceTo(c);
-        if (t < bestT) { bestT = t; best = e; }
-      }
-    }
+    for (const e of this.enemies.list) e.hover = false;
+    const best = this.under(ray);
     this.hover = best;
     if (best) best.hover = true;
-    this.renderer.domElement.style.cursor = best ? 'crosshair' : 'default';
+    this.renderer.domElement.style.cursor = best ? (best.isHero && !best.hostile ? 'pointer' : 'crosshair') : 'default';
+    // the left button held on the ground: keep walking toward the cursor
+    if (this.walkHold && this.input.mouseDown && this.player.alive) {
+      const c = this.player.control;
+      if (!c.moveTo) c.moveTo = this.aimPoint.clone(); else c.moveTo.copy(this.aimPoint);
+    }
   }
 
   // Resolve where an attack should go: hovered enemy, else nearest enemy roughly toward the cursor.
@@ -427,13 +522,16 @@ export class Game {
     return { target: null, point: new THREE.Vector3(p.x + Math.sin(facing) * 4, p.y, p.z + Math.cos(facing) * 4) };
   }
 
-  // Tapped another hero's name: invite them to our party.
-  playerMenu(rp) {
+  // Another hero, right-clicked (or their name clicked, or tapped): target them, invite them, trade with them.
+  playerMenu(rp, x = null, y = null) {
     const party = this.party, esc = (s) => String(s).replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
-    const actions = [];
+    const actions = [['Target', () => this.player.control.setTarget(rp)]];
     if (!party.has(rp.id) && party.leading && party.members.length < MAX_PARTY && !this.offline) actions.push(['Invite to party', () => party.invite(rp.name)]);
-    const note = party.has(rp.id) ? ' · in your party' : '';
-    this.ui.openMenu(rp.plate.el, `<div class="tt-name">${esc(rp.name)}</div><div class="tt-type">Level ${rp.level} ${CLASSES[rp.cls].name}${note}</div>`, actions);
+    if (!this.offline && !rp.hostile) actions.push(['Trade', () => this.trade?.request(rp)]);
+    const note = party.has(rp.id) ? ' · in your party' : rp.hostile ? ' · your foe here' : '';
+    const html = `<div class="tt-name">${esc(rp.name)}</div><div class="tt-type">Level ${rp.level} ${CLASSES[rp.cls].name}${note}</div>`;
+    if (x !== null) this.ui.openMenuAt(x, y, html, actions);
+    else this.ui.openMenu(rp.plate.el, html, actions);
   }
 
   // Keys and buttons don't move the hero while a menu has them (the world doesn't wait online).
@@ -448,17 +546,17 @@ export class Game {
   }
 
   // ---------------------------------------------------------------- combat
-  // Our hero's blow: everything within range in an arc in front. eff: stun / slow / taunt (see link.hit);
-  // critBonus: extra chance of a critical hit.
-  meleeHit({ range, arc, mult, knock, eff = null, critBonus = 0 }) {
+  // Our hero's blow: everything within range in an arc in front. eff: stun / slow / taunt / dot / weak / vuln
+  // (see link.hit); critBonus: extra chance of a critical hit; target: always counts (if in reach).
+  meleeHit({ range, arc, mult, knock, eff = null, critBonus = 0, target = null, spell = false }) {
     const p = this.player;
     let n = 0;
     for (const e of this.foes) {
       if (!e.alive || e.state === 'spawn') continue;
       const dx = e.pos.x - p.pos.x, dz = e.pos.z - p.pos.z, d = Math.hypot(dx, dz);
       if (d > range + e.radius) continue;
-      if (arc < 6.2 && Math.abs(angleDiff(p.yaw, yawTo(dx, dz))) > arc / 2 && d > e.radius + 0.5) continue;
-      this.damageEnemy(e, p.rollDamage(mult, false, critBonus), p.pos, knock, eff);
+      if (e !== target && arc < 6.2 && Math.abs(angleDiff(p.yaw, yawTo(dx, dz))) > arc / 2 && d > e.radius + 0.5) continue;
+      this.damageEnemy(e, p.rollDamage(mult, spell, critBonus), p.pos, knock, eff);
       n++;
     }
     if (n) {
@@ -468,16 +566,27 @@ export class Game {
     return n;
   }
 
-  // Everything within radius of a spot (leaps, novas, charges): spell: scaled by Spell Power.
-  areaHit({ at, radius, mult, knock = 0.4, eff = null, spell = false }) {
+  // Everything within radius of a spot (leaps, novas, rains of arrows): spell: scaled by Spell Power;
+  // quiet: no hitstop (things that tick, like burning ground).
+  areaHit({ at, radius, mult, knock = 0.4, eff = null, spell = false, critBonus = 0, quiet = false }) {
     const p = this.player, from = at.clone();
     let n = 0;
     for (const e of this.foes) {
       if (!e.alive || e.state === 'spawn' || Math.hypot(e.pos.x - at.x, e.pos.z - at.z) > radius + e.radius) continue;
-      this.damageEnemy(e, p.rollDamage(mult, spell), from, knock, eff);
+      this.damageEnemy(e, p.rollDamage(mult, spell, critBonus), from, knock, eff, quiet);
       n++;
     }
     return n;
+  }
+
+  // One blow at one foe (a targeted skill), if it's still within reach (reach: m beyond its radius; none for
+  // spells that need no reach). Returns the damage it did (0 if it couldn't).
+  strike(e, mult, { spell = false, critBonus = 0, knock = 0.4, eff = null, reach = null } = {}) {
+    const p = this.player;
+    if (!e?.alive) return 0;
+    if (reach !== null && Math.hypot(e.pos.x - p.pos.x, e.pos.z - p.pos.z) > reach + e.radius + p.stats.reach + 0.6) return 0;
+    const roll = p.rollDamage(mult, spell, critBonus);
+    return this.damageEnemy(e, roll, p.pos, knock, eff);
   }
 
   // What our attacks can hit: the monsters, and in the arena's pit the heroes there who aren't in our party.
@@ -486,36 +595,125 @@ export class Game {
     return [...this.enemies.list, ...this.others.list.filter((o) => o.hostile)];
   }
 
-  // A skill that only stuns or taunts (no damage): shown now, and the world applies it.
+  // Foes (or only monsters) within r of a spot.
+  foesNear(at, r) {
+    return this.foes.filter((e) => e.alive && e.state !== 'spawn' && Math.hypot(e.pos.x - at.x, e.pos.z - at.z) < r + e.radius);
+  }
+
+  monstersNear(at, r) {
+    return this.enemies.list.filter((e) => e.alive && e.state !== 'spawn' && Math.hypot(e.pos.x - at.x, e.pos.z - at.z) < r + e.radius);
+  }
+
+  // Friendly heroes within r of a spot: ourselves and the others who aren't our foes (for skills cast by
+  // another hero, as they'd see it: everyone near who isn't hostile to us).
+  alliesNear(at, r, caster = this.player) {
+    const near = (o) => Math.hypot(o.pos.x - at.x, o.pos.z - at.z) <= r;
+    const list = [];
+    if (this.player.alive && near(this.player) && (caster === this.player || !caster.hostile)) list.push(this.player);
+    for (const o of this.others.list) if (o.alive && !o.away && near(o) && !(caster === this.player && o.hostile) && o !== caster) list.push(o);
+    if (caster !== this.player && caster.alive && near(caster) && !list.includes(caster)) list.push(caster);
+    return list;
+  }
+
+  // Poison or burning for a share of an average blow a second (our hero's numbers): [dps, seconds, kind].
+  dot(mult, secs, kind = 'poison') {
+    return [this.player.dotDps(mult), secs, kind];
+  }
+
+  // A skill that only stuns, slows, taunts, poisons, weakens or exposes: shown now, and the world applies it.
   affectEnemy(e, eff) {
     if (!e.alive) return;
-    if (e.isHero) { if (eff.stun || eff.slow) { this.link.hitHero(e, 0, false, eff); e.applyStatus(eff); } return; }
+    if (e.isHero) { if (eff.stun || eff.slow || eff.dot) this.link.hitHero(e, eff.dot ? 1 : 0, false, eff); return; }
     this.link.hit(e, 0, false, 0, this.player.pos, eff);
     e.applyStatus(eff);
   }
 
   // Our hit lands: shown now, and sent to the world, which keeps the monster's score (eff: see link.hit).
-  // On another hero (the arena), the world passes it to their game, which takes it with its own armor.
-  damageEnemy(e, { amount, crit }, fromPos, knock = 0.4, eff = null) {
-    if (!e.alive) return;
+  // A foe that's exposed (a plague) takes more. On another hero (the arena), the world works out what it
+  // really does against their armor and tells everyone, us too (heroHit shows that number).
+  damageEnemy(e, { amount, crit }, fromPos, knock = 0.4, eff = null, quiet = false) {
+    if (!e.alive) return 0;
     if (e.isHero) {
       this.link.hitHero(e, amount, crit, eff);
-      if (eff) e.applyStatus(eff);
       e.hurt();
-      this.ui.floater(new THREE.Vector3(e.pos.x, e.pos.y + e.height + 0.1, e.pos.z), String(Math.round(amount * 0.7)), crit ? 'crit' : '');
       this.fx.sparks(e.center, crit ? 0xffe070 : 0xfff0c0, crit ? 22 : 10, crit ? 7 : 5);
       this.sfx.play(crit ? 'crit' : 'hit');
-      return;
+      return amount;
     }
+    if (e.vulnT > 0) amount = Math.round(amount * (1 + (e.vulnBy || 0.2)));
     this.link.hit(e, amount, crit, knock, fromPos, eff);
     if (eff) e.applyStatus(eff);
     e.hurt(amount);
     const c = e.center;
     const top = new THREE.Vector3(e.pos.x, e.pos.y + e.height + 0.1, e.pos.z);
-    this.ui.floater(top, String(amount), crit ? 'crit' : '');
-    this.fx.sparks(c, crit ? 0xffe070 : 0xfff0c0, crit ? 22 : 10, crit ? 7 : 5);
-    if (e.slime) this.fx.goo(c, e.def.color, 6);
-    this.sfx.play(crit ? 'crit' : 'hit');
+    this.ui.floater(top, String(amount), crit ? 'crit' : quiet ? 'small' : '');
+    if (!quiet || crit) this.fx.sparks(c, crit ? 0xffe070 : 0xfff0c0, crit ? 22 : 10, crit ? 7 : 5);
+    if (e.slime && !quiet) this.fx.goo(c, e.def.color, 6);
+    if (!quiet || Math.random() < 0.3) this.sfx.play(crit ? 'crit' : 'hit', quiet ? 0.5 : 1);
+    return amount;
+  }
+
+  // ---------------------------------------------------------------- helping other heroes
+  // A heal on a friendly hero (us, or another: their game heals them): a share of their maximum Life.
+  healAlly(who, share, quiet = false) {
+    const p = this.player, amount = share * (1 + p.stats.healPct) * (1 + (p.stats.spell - 1) * 0.5);
+    if (who === p) { p.heal(Math.round(p.stats.maxHp * amount), quiet); return; }
+    if (!who.isHero || who.hostile || !who.alive) return;
+    this.link.help(who, 'heal', Math.round(amount * 1000) / 1000);
+    if (!quiet) this.fx.heal(who.pos);
+  }
+
+  // A buff on a friendly hero (us, or another: their game takes it).
+  buffAlly(who, id, v) {
+    const p = this.player;
+    if (BUFFS[id]?.ally && id !== 'swiftness' && id !== 'shadow_mantle' && id !== 'sanctuary' && id !== 'divine_shield') v *= 1 + p.stats.healPct * 0.5;
+    if (who === p) { p.addBuff(id, v); return; }
+    if (!who.isHero || who.hostile) return;
+    this.link.help(who, 'buff', [id, Math.round(v * 1000) / 1000]);
+  }
+
+  reviveAlly(who, share) {
+    if (!who.isHero || who.hostile || who.alive) return;
+    this.link.help(who, 'rez', Math.round(share * 100) / 100);
+  }
+
+  // A party member's scientist opened a door through space: { from, map }. Step through?
+  recalled(m) {
+    const map = MAPS[m.map];
+    if (!map) return;
+    this.ui.prompt(`<b>${String(m.from).replace(/[&<>"']/g, '')}</b> opened a door through space${map ? ` in <b>${map.name}</b>` : ''}. Step through to their side?`, [
+      ['Step through', () => this.travel(map.id, { summon: true }), 'go'],
+      ['Stay', () => {}],
+    ], 28000);
+  }
+
+  // A scientist opened a door through space: the server asks every party member to step through.
+  partyRecall() {
+    if (this.offline) { this.ui.centerMsg('Teleport Party needs other heroes: play online'); return; }
+    if (!this.party.id) { this.ui.centerMsg('You are not in a party'); return; }
+    this.net.request('recall').then((r) => this.ui.log(`The door is open: ${r.n} party member${r.n === 1 ? '' : 's'} may step through.`, 'xp')).catch((err) => this.ui.centerMsg(err.message));
+  }
+
+  // Another hero helped ours (the world passes it on): [B, us, kind, value, by]. Their game worked out the
+  // value; we keep it within reason.
+  helped([, , kind, value, by]) {
+    const p = this.player, o = this.others.byId.get(by), name = o ? o.name : 'A friend';
+    if (kind === 'heal' && p.alive) {
+      const share = Math.min(1, Math.max(0, Number(value) || 0));
+      p.heal(Math.round(p.stats.maxHp * share));
+    } else if (kind === 'buff' && Array.isArray(value) && p.alive) {
+      const [id, v] = value, range = ALLY_BUFF_RANGE[id];
+      if (!range || !BUFFS[id]) return;
+      const strength = Math.min(range[1], Math.max(range[0], Number(v) || 0));
+      p.addBuff(id, strength);
+      this.fx.heal(p.pos);
+      if (BUFFS[id].long) this.ui.log(`${name} gave you <b>${BUFFS[id].name}</b>.`, 'xp');
+    } else if (kind === 'rez' && !p.alive) {
+      const share = Math.min(0.8, Math.max(0.1, Number(value) || 0.4));
+      this.ui.log(`${name} raised you!`, 'lvl');
+      p.revive(share);
+      this.fx.levelUp(p.pos);
+    }
   }
 
   // The world says a monster has fallen and we get a share (sim/world.js credits): XP (share: of the
@@ -526,35 +724,53 @@ export class Game {
     const xp = Math.max(1, Math.round(monsterXp(d, level) * clamp(1 - (levelGap - 2) * 0.2, 0.2, 1.2) * share));
     p.gainXp(xp);
     this.ui.floater(new THREE.Vector3(pos.x, pos.y + height + 0.6, pos.z), `+${xp} XP`, 'xp');
-    this.quests.onEvent('kill', { type });
+    this.quests.onEvent('kill', { type, pos: new THREE.Vector3(pos.x, pos.y + height + 1.2, pos.z) });
     if (!loot) return;
     const at = pos.clone();
-    if (chance(0.75)) this.loot.dropGold(Math.round(randInt(d.gold[0], d.gold[1]) * (1 + 0.2 * (level - 1))), at);
-    if (chance(d.boss ? 1 : 0.07)) this.loot.dropPotion(at);
-    if (d.boss) {
-      this.loot.dropItem(randomItem(level + 1, { boost: 3, minRarity: 'rare' }), at);
-      this.loot.dropItem(randomItem(level, { boost: 2, minRarity: 'magic' }), at);
-      this.loot.dropPotion(at);
+    const gold = () => Math.round(randInt(d.gold[0], d.gold[1]) * (1 + 0.2 * (level - 1)));
+    if (chance(0.75)) this.loot.dropGold(gold(), at);
+    if (chance(d.boss ? 1 : 0.06)) this.loot.dropItem(rollPotion(level), at);
+    if (d.worldBoss) { // the roaming ones: a unique one time in five, and plenty else
+      for (let i = 0; i < 4; i++) this.loot.dropGold(gold(), at);
+      if (chance(0.2)) {
+        const u = rollUnique(d.worldBoss);
+        this.loot.dropItem(u, at);
+        this.ui.log(`<b style="color:${itemColor(u)}">${itemName(u)}</b>! A unique item drops.`, 'lvl');
+      }
+      for (let i = 0; i < 3; i++) { const it = rollDrop(level, p.cls); if (it) this.loot.dropItem(it, at); }
+      this.loot.dropItem(makeItem(`recipe_${d.worldBoss}`, { n: 1 + randInt(0, 1) }), at);
+      this.loot.dropItem(rollPotion(level), at);
+      this.ui.log(`<b>${d.name}</b> has been slain!`, 'lvl');
+      this.shake(0.6 * this.volAt(at));
+    } else if (d.boss) {
+      for (let i = 0; i < 2; i++) { const it = rollDrop(level + 1, p.cls); if (it) this.loot.dropItem(it, at); }
+      if (chance(0.3)) this.loot.dropItem(makeItem(level >= 40 ? 'recipe_high' : level >= 20 ? 'recipe_mid' : 'recipe_low'), at);
+      this.loot.dropItem(rollPotion(level), at);
       this.ui.log(`<b>${d.name}</b> has been slain!`, 'lvl');
       this.shake(0.5 * this.volAt(at));
-    } else if (chance(d.drop)) {
-      this.loot.dropItem(randomItem(level, { boost: level * 0.1, table: d.loot }), at);
+    } else if (chance(d.drop * 0.7)) {
+      const it = rollDrop(level, p.cls);
+      if (it) this.loot.dropItem(it, at);
     }
   }
 
-  // Another hero's blow in the arena, from the world: [H, victim, damage, crit, by, { s: stun, w: slow s, f: slow factor }].
-  heroHit([, victim, dmg, crit, by, looks]) {
+  // A hero's blow on another in the arena, from the world: [H, victim, damage (after the victim's armor),
+  // crit, by, { s: stun, w: slow s, f: slow factor } or 0, missed]. Everyone sees the same number.
+  heroHit([, victim, dmg, crit, by, looks, miss]) {
+    dmg = Math.max(0, Math.round(Number(dmg) || 0));
     if (victim === this.link.pid) {
       if (!this.player.alive || !this.pvp) return;
-      this.damagePlayer(Number(dmg) || 0, null);
+      if (miss) this.ui.floater(this.player.headPos(), 'Dodged', 'info small');
+      else if (dmg > 0) this.takeDamage(dmg, true);
       if (looks) this.player.applyStatus(looks);
       return;
     }
-    if (by === this.link.pid) return; // (ours: shown when we struck)
     const o = this.others.byId.get(victim);
     if (!o) return;
-    this.ui.floater(o.headPos, String(dmg), crit ? 'crit other' : 'other');
-    o.hurt();
+    const mine = by === this.link.pid;
+    if (miss) this.ui.floater(o.headPos, 'Miss', mine ? 'info small' : 'other');
+    else if (dmg > 0) this.ui.floater(o.headPos, String(dmg), mine ? (crit ? 'crit' : '') : crit ? 'crit other' : 'other');
+    if (!mine) o.hurt(); // (ours flinched when we struck)
     if (looks) o.applyStatus(looks);
   }
 
@@ -571,6 +787,8 @@ export class Game {
     }
   }
 
+  // A monster's blow lands on our hero (src: the monster): our armor takes its share, unless we dodge it.
+  // A weakened monster (a plague) hits softer.
   damagePlayer(amount, src) {
     const p = this.player;
     if (!p.alive) return;
@@ -578,7 +796,24 @@ export class Game {
       this.ui.floater(p.headPos(), 'Dodged', 'info small');
       return;
     }
-    const dmg = Math.max(1, Math.round(amount * (1 - p.stats.dr) * rand(0.9, 1.1)));
+    if (src?.weakT > 0) amount *= 1 - (src.weakBy || 0.3);
+    this.takeDamage(Math.max(1, Math.round(amount * (1 - p.stats.dr) * rand(0.9, 1.1))));
+  }
+
+  // Life lost, this much (armor already counted; shields and holy ground still help, unless exact: another
+  // hero's blow, which the world already reckoned with them). It breaks a scroll's reading.
+  takeDamage(dmg, exact = false) {
+    const p = this.player;
+    if (!p.alive) return;
+    if (!exact) dmg = Math.max(1, Math.round(dmg * p.stats.taken));
+    if (p.shield > 0) { // a divine shield soaks it up first
+      const soak = Math.min(p.shield, dmg);
+      p.shield -= soak;
+      dmg -= soak;
+      if (p.shield <= 0) { delete p.buffs.divine_shield; p.auras.shield = 0; this.ui.refreshBuffs(); }
+      if (!dmg) { this.ui.floater(p.headPos(), 'Absorbed', 'info small'); return; }
+    }
+    p.breakChannel();
     p.hp -= dmg;
     this.ui.floater(p.headPos(), String(dmg), 'hurt');
     p.h.hitFlash(0xff2a1a, 0.9);
@@ -596,14 +831,13 @@ export class Game {
     this.player.gold += n;
     this.ui.floater(new THREE.Vector3(pos.x, pos.y + 1, pos.z), `+${n}g`, 'gold');
     this.sfx.play('gold');
-    this.quests.onEvent('gold', { amount: n });
     this.ui.refreshInventory();
   }
 
-  addPotion(pos) {
-    this.player.potions++;
-    this.ui.floater(new THREE.Vector3(pos.x, pos.y + 1, pos.z), '+1 Ale', 'heal');
-    this.sfx.play('pickup');
+  // Something that runs a while every frame (burning ground, a rain of arrows): fn(dt, t) returns true to
+  // keep going.
+  addTicker(fn) {
+    this.tickers.push(fn);
   }
 
   shake(a) {
@@ -620,6 +854,7 @@ export class Game {
     else if (!this.saveTimer) this.saveTimer = setTimeout(() => this.flushSave(), 1500);
   }
 
+  // The hero and the account's bank go together (rev: the server refuses saves from before a trade).
   flushSave() {
     clearTimeout(this.saveTimer);
     this.saveTimer = null;
@@ -628,8 +863,9 @@ export class Game {
     const data = this.player.serialize();
     if (this.character.id === 'local') {
       try { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); } catch { /* storage unavailable */ }
+      this.bank.saveLocal();
     } else {
-      this.net?.send('save', { save: data });
+      this.net?.send('save', { save: data, bank: this.bank.serialize(), rev: this.rev });
     }
   }
 
@@ -642,8 +878,9 @@ export class Game {
     const data = this.player.serialize();
     if (this.character.id === 'local') {
       try { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); } catch { /* storage unavailable */ }
+      this.bank.saveLocal();
     } else if (this.net?.online) {
-      await this.net.request('save', { save: data }, 4000);
+      await this.net.request('save', { save: data, bank: this.bank.serialize(), rev: this.rev }, 4000);
     }
   }
 
@@ -698,8 +935,9 @@ export class Game {
 
     this.updateAim();
     this.player.update(dt);
-    this.town.update(dt);
+    this.npcs.update(dt);
     this.places.update(dt);
+    for (let i = this.tickers.length - 1; i >= 0; i--) if (!this.tickers[i](dt)) this.tickers.splice(i, 1);
     this.enemies.update(dt);
     this.others.update(dt);
     this.projectiles.update(dt);
@@ -713,6 +951,7 @@ export class Game {
       else if (this.currentZone === undefined) this.ui.zoneToast({ name: map.name, sub: map.sub }); // (just arrived)
       this.currentZone = zone;
       this.ui.el.zoneName.textContent = zone ? zone.name : map.id === 'emberwood' ? 'The Wilds' : map.name;
+      if (zone) this.quests.onEvent('visit', { zone: zone.id, map: map.id });
     }
     this.ui.setBoss(this.enemies.boss);
     this.updateSound(rawDt, zone);

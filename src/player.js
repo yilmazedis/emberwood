@@ -1,58 +1,74 @@
-// The player's hero (any of the classes in classes.js): stats, gear, leveling, movement and skills.
+// The player's hero: its class and look, stats (from its level, items, skill points and buffs), its bag and
+// what it wears, leveling, skills, potions, combos, and moving about (control.js decides where it goes and
+// what it attacks).
 import * as THREE from 'three';
 import { Humanoid } from './character.js';
 import { heightAt, resolveCollision } from './world.js';
-import { makeItem, BASES } from './items.js';
-import { Assets } from './assets.js';
-import { dampAngle, yawTo, rand, has } from './util.js';
-import { CLASSES } from './classes.js';
-import { SKILLS, CLASS_SKILLS, BUFFS, auraTick, aimedAt } from './skills.js';
+import {
+  ITEMS, WEAPON_TYPES, SLOTS, emptyEquipment, itemDef, itemStats, makeItem, slotsFor, cannotUse, sellPrice, newId,
+  itemName, itemColor, MAX_PLUS, upgradeCost,
+} from './items.js';
+import { dampAngle, yawTo, rand, has, clamp } from './util.js';
+import { CLASSES, lookOf as classLook } from './classes.js';
+import { SKILLS, TREES, BUFFS, power, manaCost, auraTick } from './skills.js';
+import { aimedAt, handPos } from './skills/common.js';
+import { Control } from './control.js';
 import { hdr } from './fx.js';
 
 export const MAX_LEVEL = 60;
 // XP to the next level. Quick up to level 10; after that each level asks for more kills of your own level:
 // about 15 at level 10, 60 at 20, 120 at 30, 200 at 40, 300 at 50 and nearly 400 at 59.
 export const xpForLevel = (lvl) => Math.round(60 * Math.pow(lvl, 1.55) * (1 + 0.16 * Math.max(0, lvl - 9)));
+export const BAG_SIZE = 30;
+export const BAR_SIZE = 8; // skill slots on the action bar (keys 1–8)
+export const POTION_CD = 1.5;
 const _axis = new THREE.Vector2();
 const r2 = (v) => Math.round(v * 100) / 100;
 const _ember = new THREE.Vector3();
 
-export const STASH_SIZE = 30;
-const freshQuests = () => ({ mainIndex: 0, main: null, bounties: [null, null, null] }); // see quests.js
-export const emptyEquipment = () => ({ weapon: null, offhand: null, head: null, back: null, hands: null, feet: null, ring1: null, ring2: null });
+const freshQuests = () => ({ done: [], active: [] }); // see quests.js
+const freshSkills = () => ({ pts: {}, bar: new Array(BAR_SIZE).fill(null) });
 
-// Gloves/boots: colour + material from the base, glowing when legendary.
-function gearLook(item) {
-  if (!item) return null;
-  const b = BASES[item.base];
-  return { ...b.gear, cover: b.cover, glow: item.rarity === 'legendary' ? 1 : 0 };
-}
+// The basic attack's combo: a press that lands in the window after a blow (from COMBO_OPEN of the swing to a
+// moment after it ends) chains into the next, stronger blow and cuts the rest of the swing short. Too early
+// (mashing) breaks the chain. A press right as the window opens is perfect.
+export const COMBO = { open: 0.8, grace: 0.32, perfect: 0.12, mults: [1, 1.04, 1.08, 1.2], perfectBonus: 0.05, tooEarly: 0.12 };
 
-// Weapons in the hands; a head item shows the class's own hat (helmet, bear hat, wizard hat), a back
-// item its cape (classes.js lists the model parts); gloves and boots tint the hands and feet.
-export function applyEquipmentVisuals(h, eq, cls = 'knight') {
-  const c = CLASSES[cls];
-  const glow = (it) => (it && it.rarity === 'legendary' ? 0xff6a10 : null);
-  h.equip('r', eq.weapon?.model || null, glow(eq.weapon));
-  h.equip('l', eq.offhand?.model || null, glow(eq.offhand));
-  const shown = new Set(eq.head ? c.hats[eq.head.base] || [] : []);
-  for (const part of new Set(Object.values(c.hats).flat())) h.setMeshVisible(part, shown.has(part));
-  for (const part of c.capes) h.setMeshVisible(part, !!eq.back);
+// ---------------------------------------------------------------- how a hero looks
+// Clothes and weapons on the model: weapons in the hands, a helmet shows the look's hat, armor colours the
+// body (and from middle class shows the cape), gloves and boots tint hands and feet. eq: slot -> item.
+export function applyEquipmentVisuals(h, eq, cls, look = 0) {
+  const L = classLook(cls, look), glowOf = (it) => {
+    const d = itemDef(it);
+    if (!d) return null;
+    if ((it.p ?? 0) >= 7) return d.glow ?? 0xff6a10; // +7 burns brightly
+    return d.unique || (it.p ?? 0) >= 5 ? d.glow ?? null : null;
+  };
+  const wd = itemDef(eq.weapon), od = itemDef(eq.offhand);
+  const leftBow = wd && WEAPON_TYPES[wd.type]?.left;
+  h.equip(leftBow ? 'l' : 'r', wd ? wd.model : null, glowOf(eq.weapon), wd?.tint ?? null);
+  if (leftBow) h.equip('r', null);
+  else h.equip('l', od ? od.model : null, glowOf(eq.offhand), od?.tint ?? null);
+  const head = itemDef(eq.head), body = itemDef(eq.body);
+  const shown = new Set();
+  if (head?.look?.helm !== 0 && head) {
+    for (const part of L.hats) if (part.endsWith('Visor') ? head.tier !== 'low' : true) shown.add(part);
+  }
+  for (const part of L.hats) h.setMeshVisible(part, shown.has(part));
+  for (const part of L.capes) h.setMeshVisible(part, !!body && body.tier !== 'low');
+  h.setBodyTint(body?.look?.body ?? null);
   h.enableGearTint();
-  h.setGear('hands', gearLook(eq.hands));
-  h.setGear('feet', gearLook(eq.feet));
+  const gearOf = (d, cover) => (d ? { color: d.look?.body ?? 0x8a6a4a, metal: d.look?.metal ?? 0.1, rough: d.look?.metal > 0.2 ? 0.4 : 0.8, cover, glow: 0 } : null);
+  h.setGear('hands', gearOf(itemDef(eq.hands), { hand: 1, lowerarm: 0.8 }));
+  h.setGear('feet', gearOf(itemDef(eq.feet), { foot: 1, toes: 1, lowerleg: 0.9 }));
 }
 
-// What the other players' games need to draw this hero: its level and the gear that shows.
+// What the other players' games need to draw this hero: its level, look and what it wears that shows
+// (items by name; their games know them all).
 export function lookOf(p) {
-  const eq = p.equipment, leg = (it) => (it.rarity === 'legendary' ? 1 : 0);
-  const k = { lv: p.level };
-  if (eq.weapon?.model) k.w = [eq.weapon.model, leg(eq.weapon)];
-  if (eq.offhand?.model) k.o = [eq.offhand.model, leg(eq.offhand)];
-  if (eq.head) k.h = eq.head.base;
-  if (eq.back) k.b = 1;
-  if (eq.hands) k.g = [eq.hands.base, leg(eq.hands)];
-  if (eq.feet) k.f = [eq.feet.base, leg(eq.feet)];
+  const eq = p.equipment, k = { lv: p.level, m: p.look };
+  const put = (key, it) => { if (it) k[key] = it.p ? [it.k, it.p] : it.k; };
+  put('w', eq.weapon); put('o', eq.offhand); put('h', eq.head); put('b', eq.body); put('g', eq.hands); put('f', eq.feet);
   return k;
 }
 
@@ -60,21 +76,22 @@ export function lookOf(p) {
 export function equipmentFromLook(k) {
   const eq = emptyEquipment();
   if (!k || typeof k !== 'object') return eq;
-  const rarity = (v) => (v ? 'legendary' : 'common');
-  const held = (v) => (Array.isArray(v) && typeof v[0] === 'string' && has(Assets.items, v[0]) ? { model: v[0], rarity: rarity(v[1]) } : null);
-  const base = (key, slot) => typeof key === 'string' && has(BASES, key) && BASES[key].slot === slot;
-  const worn = (v, slot) => (Array.isArray(v) && base(v[0], slot) && BASES[v[0]].gear ? { base: v[0], rarity: rarity(v[1]) } : null);
-  eq.weapon = held(k.w);
-  eq.offhand = held(k.o);
-  eq.head = base(k.h, 'head') ? { base: k.h } : null;
-  eq.back = k.b ? { base: 'cape' } : null;
-  eq.hands = worn(k.g, 'hands');
-  eq.feet = worn(k.f, 'feet');
+  const item = (v, slots) => {
+    const [key, plus] = Array.isArray(v) ? v : [v, 1];
+    if (typeof key !== 'string' || !has(ITEMS, key) || !slots.includes(ITEMS[key].slot) || ITEMS[key].stack) return null;
+    return { k: key, p: clamp(Number(plus) || 0, 0, MAX_PLUS) };
+  };
+  eq.weapon = item(k.w, ['weapon']);
+  eq.offhand = item(k.o, ['offhand', 'weapon']);
+  eq.head = item(k.h, ['head']);
+  eq.body = item(k.b, ['body']);
+  eq.hands = item(k.g, ['hands']);
+  eq.feet = item(k.f, ['feet']);
   return eq;
 }
 
-// The mage's arcane bolt as an action, for our hero (real: it deals damage) or for show.
-export function boltAction(a, point, real) {
+// A magic bolt from a staff, for our hero (real: it deals damage) or for show. target: the foe it homes on.
+export function boltAction(a, point, real, target = null) {
   const g = a.game;
   a.h.anim.play('Throw', { timeScale: 2.6, startAt: 0.25 });
   if (a.vol() > 0.01) g.sfx.play('bolt', 0.8 * a.vol());
@@ -83,11 +100,25 @@ export function boltAction(a, point, real) {
     tick: (dt, s) => {
       if (s.fired || s.t < 0.15) return;
       s.fired = true;
-      const from = new THREE.Vector3();
-      a.h.bones.handslotr.getWorldPosition(from);
-      from.y = Math.max(from.y, a.pos.y + 1.2);
-      const to = aimedAt(a, from, point);
-      g.projectiles.spawn({ from, to, owner: real ? 'player' : 'remote', mult: 1, speed: 22, color: 0x9a7dff, trail: 0x5a3aff, radius: 0.35, range: 13, size: 0.2, small: true, glide: 0.9 });
+      const from = handPos(a);
+      g.projectiles.spawn({ from, to: aimedAt(a, from, point), homing: target, owner: real ? 'player' : 'remote', mult: s.mult ?? 1, spell: true, speed: 22, color: 0x9a7dff, trail: 0x5a3aff, radius: 0.35, range: 16, size: 0.2, small: true, glide: 0.9, combo: s.combo });
+    },
+    end: () => a.h.anim.stopOne(),
+  };
+}
+
+// An arrow from a bow (the basic attack of archers), for our hero or for show.
+export function arrowAction(a, point, real, target = null) {
+  const g = a.game;
+  a.h.anim.play('Throw', { timeScale: 2.2, startAt: 0.15 });
+  return {
+    fired: false,
+    tick: (dt, s) => {
+      if (s.fired || s.t < 0.18) return;
+      s.fired = true;
+      const from = handPos(a, true);
+      g.projectiles.spawn({ from, to: aimedAt(a, from, point), homing: target, owner: real ? 'player' : 'remote', mult: s.mult ?? 1, spell: false, speed: 34, color: 0xfff0d0, trail: 0xc8a070, radius: 0.32, range: 18, size: 0.14, small: true, noLight: true, glide: 1.0, arrow: true, combo: s.combo });
+      if (a.vol() > 0.01) g.sfx.play('swing', 0.3 * a.vol());
     },
     end: () => a.h.anim.stopOne(),
   };
@@ -96,23 +127,24 @@ export function boltAction(a, point, real) {
 export class Player {
   constructor(game) {
     this.game = game;
-    this.setClass('knight');
+    this.look = 0;
+    this.setClass('warrior', 0);
     this.radius = 0.5;
     this.yaw = Math.PI;
     this.targetYaw = this.yaw;
+    this.control = new Control(game, this);
     this.reset();
   }
 
-  // Wear the class's model (swapping it in the scene if one is already there).
-  setClass(cls) {
-    this.cls = cls;
-    // its four skills, in key order: { id, key, name, level, mp, cd, … } (skills.js)
-    this.skills = CLASS_SKILLS[cls].map((id, i) => ({ id, key: String(i + 1), ...SKILLS[id] }));
-    const model = CLASSES[cls].model;
-    if (this.h && this.model === model) return;
+  // Wear the class's model in its look (swapping it in the scene if one is already there).
+  setClass(cls, look = 0) {
+    this.cls = CLASSES[cls] ? cls : 'warrior';
+    this.look = look;
+    const L = classLook(this.cls, look), key = `${L.model}:${L.palette || ''}`;
+    if (this.h && this.modelKey === key) return;
     const old = this.h;
-    this.model = model;
-    this.h = new Humanoid(model);
+    this.modelKey = key;
+    this.h = new Humanoid(L.model, { palette: L.palette || null });
     this.group = this.h.group;
     this.pos = this.group.position;
     if (old) {
@@ -128,70 +160,140 @@ export class Player {
     this.level = 1;
     this.xp = 0;
     this.gold = 0;
-    this.potions = 3;
-    this.bag = new Array(20).fill(null);
+    this.bag = new Array(BAG_SIZE).fill(null);
     this.equipment = emptyEquipment();
-    this.stash = new Array(STASH_SIZE).fill(null);
-    this.shop = { stock: [], restockAt: 0 }; // the merchant's stock (see town.js)
     this.quests = freshQuests();
+    this.sk = freshSkills();
     this.cd = { attack: 0, potion: 0 };
-    for (const sk of this.skills) this.cd[sk.id] = 0;
-    this.buffs = {}; // id -> seconds left (skills.js BUFFS)
-    this.stunT = 0; // another hero's skill in the arena: stunned (can't act) / slowed
+    this.buffs = {}; // id -> { t: seconds left, v: strength } (skills.js BUFFS)
+    this.stunT = 0; // another hero's skill in the arena, or a monster's: stunned (can't act) / slowed
     this.slowT = 0;
     this.slowBy = 1;
     this.auras = {}; // their looks, the same for every hero (skills.js auraTick)
     this.action = null;
     this.queued = null;
-    this.combo = 0;
+    this.combo = { step: 0, until: 0, open: 0, perfectUntil: 0, swings: 0 };
     this.alive = true;
     this.stepT = 0;
+    this.channel = null; // reading a camp scroll
+    this.sureCrit = false;
     this.hp = undefined;
+    this.control?.reset();
     this.recompute();
     this.hp = this.stats.maxHp;
     this.mp = this.stats.maxMp;
   }
 
+  // A new hero's things: its class's first weapon and clothes, some potions and a scroll home.
   starterKit() {
-    for (const [slot, base, name] of CLASSES[this.cls].start) this.equipment[slot] = makeItem(base, 1, 'common', name);
+    const c = CLASSES[this.cls];
+    for (const key of c.start) {
+      const it = makeItem(key), d = itemDef(it);
+      const slot = d.slot === 'weapon' && this.equipment.weapon ? 'offhand' : d.slot;
+      this.equipment[slot] = it;
+    }
+    this.addItem(makeItem('hp_potion_1', { n: 5 }), true);
+    this.addItem(makeItem('mp_potion_1', { n: 3 }), true);
+    this.addItem(makeItem('camp_scroll', { n: 1 }), true);
+    this.gold = 30;
     this.onGearChanged(false);
     this.hp = this.stats.maxHp;
     this.mp = this.stats.maxMp;
   }
 
   serialize() {
+    const buffs = {};
+    for (const [id, b] of Object.entries(this.buffs)) if (BUFFS[id]?.long && b.t > 5) buffs[id] = [Math.round(b.t), r2(b.v)];
     return {
-      v: 1, level: this.level, xp: this.xp, gold: this.gold, potions: this.potions,
-      bag: this.bag, equipment: this.equipment, stash: this.stash, shop: this.shop, quests: this.quests,
+      v: 2, level: this.level, xp: this.xp, gold: this.gold, bag: this.bag, equipment: this.equipment,
+      quests: this.quests, sk: this.sk, buffs,
     };
   }
 
   load(s) {
-    this.level = Math.min(MAX_LEVEL, s.level || 1);
-    this.xp = s.xp || 0;
-    this.gold = s.gold || 0;
-    this.potions = s.potions ?? 3;
-    this.bag = Array.from({ length: 20 }, (_, i) => s.bag?.[i] || null);
-    this.equipment = { ...emptyEquipment(), ...s.equipment };
-    this.stash = Array.from({ length: STASH_SIZE }, (_, i) => s.stash?.[i] || null);
-    this.shop = Array.isArray(s.shop?.stock) ? s.shop : { stock: [], restockAt: 0 };
-    this.quests = Array.isArray(s.quests?.bounties) ? s.quests : freshQuests();
+    if (!s || (s.v || 1) < 2) return this.loadOld(s || {});
+    this.level = clamp(Math.round(s.level || 1), 1, MAX_LEVEL);
+    this.xp = Math.max(0, s.xp || 0);
+    this.gold = Math.max(0, Math.round(s.gold || 0));
+    const valid = (it) => (it && typeof it === 'object' && has(ITEMS, it.k) ? it : null);
+    this.bag = Array.from({ length: BAG_SIZE }, (_, i) => valid(s.bag?.[i]));
+    this.equipment = emptyEquipment();
+    for (const slot of SLOTS) this.equipment[slot] = valid(s.equipment?.[slot]);
+    this.quests = Array.isArray(s.quests?.done) ? s.quests : freshQuests();
+    this.sk = { pts: {}, bar: new Array(BAR_SIZE).fill(null) };
+    const trees = TREES[this.cls];
+    for (const t of trees) this.sk.pts[t.id] = clamp(Math.round(s.sk?.pts?.[t.id] || 0), 0, MAX_LEVEL);
+    if (this.spentPoints() > this.level) this.sk.pts = {}; // (shouldn't happen: start over)
+    for (let i = 0; i < BAR_SIZE; i++) { const id = s.sk?.bar?.[i]; this.sk.bar[i] = has(SKILLS, id) && SKILLS[id].cls === this.cls ? id : null; }
+    this.buffs = {};
+    for (const [id, b] of Object.entries(s.buffs || {})) if (BUFFS[id]?.long && Array.isArray(b)) this.buffs[id] = { t: clamp(Number(b[0]) || 0, 0, BUFFS[id].dur), v: Number(b[1]) || 0 };
     this.onGearChanged(false);
     this.hp = this.stats.maxHp;
     this.mp = this.stats.maxMp;
   }
 
+  // A hero from before the four classes and fixed items: its level, XP and gold stay; its old random items are
+  // sold for it (their value, three times over, goes into its purse), and it gets its class's things for its
+  // level, as if bought, so it can play on at once. Skill points are all free to spend.
+  loadOld(s) {
+    this.level = clamp(Math.round(s.level || 1), 1, MAX_LEVEL);
+    this.xp = Math.max(0, s.xp || 0);
+    const old = [...(s.bag || []), ...Object.values(s.equipment || {}), ...(s.stash || [])].filter((x) => x && typeof x === 'object');
+    this.gold = Math.max(0, Math.round(s.gold || 0)) + old.reduce((sum, it) => sum + Math.max(0, Number(it.value) || 0) * 3, 0);
+    this.bag = new Array(BAG_SIZE).fill(null);
+    this.equipment = emptyEquipment();
+    this.quests = freshQuests();
+    this.sk = freshSkills();
+    this.buffs = {};
+    this.kitForLevel();
+    this.addItem(makeItem(this.level >= 35 ? 'hp_potion_3' : this.level >= 15 ? 'hp_potion_2' : 'hp_potion_1', { n: Math.max(5, Math.min(30, (s.potions || 0) + 5)) }), true);
+    this.addItem(makeItem(this.level >= 35 ? 'mp_potion_3' : this.level >= 15 ? 'mp_potion_2' : 'mp_potion_1', { n: 8 }), true);
+    this.addItem(makeItem('camp_scroll', { n: 3 }), true);
+    this.migrated = old.length;
+    this.onGearChanged(false);
+    this.hp = this.stats.maxHp;
+    this.mp = this.stats.maxMp;
+  }
+
+  // The best weapon and clothes of its class a merchant would sell a hero of this level (old heroes get them).
+  kitForLevel() {
+    const c = CLASSES[this.cls], best = (pred) => Object.values(ITEMS).filter((d) => !d.unique && !d.stack && d.level <= this.level && d.classes?.includes(this.cls) && pred(d)).sort((a, b) => b.level - a.level)[0];
+    for (const key of c.start) {
+      const first = ITEMS[key];
+      const d = best((x) => x.kind === first.kind && (x.kind === 'armor' ? true : x.type === first.type)) || first;
+      if (d.kind === 'armor') for (const slot of ['head', 'body', 'hands', 'feet']) this.equipment[slot] = makeItem(`${d.set}_${slot}`);
+      else this.equipment[d.slot === 'weapon' && this.equipment.weapon ? 'offhand' : d.slot] = makeItem(d.key);
+    }
+  }
+
+  // ---------------------------------------------------------------- stats
   recompute() {
-    const L = this.level, c = CLASSES[this.cls];
+    const L = this.level, c = CLASSES[this.cls], eq = this.equipment;
     const s = {
-      maxHp: (90 + L * 14) * c.hp, maxMp: (40 + L * 6) * c.mp, armor: L * 1.5 * c.armor, dmgMin: 2, dmgMax: 4, speed: 1.3,
-      dmgPct: 0.06 * (L - 1) + (c.dmg - 1), atkSpd: c.atkSpd, moveSpd: c.moveSpd, crit: 0.05 + c.crit, spell: 1 + c.spell,
-      regen: 1 + L * 0.25, mpRegen: (3 + L * 0.3) * Math.sqrt(c.mp), evade: 0,
+      maxHp: 90 + L * 14, maxMp: 40 + L * 6, armor: L * 1.5, levelDmg: L * 0.9, dmgMin: 2, dmgMax: 4, speed: 1.3,
+      dmgPct: 0.05 * (L - 1), dmgMult: c.dmg, atkSpd: c.atkSpd, moveSpd: c.moveSpd, crit: 0.05 + c.crit, spell: 1 + c.spell,
+      regen: 1 + L * 0.25, mpRegen: (1 + L * 0.12) * Math.sqrt(c.mp), evade: 0, reach: 0, ranged: null, weapon: null,
+      hpPct: 0, armorPct: 0, mpRegenPct: 0, spellPct: 0, dotPct: 0, healPct: 0, typePct: 0, taken: 1,
     };
-    for (const it of Object.values(this.equipment)) {
+    // weapons: the main hand's damage and speed; a second one-handed weapon adds an eighth of its damage
+    const w = itemDef(eq.weapon);
+    if (w) {
+      const ws = itemStats(eq.weapon), t = WEAPON_TYPES[w.type];
+      s.dmgMin = ws.dmgMin; s.dmgMax = ws.dmgMax; s.speed = ws.speed;
+      s.reach = t.reach || 0; s.ranged = t.ranged || null; s.weapon = w.type; s.hands = t.hands; s.swing = t.swing;
+    }
+    const off = itemDef(eq.offhand);
+    this.dualWield = !!(off && off.kind === 'weapon');
+    if (this.dualWield) {
+      const os = itemStats(eq.offhand);
+      s.dmgMin += Math.round(os.dmgMin * 0.12);
+      s.dmgMax += Math.round(os.dmgMax * 0.12);
+    }
+    // everything worn: its stats (the weapons' damage is counted above)
+    for (const slot of SLOTS) {
+      const it = eq[slot];
       if (!it) continue;
-      const st = it.stats;
-      if (st.dmgMin) { s.dmgMin = st.dmgMin; s.dmgMax = st.dmgMax; s.speed = st.speed; }
+      const st = itemStats(it);
       s.armor += st.armor || 0;
       s.maxHp += st.hp || 0;
       s.maxMp += st.mp || 0;
@@ -202,21 +304,37 @@ export class Player {
       s.spell += st.spell || 0;
       s.regen += st.regen || 0;
     }
-    for (const id of Object.keys(this.buffs || {})) { // skills' timed boosts
-      const b = BUFFS[id];
-      if (b.armorMul) s.armor *= b.armorMul;
-      s.atkSpd += b.atkSpd || 0;
-      s.dmgPct += b.dmgPct || 0;
-      s.evade = Math.max(s.evade, b.evade || 0);
+    // what the points in each tree add
+    for (const tree of TREES[this.cls]) {
+      const n = this.sk.pts[tree.id] || 0;
+      if (!n) continue;
+      for (const [k, v] of Object.entries(tree.passive)) {
+        if (k === 'daggerPct') { if (s.weapon === 'dagger') s.typePct += v * n; }
+        else if (k === 'bowPct') { if (s.weapon === 'bow') s.typePct += v * n; }
+        else if (k === 'bowSpd') { if (s.weapon === 'bow') s.atkSpd += v * n; }
+        else s[k] = (s[k] || 0) + v * n;
+      }
     }
-    s.armor = Math.round(s.armor);
-    s.maxHp = Math.round(s.maxHp);
-    s.maxMp = Math.round(s.maxMp);
+    // timed boosts (skills, blessings, elixirs)
+    for (const [id, b] of Object.entries(this.buffs || {})) {
+      const def = BUFFS[id];
+      if (!def) continue;
+      for (const k of ['armorPct', 'hpPct', 'dmgPct', 'atkSpd', 'moveSpd', 'crit']) if (def[k]) s[k] += def[k](b.v);
+      if (def.evade) s.evade = Math.max(s.evade, def.evade(b.v));
+      if (def.taken) s.taken *= def.taken(b.v);
+    }
+    s.maxHp = Math.round(s.maxHp * c.hp * (1 + s.hpPct));
+    s.maxMp = Math.round(s.maxMp * c.mp);
+    s.armor = Math.round(s.armor * c.armor * (1 + s.armorPct));
+    s.mpRegen *= 1 + s.mpRegenPct;
+    s.spell *= 1 + s.spellPct;
+    s.evade = Math.min(0.6, s.evade);
     s.atkSpeed = s.speed * (1 + s.atkSpd);
-    s.moveSpeed = 5.6 * (1 + s.moveSpd);
-    s.dmgLo = Math.max(1, Math.round(s.dmgMin * (1 + s.dmgPct)));
-    s.dmgHi = Math.max(s.dmgLo + 1, Math.round(s.dmgMax * (1 + s.dmgPct)));
-    s.dr = s.armor / (s.armor + 60 + 8 * Math.max(0, L - 10)); // (armor grows with level: so does what it takes)
+    s.moveSpeed = 5.6 * (1 + Math.min(0.6, s.moveSpd));
+    s.dmgLo = Math.max(1, Math.round((s.dmgMin + s.levelDmg) * (1 + s.dmgPct + s.typePct) * s.dmgMult));
+    s.dmgHi = Math.max(s.dmgLo + 1, Math.round((s.dmgMax + s.levelDmg) * (1 + s.dmgPct + s.typePct) * s.dmgMult));
+    s.dr = Math.min(0.85, s.armor / (s.armor + 60 + 8 * Math.max(0, L - 10))); // (armor grows with level: so does what it takes)
+    s.style = this.styleName();
     this.stats = s;
     if (this.hp !== undefined) {
       this.hp = Math.min(this.hp, s.maxHp);
@@ -224,59 +342,135 @@ export class Player {
     }
   }
 
+  // How this hero fights now, by what it holds ("Sword and shield", "Bow"…).
+  styleName() {
+    const w = itemDef(this.equipment.weapon), o = itemDef(this.equipment.offhand), st = CLASSES[this.cls].styles;
+    if (!w) return 'Bare hands';
+    switch (this.cls) {
+      case 'warrior': return o?.type === 'shield' ? st.guard : o?.kind === 'weapon' ? st.dual : w.hands === 2 ? st.heavy : 'One weapon';
+      case 'healer': return w.hands === 2 ? st.heavy : o?.type === 'shield' ? st.guard : 'Mace';
+      case 'rogue': return w.type === 'bow' ? st.archer : st.assassin;
+      case 'scientist': return w.type === 'staff' ? st.elements : o?.type === 'book' ? st.alchemy : 'Short staff';
+      default: return '';
+    }
+  }
+
+  // One blow (or spell): weapon damage plus the hero's level's share, its bonuses, times mult; spells use
+  // spell power. Critical hits do 80% more.
   rollDamage(mult, spell = false, critBonus = 0) {
     const s = this.stats;
     let amount = rand(s.dmgLo, s.dmgHi) * mult * (spell ? s.spell : 1);
-    const crit = Math.random() < s.crit + critBonus;
-    if (crit) amount *= 2;
+    const crit = this.sureCrit || Math.random() < s.crit + critBonus;
+    this.sureCrit = false;
+    if (crit) amount *= 1.8;
     return { amount: Math.max(1, Math.round(amount)), crit };
   }
 
-  // ---------------------------------------------------------------- inventory
+  // Damage a second for poisons and burns: mult of an average blow (no crits).
+  dotDps(mult, spell = true) {
+    const s = this.stats;
+    return Math.max(1, Math.round(((s.dmgLo + s.dmgHi) / 2) * mult * (spell ? s.spell : 1) * (1 + s.dotPct)));
+  }
+
+  // ---------------------------------------------------------------- the bag
   freeSlot() {
     return this.bag.findIndex((x) => !x);
   }
 
-  addItem(item) {
+  // Put an item in the bag (stackables join a stack of the same kind first). False if there's no room.
+  addItem(item, quiet = false) {
+    const d = itemDef(item);
+    if (!d) return false;
+    if (d.stack) {
+      let left = item.n || 1;
+      for (const it of this.bag) {
+        if (!it || it.k !== item.k || it.n >= d.stack) continue;
+        const take = Math.min(left, d.stack - it.n);
+        it.n += take;
+        left -= take;
+        if (!left) break;
+      }
+      while (left > 0) {
+        const i = this.freeSlot();
+        if (i < 0) { item.n = left; if (!quiet) this.game.ui?.refreshInventory(); return false; }
+        const take = Math.min(left, d.stack);
+        this.bag[i] = { id: newId(), k: item.k, n: take };
+        left -= take;
+      }
+      if (!quiet) this.game.ui?.refreshInventory();
+      return true;
+    }
     const i = this.freeSlot();
     if (i < 0) return false;
     this.bag[i] = item;
-    this.game.ui.refreshInventory();
+    if (!quiet) this.game.ui?.refreshInventory();
     return true;
   }
 
-  // Equipment slot an item goes into. Rings fill the empty ring slot first; with both taken,
-  // they replace the weaker ring (lower value) unless a slot is given explicitly.
+  // How many of a stackable the bag holds; and taking n of them out (false if there aren't that many).
+  count(key) {
+    return this.bag.reduce((n, it) => n + (it && it.k === key ? it.n || 1 : 0), 0);
+  }
+
+  takeOut(key, n = 1) {
+    if (this.count(key) < n) return false;
+    for (let i = this.bag.length - 1; i >= 0 && n > 0; i--) {
+      const it = this.bag[i];
+      if (!it || it.k !== key) continue;
+      const take = Math.min(n, it.n || 1);
+      it.n = (it.n || 1) - take;
+      n -= take;
+      if (it.n <= 0) this.bag[i] = null;
+    }
+    return true;
+  }
+
+  // Where an item goes when equipped: an empty slot of its kind first (earrings, rings, a second weapon).
   slotFor(item) {
-    if (item.slot !== 'ring') return item.slot;
-    const eq = this.equipment;
-    if (!eq.ring1) return 'ring1';
-    if (!eq.ring2) return 'ring2';
-    return eq.ring2.value < eq.ring1.value ? 'ring2' : 'ring1';
+    const slots = slotsFor(item, this.cls), eq = this.equipment, d = itemDef(item);
+    if (!slots.length) return null;
+    if (d.kind === 'weapon' && slots.includes('offhand')) { // a second weapon only beside another one-hander
+      const main = itemDef(eq.weapon);
+      if (eq.weapon && main?.hands === 1 && slotsFor(eq.weapon, this.cls).includes('offhand') && !eq.offhand) return 'offhand';
+      return 'weapon';
+    }
+    return slots.find((s) => !eq[s]) || slots[0];
   }
 
   equipFromBag(i, target = null) {
-    const it = this.bag[i];
+    const it = this.bag[i], g = this.game;
     if (!it) return;
+    const d = itemDef(it);
+    if (d.stack) return this.useItem(i);
+    const why = cannotUse(it, this.cls, this.level);
+    if (why) { g.ui.centerMsg(why); return; }
+    const slots = slotsFor(it, this.cls);
+    const slot = target && slots.includes(target) ? target : this.slotFor(it);
+    if (!slot) return;
     const eq = this.equipment;
-    const slot = target || this.slotFor(it);
-    // what else has to come off?
+    // what else has to come off: the off hand for a two-handed weapon (or a main weapon a second one can't go
+    // beside), the two-handed weapon for something in the off hand
     const extra = [];
-    if (it.twoHanded && eq.offhand) extra.push('offhand');
-    if (it.slot === 'offhand' && eq.weapon?.twoHanded) extra.push('weapon');
+    if (slot === 'weapon') {
+      const off = itemDef(eq.offhand);
+      if (d.hands === 2 && eq.offhand) extra.push('offhand');
+      else if (off?.kind === 'weapon' && !slotsFor(it, this.cls).includes('offhand')) extra.push('offhand');
+    }
+    if (slot === 'offhand') {
+      const main = itemDef(eq.weapon);
+      if (main?.hands === 2) extra.push('weapon');
+      if (d.kind === 'weapon' && (!main || main.hands !== 1)) { g.ui.centerMsg('A second weapon goes beside a one-handed one'); return; }
+    }
     const prev = eq[slot];
     const freeAfter = this.bag.filter((x) => !x).length + (prev ? 0 : 1);
-    if (extra.length > freeAfter) {
-      this.game.ui.centerMsg('Not enough room in your bag');
-      return;
-    }
+    if (extra.length > freeAfter) { g.ui.centerMsg('Not enough room in your bag'); return; }
     this.bag[i] = prev || null;
     eq[slot] = it;
     for (const s of extra) {
       this.bag[this.freeSlot()] = eq[s];
       eq[s] = null;
     }
-    this.game.sfx.play('equip');
+    g.sfx.play('equip');
     this.onGearChanged();
   }
 
@@ -284,40 +478,122 @@ export class Player {
     const it = this.equipment[slot];
     if (!it) return;
     const i = this.freeSlot();
-    if (i < 0) {
-      this.game.ui.centerMsg('Your bag is full');
-      return;
-    }
+    if (i < 0) { this.game.ui.centerMsg('Your bag is full'); return; }
     this.bag[i] = it;
     this.equipment[slot] = null;
+    // without a main weapon, a second one moves over to the main hand
+    if (slot === 'weapon' && itemDef(this.equipment.offhand)?.kind === 'weapon') {
+      this.equipment.weapon = this.equipment.offhand;
+      this.equipment.offhand = null;
+    }
     this.game.sfx.play('equip');
     this.onGearChanged();
   }
 
-  sell(i) {
-    const it = this.bag[i];
-    if (!it) return;
-    this.bag[i] = null;
-    this.gold += it.value;
-    this.game.town?.addBuyback(it);
-    this.game.sfx.play('gold');
-    this.game.ui.log(`Sold ${it.name} for <b>${it.value}g</b>`, 'gold');
-    this.game.ui.refreshInventory();
-    this.game.save();
+  // Use a potion, elixir or scroll from the bag.
+  useItem(i) {
+    const it = this.bag[i], d = itemDef(it), g = this.game;
+    if (!d?.stack || !this.alive) return;
+    if (this.level < d.level) { g.ui.centerMsg(`Needs level ${d.level}`); return; }
+    if (d.kind === 'potion') this.drink(d.key);
+    else if (d.kind === 'elixir') {
+      if (!this.takeOut(d.key)) return;
+      this.addBuff(d.buff, 1);
+      g.fx.heal(this.pos);
+      g.sfx.play('drink');
+      g.ui.log(`${d.name}: ${d.desc}`, 'xp');
+      g.link.act({ k: 'dr' });
+      g.ui.refreshInventory();
+      g.save();
+    } else if (d.kind === 'scroll') this.readCampScroll();
+    else if (d.kind === 'recipe') g.ui.centerMsg('Take it to the anvil in Emberwood camp');
   }
 
+  // Drink a potion: the given one, or the strongest of its kind (hp | mp) the hero can use.
+  drink(keyOrUse) {
+    const g = this.game;
+    if (!this.alive || this.cd.potion > 0 || this.stunT > 0) return;
+    let key = keyOrUse;
+    if (keyOrUse === 'hp' || keyOrUse === 'mp') {
+      key = [3, 2, 1].map((n) => `${keyOrUse}_potion_${n}`).find((k) => this.count(k) && ITEMS[k].level <= this.level);
+      if (!key) { g.ui.centerMsg(`No ${keyOrUse === 'hp' ? 'healing' : 'mana'} potions: the provisioner in camp sells them`); return; }
+    }
+    const d = ITEMS[key];
+    if (d.use === 'hp' && this.hp >= this.stats.maxHp) { g.ui.centerMsg('Already at full Life'); return; }
+    if (d.use === 'mp' && this.mp >= this.stats.maxMp) { g.ui.centerMsg('Already at full Mana'); return; }
+    if (!this.takeOut(key)) return;
+    this.cd.potion = POTION_CD;
+    if (d.use === 'hp') this.heal(Math.round(this.stats.maxHp * d.amount));
+    else {
+      this.mp = Math.min(this.stats.maxMp, this.mp + this.stats.maxMp * d.amount);
+      g.fx.add.emit({ pos: this.pos, count: 30, spread: 0.6, velSpread: 0.6, vel: { x: 0, y: 2.4, z: 0 }, color: hdr(0x6aa0ff, 2), colorEnd: hdr(0x2a50ff, 0.3), size: 0.2, sizeEnd: 0.04, life: 1, drag: 1.2, flat: true });
+    }
+    g.sfx.play('drink');
+    g.link.act({ k: 'dr' });
+    g.ui.refreshInventory();
+    g.save();
+  }
+
+  // A camp scroll: three seconds of reading (a blow breaks it), then off to this land's camp.
+  readCampScroll() {
+    const g = this.game, map = g.places.map;
+    if (map.kind === 'arena') { g.ui.centerMsg('The scroll will not work in the arena'); return; }
+    if (this.channel) return;
+    if (!this.count('camp_scroll')) return;
+    this.channel = { t: 0, dur: 3, kind: 'scroll' };
+    this.action = null;
+    this.h.anim.play('Interact', { timeScale: 0.5 });
+    g.ui.channel('Reading the camp scroll…', 3);
+    g.sfx.play('page');
+  }
+
+  breakChannel() {
+    if (!this.channel) return;
+    this.channel = null;
+    this.h.anim.stopOne();
+    this.game.ui.channel(null);
+    this.game.ui.centerMsg('Interrupted');
+  }
+
+  sell(i) {
+    const it = this.bag[i], g = this.game;
+    if (!it) return;
+    const value = sellPrice(it);
+    this.bag[i] = null;
+    this.gold += value;
+    g.npcs?.addBuyback(it, value);
+    g.sfx.play('gold');
+    g.ui.log(`Sold <b style="color:${itemColor(it)}">${itemName(it)}${it.n > 1 ? ` ×${it.n}` : ''}</b> for <b>${value}g</b>`, 'gold');
+    g.ui.refreshInventory();
+    g.save();
+  }
 
   onGearChanged(save = true) {
     const hpFrac = this.hp !== undefined ? this.hp / this.stats.maxHp : 1;
     this.recompute();
     if (this.hp !== undefined) this.hp = Math.min(this.stats.maxHp, Math.max(this.hp, hpFrac * this.stats.maxHp));
-    applyEquipmentVisuals(this.h, this.equipment, this.cls);
+    applyEquipmentVisuals(this.h, this.equipment, this.cls, this.look);
     this.game.ui?.refreshInventory();
-    this.game.doll?.setEquipment(this.equipment, this.cls);
+    this.game.ui?.refreshSkills?.();
+    this.game.doll?.setEquipment(this.equipment, this.cls, this.look);
     this.game.link?.lookChanged();
     if (save) this.game.save();
   }
 
+  // The anvil: one step up for a worn or carried item, if the hero has the recipes and the fee.
+  upgrade(item) {
+    const g = this.game, cost = upgradeCost(item);
+    if (!cost) return false;
+    if (this.count(cost.recipe) < cost.recipes) { g.ui.centerMsg(`Needs ${cost.recipes} ${ITEMS[cost.recipe].name}${cost.recipes > 1 ? 's' : ''}`); return false; }
+    if (this.gold < cost.gold) { g.ui.centerMsg('Not enough gold'); return false; }
+    this.takeOut(cost.recipe, cost.recipes);
+    this.gold -= cost.gold;
+    item.p = (item.p ?? 0) + 1;
+    this.onGearChanged();
+    return true;
+  }
+
+  // ---------------------------------------------------------------- levels and skill points
   gainXp(n) {
     if (this.level >= MAX_LEVEL) { this.xp = 0; return; } // (the top, for now)
     this.xp += n;
@@ -327,8 +603,7 @@ export class Player {
       this.level++;
       leveled = true;
       if (this.level >= MAX_LEVEL) this.xp = 0;
-      const skill = this.skills.find((s) => s.level === this.level);
-      this.game.ui.log(`<b>Level ${this.level}!</b>${skill ? ` New skill: <b>${skill.name}</b> [${skill.key}]` : ''}`, 'lvl');
+      this.game.ui.log(`<b>Level ${this.level}!</b> A new skill point: <b>K</b> opens your skills.`, 'lvl');
     }
     if (leveled) {
       this.recompute();
@@ -337,12 +612,90 @@ export class Player {
       this.game.fx.levelUp(this.pos);
       this.game.sfx.play('levelup');
       this.game.ui.floater(this.headPos(), `Level ${this.level}`, 'info');
-      this.game.ui.buildActionBar();
-      this.game.town?.onLevelUp();
+      this.game.ui.refreshSkills?.();
+      this.game.quests?.onLevel();
       this.game.link?.act({ k: 'lv' });
       this.game.link?.lookChanged();
       this.game.save();
     }
+  }
+
+  spentPoints() {
+    return Object.values(this.sk.pts).reduce((a, b) => a + b, 0);
+  }
+
+  get freePoints() {
+    return Math.max(0, this.level - this.spentPoints());
+  }
+
+  treePoints(treeId) {
+    return this.sk.pts[treeId] || 0;
+  }
+
+  skillOpen(id) {
+    const sk = SKILLS[id];
+    return !!sk && sk.cls === this.cls && this.treePoints(sk.tree) >= sk.unlock;
+  }
+
+  skillPower(id) {
+    return power(this.treePoints(SKILLS[id].tree));
+  }
+
+  // Why a skill can't be used with what the hero holds now (null if it can).
+  skillBlocked(id) {
+    const need = SKILLS[id].needs, s = this.stats, off = itemDef(this.equipment.offhand);
+    if (!need) return null;
+    if (need === 'shield' && off?.type !== 'shield') return 'Needs a shield';
+    if (need === 'book' && off?.type !== 'book') return 'Needs a book in the off hand';
+    if (need === 'staff' && s.weapon !== 'staff') return 'Needs a long staff';
+    if (need === 'bow' && s.weapon !== 'bow') return 'Needs a bow';
+    if (need === 'dagger' && s.weapon !== 'dagger') return 'Needs a dagger';
+    if (need === 'twohand' && (s.hands !== 2 || s.ranged)) return 'Needs a two-handed weapon';
+    if (need === 'melee' && (!s.weapon || s.ranged)) return 'Needs a melee weapon';
+    return null;
+  }
+
+  // One point into a tree; skills it opens go on the bar's free slots.
+  learn(treeId) {
+    if (!this.freePoints || !TREES[this.cls].some((t) => t.id === treeId)) return false;
+    const before = new Set(TREES[this.cls].flatMap((t) => t.skills).filter((id) => this.skillOpen(id)));
+    this.sk.pts[treeId] = this.treePoints(treeId) + 1;
+    for (const id of TREES[this.cls].find((t) => t.id === treeId).skills) {
+      if (!this.skillOpen(id) || before.has(id) || this.sk.bar.includes(id)) continue;
+      const free = this.sk.bar.indexOf(null);
+      if (free >= 0) this.sk.bar[free] = id;
+      this.game.ui?.log(`New skill: <b>${SKILLS[id].name}</b>`, 'lvl');
+    }
+    this.recompute();
+    this.game.ui?.buildActionBar();
+    this.game.save();
+    return true;
+  }
+
+  // Take every point back (for a fee: the skill window says how much).
+  resetSkills() {
+    const g = this.game, fee = this.respecFee();
+    if (this.gold < fee) { g.ui.centerMsg('Not enough gold'); return false; }
+    this.gold -= fee;
+    this.sk = freshSkills();
+    this.recompute();
+    g.ui.buildActionBar();
+    g.ui.refreshInventory();
+    g.save();
+    return true;
+  }
+
+  respecFee() {
+    return this.level < 10 ? 0 : Math.round(this.level * this.level * 4 / 10) * 10;
+  }
+
+  setBar(i, id) {
+    if (i < 0 || i >= BAR_SIZE) return;
+    const was = this.sk.bar.indexOf(id);
+    if (was >= 0) this.sk.bar[was] = this.sk.bar[i]; // (swap places)
+    this.sk.bar[i] = id;
+    this.game.ui.buildActionBar();
+    this.game.save();
   }
 
   headPos() {
@@ -357,65 +710,131 @@ export class Player {
     this.group.rotation.y = this.yaw;
   }
 
-  basicAttack() {
-    const g = this.game, s = this.stats;
-    if (this.cls === 'mage') return this.arcaneBolt();
-    const { point } = g.aim(3.2);
+  // How far the basic attack reaches (to the foe's centre: its radius counts too).
+  attackRange(target = null) {
+    const s = this.stats;
+    if (s.ranged) return s.ranged === 'arrow' ? 15 : 13;
+    return (s.hands === 2 ? 2.7 : 2.3) + s.reach + (target ? target.radius : 0);
+  }
+
+  // The basic attack at a foe (or toward a point). manual: a press (it can combo), not a held button: a press
+  // in the window after a blow lands chains into the next, stronger one at once; a moment too early is held
+  // for the window (and is perfect); earlier than that breaks the chain. Held attacks never combo.
+  basicAttack(target = null, manual = false) {
+    const g = this.game, s = this.stats, c = this.combo, now = g.time;
+    if (!this.alive || this.stunT > 0 || this.channel) return false;
+    if (this.action && !this.action.swing) return false; // (a skill is playing)
+    const swinging = !!this.action?.swing;
+    let step = 0, perfect = false;
+    if (manual) {
+      if (swinging && now < c.open) {
+        if (now >= c.open - COMBO.tooEarly) { this.queued = { t: c.open - now + 0.001, fn: () => this.basicAttack(target, true) }; return true; }
+        c.step = 0;
+        g.ui.combo(0, 'early');
+        return false;
+      }
+      if (now >= c.open && now <= c.until) {
+        step = c.step + 1 >= COMBO.mults.length ? 1 : c.step + 1; // (after the finisher the chain starts over)
+        perfect = now <= c.perfectUntil;
+      }
+    } else if (swinging || this.cd.attack > 0) return false;
+    c.step = step;
     const dur = 0.62 / s.atkSpeed;
-    const twoH = !!this.equipment.weapon?.twoHanded;
+    const mult = COMBO.mults[step] * (perfect ? 1 + COMBO.perfectBonus : 1);
+    const point = target ? target.pos.clone() : g.aim(3.2).point;
     this.faceToward(point);
-    this.combo = (this.combo + 1) % 2;
-    const style = twoH ? 'chop' : this.combo ? 'slash' : 'backslash';
-    this.h.startSwing(dur, style);
+    this.action = null;
+    this.h.swing = null;
+    this.queued = null;
+    c.open = now + dur * COMBO.open;
+    c.perfectUntil = c.open + COMBO.perfect;
+    c.until = now + dur + COMBO.grace;
+    if (manual && step > 0) g.ui.combo(step, perfect ? 'perfect' : 'good');
     this.cd.attack = dur;
+    if (s.ranged) {
+      const act = s.ranged === 'arrow' ? arrowAction(this, point, true, target) : boltAction(this, point, true, target);
+      this.action = { t: 0, dur, canMove: false, swing: true, mult, combo: step, ...act };
+      g.link.act({ k: s.ranged === 'arrow' ? 'ar' : 'bo', x: r2(point.x), z: r2(point.z) });
+      return true;
+    }
+    const twoH = s.hands === 2, style = step === COMBO.mults.length - 1 ? 'chop' : twoH ? (step % 2 ? 'cleave' : 'chop') : s.swing === 'stab' ? (step % 2 ? 'stab' : 'slash') : (step + c.swings) % 2 ? 'slash' : 'backslash';
+    c.swings = (c.swings || 0) + 1;
+    this.h.startSwing(dur, style);
     g.sfx.play('swing', 0.7);
+    const range = this.attackRange() - 0.1, finisher = step === COMBO.mults.length - 1;
     this.action = {
-      t: 0, dur, canMove: false, hit: false,
+      t: 0, dur, canMove: false, hit: false, swing: true,
       tick: (dt, a) => {
         if (!a.hit && a.t >= dur * 0.45) {
           a.hit = true;
           a.canMove = true;
           a.moveMult = 0.6;
-          const n = g.meleeHit({ range: twoH ? 2.7 : 2.3, arc: twoH ? 1.6 : 2.1, mult: 1, knock: 0.35 });
-          if (style === 'chop') g.fx.arc(this.pos, this.yaw, { span: 1.3, rIn: 0.5, rOut: 2.8, color: 0xfff2d0, dur: 0.2 });
-          else g.fx.arc(this.pos, this.yaw, { span: 2.1, rIn: 0.6, rOut: 2.4, color: 0xfff2d0, dur: 0.22, reverse: style === 'backslash' });
+          const eff = this.buffs.poison_blade && s.weapon === 'dagger' ? { dot: [this.dotDps(this.buffs.poison_blade.v, false), 4, 'poison'] } : null;
+          const n = g.meleeHit({ range, arc: twoH ? 1.8 : 2.1, mult, knock: finisher ? 1.0 : 0.35, eff, target });
+          const color = finisher ? 0xffc060 : perfect ? 0xfff6a0 : 0xfff0d0;
+          if (style === 'chop' || style === 'cleave') g.fx.arc(this.pos, this.yaw, { span: 1.4, rIn: 0.5, rOut: range + 0.4, color, dur: 0.2 });
+          else g.fx.arc(this.pos, this.yaw, { span: 2.1, rIn: 0.6, rOut: range + 0.2, color, dur: 0.22, reverse: style === 'backslash' });
+          if (finisher && n) g.shake(0.18);
           if (!n) g.sfx.play('whiff', 0.5);
         }
       },
     };
     g.link.act({ k: 'sw', s: style, d: r2(dur) });
+    return true;
   }
 
-  // The mage's attack: a bolt of arcane force from the staff (weapon damage, scaled by Spell Power).
-  arcaneBolt() {
-    const g = this.game, s = this.stats;
-    const { point } = g.aim(12);
-    const dur = 0.62 / s.atkSpeed;
-    this.faceToward(point);
-    this.cd.attack = dur;
-    this.action = { t: 0, dur, canMove: false, ...boltAction(this, point, true) };
-    g.link.act({ k: 'bo', x: r2(point.x), z: r2(point.z) });
-  }
-
+  // Use the skill in bar slot i (keys 1–8).
   useSkill(i) {
-    const g = this.game, sk = this.skills[i];
-    if (!this.alive || !sk || this.stunT > 0) return;
-    if (this.level < sk.level) { g.ui.centerMsg(`${sk.name} unlocks at level ${sk.level}`); return; }
-    if (this.cd[sk.id] > 0) return;
-    if (this.mp < sk.mp) { g.ui.noMana(); return; }
-    if (this.action) { this.queued = { t: 0.4, fn: () => this.useSkill(i) }; return; }
-    this.mp -= sk.mp;
-    this.cd[sk.id] = sk.cd;
-    const at = sk.range ? g.aim(sk.range).point : null;
-    this.action = sk.cast(this, at, true);
-    const to = this.action.dest || at; // where the others should see it go (a leap's landing, a teleport's end)
-    g.link.act(to ? { k: 'sk', id: sk.id, x: r2(to.x), z: r2(to.z) } : { k: 'sk', id: sk.id });
+    const id = this.sk.bar[i];
+    if (id) this.castSkill(id);
   }
 
-  // Timed boosts from skills (skills.js BUFFS); their looks are an aura every hero shows.
-  addBuff(id) {
-    this.buffs[id] = BUFFS[id].dur;
+  // Cast a skill: its target (the selected foe, or the nearest; a friend; a spot), in range or not (control.js
+  // walks there first), mana and cooldown.
+  castSkill(id, opts = {}) {
+    const g = this.game, sk = SKILLS[id];
+    if (!this.alive || !sk || this.stunT > 0) return false;
+    if (!this.skillOpen(id)) { g.ui.centerMsg(`${sk.name}: put more points in its tree`); return false; }
+    const blocked = this.skillBlocked(id);
+    if (blocked) { g.ui.centerMsg(`${sk.name}: ${blocked.toLowerCase()}`); return false; }
+    if ((this.cd[id] || 0) > 0) return false;
+    const cost = manaCost(sk, this.level);
+    if (this.mp < cost) { g.ui.noMana(); return false; }
+    const ctx = this.control.skillTarget(sk, opts);
+    if (!ctx) return false; // (no target: control said why, or is walking into range)
+    if (this.channel) this.breakChannel();
+    const swinging = this.action?.swing;
+    if (this.action && !swinging) { this.queued = { t: 0.4, fn: () => this.castSkill(id, opts) }; return false; }
+    // a skill right after a basic blow, in its combo window, cuts the swing short and is stronger for the chain
+    let bonus = 1;
+    if (swinging) {
+      if (g.time < this.combo.open) { this.queued = { t: this.combo.open - g.time + 0.02, fn: () => this.castSkill(id, opts) }; return false; }
+      if (g.time <= this.combo.until && this.combo.step > 0) { bonus = 1 + 0.05 * this.combo.step; g.ui.combo(this.combo.step, 'skill'); }
+      this.combo.step = 0;
+    }
+    this.action = null;
+    this.h.swing = null;
+    this.mp -= cost;
+    this.cd[id] = sk.cd;
+    ctx.pw = this.skillPower(id) * bonus;
+    this.action = sk.cast(this, ctx, true);
+    const to = this.action.dest || ctx.at || (ctx.target ? ctx.target.pos : null);
+    const a = { k: 'sk', id, pw: r2(ctx.pw) };
+    if (to) { a.x = r2(to.x); a.z = r2(to.z); }
+    if (ctx.target) a.t = ctx.target === this ? 0 : ctx.target.isHero ? `h${ctx.target.id}` : ctx.target.id;
+    g.link.act(a);
+    return true;
+  }
+
+  // Timed boosts (skills.js BUFFS); v: their strength.
+  addBuff(id, v = 1, dur = null) {
+    const def = BUFFS[id];
+    if (!def) return;
+    this.buffs[id] = { t: dur ?? def.dur, v };
+    if (id === 'divine_shield') this.shield = Math.round(this.stats.maxHp * v);
+    if (def.look) this.aura(def.look, dur ?? def.dur);
     this.recompute();
+    this.game.ui?.refreshBuffs?.();
   }
 
   aura(id, dur) {
@@ -426,36 +845,27 @@ export class Player {
     return 1; // (our own sounds are never far away)
   }
 
-  drinkAle() {
+  heal(n, quiet = false) {
     const g = this.game;
-    if (!this.alive || this.cd.potion > 0) return;
-    if (this.potions <= 0) { g.ui.centerMsg('No ale left — the merchant in camp sells more'); return; }
-    if (this.hp >= this.stats.maxHp) { g.ui.centerMsg('Already at full life'); return; }
-    this.potions--;
-    this.cd.potion = 1.5;
-    this.heal(Math.round(this.stats.maxHp * 0.4));
-    g.sfx.play('drink');
-    g.link.act({ k: 'dr' });
-    g.save();
-  }
-
-  heal(n) {
-    const g = this.game;
+    if (!this.alive) return;
     const before = this.hp;
     this.hp = Math.min(this.stats.maxHp, this.hp + n);
+    if (quiet) { if (this.hp - before >= 1) g.ui.floater(this.headPos(), `+${Math.round(this.hp - before)}`, 'heal small'); return; }
     g.fx.heal(this.pos);
     g.ui.floater(this.headPos(), `+${Math.round(this.hp - before)}`, 'heal');
     g.sfx.play('heal');
   }
 
-  // Another hero stunned or slowed us (the arena): { s: stun s, w: slow s, f: slow factor }.
+  // Stunned or slowed (another hero in the arena, or a monster's blow): { s: stun s, w: slow s, f: slow factor }.
   applyStatus(looks) {
-    const s = Number(looks.s) || 0, w = Number(looks.w) || 0;
+    if (this.buffs.sanctuary) return; // (holy ground: no stuns or slows)
+    const s = Number(looks.s ?? looks.stun) || 0, w = Number(looks.w) || 0;
     if (s > 0) {
       this.stunT = Math.max(this.stunT, Math.min(1.5, s));
       this.action = null;
       this.queued = null;
       this.h.swing = null;
+      this.breakChannel();
     }
     if (w > 0) {
       this.slowT = Math.max(this.slowT, Math.min(6, w));
@@ -470,17 +880,22 @@ export class Player {
     this.slowT = 0;
     this.action = null;
     this.queued = null;
+    this.channel = null;
+    g.ui.channel(null);
     this.h.swing = null;
     this.h.armsOut = 0;
     this.h.model.rotation.y = 0;
     this.h.anim.play('Death_A', { hold: true });
+    this.control.onDeath();
+    for (const id of Object.keys(this.buffs)) if (!BUFFS[id].long) delete this.buffs[id]; // (blessings outlast death)
+    this.recompute();
     const arena = g.places.map.kind === 'arena';
     const lost = arena ? 0 : Math.floor(this.gold * 0.1); // (the arena takes no gold)
     this.gold -= lost;
     g.sfx.play('death');
     g.link.act({ k: 'de' });
     g.ui.closeInventory();
-    setTimeout(() => g.ui.showDeath(true), 1400);
+    setTimeout(() => { if (!this.alive) g.ui.showDeath(true); }, 1400);
     g.save();
   }
 
@@ -490,10 +905,11 @@ export class Player {
     this.game.rise();
   }
 
-  revive() {
+  // Back on our feet with this share of our Life (all of it at camp; less when a healer raises us).
+  revive(share = 1) {
     this.alive = true;
-    this.hp = this.stats.maxHp;
-    this.mp = this.stats.maxMp;
+    this.hp = Math.max(1, this.stats.maxHp * share);
+    this.mp = share >= 1 ? this.stats.maxMp : Math.max(this.mp, this.stats.maxMp * share);
     this.h.anim.play('Spawn_Ground', { timeScale: 1.2 });
     this.game.ui.showDeath(false);
     this.game.link.act({ k: 're' });
@@ -504,11 +920,12 @@ export class Player {
     const g = this.game, s = this.stats;
     for (const k in this.cd) this.cd[k] = Math.max(0, this.cd[k] - dt);
     let lapsed = false;
-    for (const id of Object.keys(this.buffs)) {
-      this.buffs[id] -= dt;
-      if (this.buffs[id] <= 0) { delete this.buffs[id]; lapsed = true; }
+    for (const [id, b] of Object.entries(this.buffs)) {
+      b.t -= dt;
+      if (id === 'renew' && this.alive) this.heal(this.stats.maxHp * b.v * dt, true);
+      if (b.t <= 0) { delete this.buffs[id]; lapsed = true; if (id === 'divine_shield') this.shield = 0; }
     }
-    if (lapsed) this.recompute();
+    if (lapsed) { this.recompute(); g.ui.refreshBuffs?.(); }
     auraTick(this, dt);
     this.stunT = Math.max(0, this.stunT - dt);
     this.slowT = Math.max(0, this.slowT - dt);
@@ -525,6 +942,17 @@ export class Player {
     this.hp = Math.min(s.maxHp, this.hp + s.regen * (safe ? 8 : 1) * dt);
     this.mp = Math.min(s.maxMp, this.mp + s.mpRegen * (safe ? 4 : 1) * dt);
 
+    // reading a camp scroll
+    if (this.channel) {
+      this.channel.t += dt;
+      if (this.channel.t >= this.channel.dur) {
+        this.channel = null;
+        g.ui.channel(null);
+        this.h.anim.stopOne();
+        if (this.takeOut('camp_scroll')) { g.ui.refreshInventory(); g.toCamp(); }
+      }
+    }
+
     const a = this.action;
     if (a) {
       a.t += dt;
@@ -535,12 +963,19 @@ export class Player {
       }
     }
 
-    const ax = g.inputBlocked ? _axis.set(0, 0) : g.input.axis(_axis); // keyboard (0 or 1) or joystick (analog 0..1)
-    const len = Math.min(1, ax.length());
+    // where to go: the keys or the joystick, else where control.js is taking us (a click, a foe to reach)
+    const ax = g.inputBlocked ? _axis.set(0, 0) : g.input.axis(_axis);
+    let len = Math.min(1, ax.length());
+    if (len > 0.01) this.control.manualMove();
+    else {
+      const want = this.control.steer(dt);
+      if (want) { ax.set(want.x, want.z); len = want.len; }
+    }
     let speed = 0;
     const spawning = this.h.anim.oneName === 'Spawn_Ground';
     if (len > 0.01 && (!this.action || this.action.canMove) && !spawning && this.stunT <= 0) {
-      const mx = ax.x / len, mz = ax.y / len;
+      if (this.channel) this.breakChannel();
+      const mx = ax.x / (ax.length() || 1), mz = ax.y / (ax.length() || 1);
       speed = s.moveSpeed * (this.action?.moveMult ?? 1) * Math.max(0.35, len) * (this.slowT > 0 ? this.slowBy : 1);
       this.pos.x += mx * speed * dt;
       this.pos.z += mz * speed * dt;
@@ -553,49 +988,47 @@ export class Player {
 
     this.moveSpeed = speed;
     this.moveMode = speed > s.moveSpeed * 0.55 ? 2 : speed > 0 ? 1 : 0; // (what the others see)
-    if (speed > s.moveSpeed * 0.55) this.h.anim.setBase('Running_A', speed / 5.4);
-    else if (speed > 0) this.h.anim.setBase('Walking_A', Math.max(0.7, speed / 2.2));
-    else this.h.anim.setBase('Idle_A');
+    if (!this.channel) {
+      if (speed > s.moveSpeed * 0.55) this.h.anim.setBase('Running_A', speed / 5.4);
+      else if (speed > 0) this.h.anim.setBase('Walking_A', Math.max(0.7, speed / 2.2));
+      else this.h.anim.setBase('Idle_A');
+    }
     if (speed > 0 && this.h.anim.oneName === 'Hit_A') this.h.anim.stopOne();
 
     if (this.queued) {
       this.queued.t -= dt;
-      if (this.queued.t <= 0) this.queued = null;
-    }
-    if (!this.action && !spawning) {
-      if (this.queued) {
+      if (this.queued.t <= 0) {
         const q = this.queued;
         this.queued = null;
-        q.fn();
-      } else if (g.input.attacking && !g.inputBlocked && this.cd.attack <= 0 && this.stunT <= 0) {
-        this.basicAttack();
+        if (!this.action || this.action.swing) q.fn();
       }
     }
+    if (!spawning && !this.channel) this.control.act(dt); // attacks it holds or is walking toward
 
     if (speed > 0) {
       this.stepT += dt;
       if (this.stepT > 0.28) { this.stepT = 0; g.fx.dust(this.pos, 2); }
     }
     this.h.update(dt);
-    this.legendaryEmbers(dt);
+    this.glowEmbers(dt);
   }
 
-  // Legendary gloves/boots shed a few embers from the hands/feet.
-  legendaryEmbers(dt) {
-    const eq = this.equipment;
-    const spots = [];
-    if (eq.hands?.rarity === 'legendary') spots.push('handl', 'handr');
-    if (eq.feet?.rarity === 'legendary') spots.push('footl', 'footr');
-    if (!spots.length) return;
+  // Unique and +7 weapons shed a few embers.
+  glowEmbers(dt) {
+    const it = this.equipment.weapon, d = itemDef(it);
+    if (!d || !(d.unique || (it.p ?? 0) >= 7)) return;
     this.emberT = (this.emberT || 0) + dt;
-    if (this.emberT < 0.09) return;
+    if (this.emberT < 0.12) return;
     this.emberT = 0;
-    const bone = this.h.bones[spots[Math.floor(Math.random() * spots.length)]];
+    const bone = this.h.bones[WEAPON_TYPES[d.type]?.left ? 'handslotl' : 'handslotr'];
     if (!bone) return;
     bone.getWorldPosition(_ember);
+    _ember.y += rand(0, 0.8);
+    const c = d.glow ?? 0xff6a10;
     this.game.fx.add.emit({
-      pos: _ember, count: 1, spread: 0.07, velSpread: 0.25, vel: { x: 0, y: 0.9, z: 0 },
-      color: hdr(0xffa040, 2.2), colorEnd: hdr(0xff3a10, 0.3), size: 0.12, sizeEnd: 0.02, life: 0.7, drag: 1.2,
+      pos: _ember, count: 1, spread: 0.15, velSpread: 0.25, vel: { x: 0, y: 0.9, z: 0 },
+      color: hdr(c, 2.2), colorEnd: hdr(c, 0.3), size: 0.11, sizeEnd: 0.02, life: 0.7, drag: 1.2,
     });
   }
 }
+

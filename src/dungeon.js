@@ -7,7 +7,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { CELL, WALL, CUT_Y, FLOOR_Y } from './dungeon-map.js';
-import { randomItem } from './items.js';
+import { rollDrop, rollPotion, makeItem } from './items.js';
 import { download } from './assets.js';
 import { hdr } from './fx.js';
 import { randInt, chance } from './util.js';
@@ -90,6 +90,36 @@ function runeCircle(room, color) {
   m.position.set(room.cx, FLOOR_Y + 0.02, room.cz);
   m.renderOrder = 3;
   return m;
+}
+
+// ---------------------------------------------------------------- the stairs down to the deeper floor
+// A dark square in the floor with a stone rim and steps going down into a glow.
+function trapdoor(at, glow) {
+  const g = new THREE.Group();
+  g.position.set(at.x, FLOOR_Y, at.z);
+  const stone = new THREE.MeshStandardMaterial({ color: 0x4a4650, roughness: 0.9, flatShading: true });
+  const dark = new THREE.MeshBasicMaterial({ color: 0x050407 });
+  const pit = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 2.4), dark);
+  pit.rotation.x = -Math.PI / 2;
+  pit.position.y = 0.04;
+  g.add(pit);
+  for (let i = 0; i < 4; i++) { // the steps
+    const step = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.08, 0.5), stone);
+    step.position.set(0, 0.03 - i * 0.02, -0.85 + i * 0.5);
+    step.scale.setScalar(1 - i * 0.12);
+    g.add(step);
+  }
+  for (const [x, z, w, d] of [[0, -1.3, 2.9, 0.3], [0, 1.3, 2.9, 0.3], [-1.3, 0, 0.3, 2.3], [1.3, 0, 0.3, 2.3]]) {
+    const rim = new THREE.Mesh(new THREE.BoxGeometry(w, 0.18, d), stone);
+    rim.position.set(x, 0.09, z);
+    rim.castShadow = rim.receiveShadow = true;
+    g.add(rim);
+  }
+  const light = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 1.6), new THREE.MeshBasicMaterial({ color: new THREE.Color(glow).multiplyScalar(1.4), transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false }));
+  light.rotation.x = -Math.PI / 2;
+  light.position.y = 0.06;
+  g.add(light);
+  return g;
 }
 
 // ---------------------------------------------------------------- a dungeon at runtime
@@ -198,6 +228,7 @@ export class DungeonView {
     }
     this.circle = runeCircle(this.d.rooms.B, this.look.circle ?? 0x8a4dff);
     this.group.add(this.circle);
+    if (this.map.down) this.group.add(trapdoor(this.map.down, this.look.circle ?? 0x8a4dff));
   }
 
   show(on) {
@@ -222,20 +253,22 @@ export class DungeonView {
     c.label.el.style.display = 'none';
     g.sfx.play('chest');
     const at = new THREE.Vector3(c.x + Math.sin(c.rot) * 0.7, FLOOR_Y, c.z + Math.cos(c.rot) * 0.7);
-    const lvl = Math.max(p.level, this.map.levels[0] + 1);
+    const lvl = Math.min(this.map.levels[1], Math.max(p.level, this.map.levels[0] + 1));
+    const drop = (l) => { const it = rollDrop(l, p.cls); if (it) g.loot.dropItem(it, at); };
     if (c.hoard) {
       c.unlocked = false; // sealed again until its boss falls again
       g.loot.dropGold(Math.round(randInt(150, 240) * (1 + 0.12 * (lvl - 9))), at);
       g.loot.dropGold(Math.round(randInt(60, 110) * (1 + 0.12 * (lvl - 9))), at);
-      g.loot.dropItem(randomItem(lvl + 1, { minRarity: 'rare', boost: 2 }), at);
-      g.loot.dropItem(randomItem(lvl, { minRarity: 'magic', boost: 1.5 }), at);
-      g.loot.dropPotion(at);
+      drop(lvl + 1);
+      drop(lvl);
+      if (chance(0.5)) g.loot.dropItem(makeItem(lvl >= 40 ? 'recipe_high' : lvl >= 20 ? 'recipe_mid' : 'recipe_low'), at);
+      g.loot.dropItem(rollPotion(lvl), at);
       g.fx.burst(new THREE.Vector3(c.x, FLOOR_Y + 1.2, c.z), 0xffc860, 40, 4);
       g.ui.log(`You loot <b>${c.name}</b>.`, 'gold');
     } else {
       g.loot.dropGold(Math.round(randInt(30, 60) * (1 + 0.2 * (lvl - 1))), at);
-      g.loot.dropItem(randomItem(lvl, { minRarity: 'magic' }), at);
-      if (chance(0.5)) g.loot.dropPotion(at);
+      if (chance(0.6)) drop(lvl);
+      if (chance(0.5)) g.loot.dropItem(rollPotion(lvl), at);
     }
   }
 

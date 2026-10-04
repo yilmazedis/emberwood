@@ -10,12 +10,12 @@
 // really stands, so dodging works). A kill's XP and loot are shared out here (see credits: parties
 // share theirs) and each hero's game rolls what it was given.
 // Plain numbers only (no three.js), so Node runs it as is.
-import { ENEMY_TYPES, monsterHp } from '../monsters.js';
+import { ENEMY_TYPES, monsterHp, WORLD_BOSSES, WORLD_BOSS_FIRST, WORLD_BOSS_RETURN } from '../monsters.js';
 import { planWorld, zoneAt, resolveCollision, isWalkable, randomWalkablePoint } from '../terrain.js';
 import { MAPS, START, portalTo, arrival } from '../maps.js';
 import { rand, clamp, dampAngle, yawTo, TAU } from '../util.js';
 
-export const PROTOCOL = 4; // bump when the messages change: older games are asked to reload
+export const PROTOCOL = 5; // bump when the messages change: older games are asked to reload
 export const TICK = 0.1; // seconds between world updates
 export const STATES = ['spawn', 'idle', 'chase', 'return', 'dead'];
 const CODE = Object.fromEntries(STATES.map((s, i) => [s, i]));
@@ -26,14 +26,21 @@ const INSTANCE_TTL = 300; // seconds an empty dungeon copy is kept (come back fo
 const HERO_RADIUS = 0.5;
 const SHARE_RANGE = 60; // party members this near a kill share it
 const PARTY_BONUS = 0.2; // each extra member in range adds this much to the party's XP
-const PVP_SCALE = 0.7; // heroes hit heroes a little softer than monsters (fights last a few exchanges)
+const PVP_SCALE = 0.45; // heroes hit heroes much softer than monsters (fights last a few exchanges)
 const PVP_CREDIT = 10; // seconds: a hero who falls this soon after another's blow was defeated by them
+const MAX_DR = 0.85; // the most of a blow a hero's armor can take (what its game reports is held to this)…
+const MAX_EVADE = 0.6; // …and the best chance it has to dodge one
+const hitCap = (lvl) => 100 + 150 * lvl; // the most one blow can do (a check on what heroes' games report)
 const r2 = (v) => Math.round(v * 100) / 100;
 const r1 = (v) => Math.round(v * 10) / 10;
+const zonesOf = (map) => map.outdoor?.zones || map.zones || [];
+const HELP_RANGE = 35; // m: how far a heal or blessing may reach another hero
+const HELPS = { heal: [0, 1], rez: [0.1, 0.8] }; // what a hero's game may give another (buffs: skills.js checks)
 const r3 = (v) => Math.round(v * 1000) / 1000;
 
 // What a skill does besides damage, from a hero's game, checked: { stun: s, slow: [speed factor, s],
-// taunt: s } (null if nothing sensible).
+// taunt: s, dot: [damage a second, s, kind], weak: [share less damage, s], vuln: [share more taken, s] }
+// (null if nothing sensible).
 function cleanEffects(e) {
   if (!e || typeof e !== 'object') return null;
   const out = {};
@@ -41,7 +48,24 @@ function cleanEffects(e) {
   if (stun > 0) out.stun = Math.min(3, stun);
   if (taunt > 0) out.taunt = Math.min(6, taunt);
   if (Array.isArray(e.slow) && Number(e.slow[1]) > 0) out.slow = [clamp(Number(e.slow[0]) || 1, 0.2, 1), Math.min(6, Number(e.slow[1]))];
+  if (Array.isArray(e.dot) && Number(e.dot[0]) > 0 && Number(e.dot[1]) > 0) out.dot = [Math.round(Number(e.dot[0])), Math.min(10, Number(e.dot[1])), e.dot[2] === 'burn' ? 'burn' : 'poison'];
+  if (Array.isArray(e.weak) && Number(e.weak[1]) > 0) out.weak = [clamp(Number(e.weak[0]) || 0, 0, 0.5), Math.min(12, Number(e.weak[1]))];
+  if (Array.isArray(e.vuln) && Number(e.vuln[1]) > 0) out.vuln = [clamp(Number(e.vuln[0]) || 0, 0, 0.5), Math.min(12, Number(e.vuln[1]))];
   return Object.keys(out).length ? out : null;
+}
+
+// How a hit's effects look to the others: { s: stun, w: slow, t: taunt, p: poison s, pk: its kind, k: weak s,
+// kf: how weak, v: exposed s, vf: how much }
+function effectLooks(eff) {
+  if (!eff) return 0;
+  const l = {};
+  if (eff.stun) l.s = eff.stun;
+  if (eff.slow) l.w = eff.slow[1];
+  if (eff.taunt) l.t = eff.taunt;
+  if (eff.dot) { l.p = eff.dot[1]; l.pk = eff.dot[2]; }
+  if (eff.weak) { l.k = eff.weak[1]; l.kf = eff.weak[0]; }
+  if (eff.vuln) { l.v = eff.vuln[1]; l.vf = eff.vuln[0]; }
+  return Object.keys(l).length ? l : 0;
 }
 
 // ---------------------------------------------------------------- monsters
@@ -84,6 +108,9 @@ class Monster {
     this.hitters = new Map(); // pid -> damage dealt: they (and their parties) share the kill
     this.raised = []; // a boss's calls for help so far (at 70% and 40% life)
     this.enraged = false; // bosses below 30% life
+    this.dots = new Map(); // pid -> { dps, t, kind, acc }: poisons and burns heroes put on it (each their own)
+    this.weak = 0; // weakened (a plague): hits softer (heroes' games apply it, they're told how much)
+    this.vuln = 0; // exposed: takes more (heroes' games add it to their hits)
     if (d.lich) {
       this.circleT = 5;
       this.blinkCd = 6;
@@ -99,9 +126,11 @@ class Monster {
     return Math.hypot(p.x - this.x, p.z - this.z);
   }
 
-  // A hero this monster may fight: here, alive, at the keyboard and outside camp.
+  // A hero this monster may fight: here, alive, at the keyboard, outside camp and not vanished; a world
+  // boss only fights heroes who struck it.
   fair(p) {
-    return !!p && p.inWorld && p.area === this.area && p.alive && !p.away && !zoneAt(p.x, p.z)?.safe;
+    return !!p && p.inWorld && p.area === this.area && p.alive && !p.away && !(p.hiddenUntil > this.sim.time) && !zoneAt(p.x, p.z)?.safe
+      && (!this.def.passive || this.hitters.has(p.pid));
   }
 
   // Can it see the hero? Always, outside; in a dungeon, not through walls.
@@ -153,6 +182,7 @@ class Monster {
 
   aggro(p, alertPack) {
     if (!p || this.state === 'dead' || this.state === 'spawn') return;
+    if (this.def.passive && this.state !== 'chase') this.home = { x: this.x, z: this.z }; // (a roamer's fight is where it was struck)
     this.state = 'chase';
     this.stateT = 0;
     this.target = p;
@@ -177,6 +207,9 @@ class Monster {
       if (this.deadT > 3.6) this.removed = true;
       return;
     }
+    this.weak -= dt;
+    this.vuln -= dt;
+    if (this.dots.size && this.tickDots(dt)) return; // (poisoned to death)
     if (this.state === 'spawn') {
       if (this.stateT > (d.kind === 'slime' ? 0.5 : 1.0)) {
         this.state = 'idle';
@@ -205,6 +238,8 @@ class Monster {
       this.updateAttack(dt, p, dist);
     } else if (this.stagger > 0 || this.stun > 0) {
       // reeling
+    } else if (this.state === 'idle' && d.passive) {
+      speed = this.roam(dt); // a world boss walks the land and leaves heroes alone
     } else if (this.state === 'idle') {
       this.wanderT -= dt;
       if (this.wanderT <= 0) {
@@ -276,6 +311,37 @@ class Monster {
     }
     resolveCollision(this, this.radius);
     this.speed = speed;
+  }
+
+  // A roaming world boss: from one of the land's zones to another, slowly.
+  roam(dt) {
+    const zones = zonesOf(this.area.map);
+    if (!this.wanderTarget || Math.hypot(this.wanderTarget.x - this.x, this.wanderTarget.z - this.z) < 2) {
+      const open = zones.filter((z) => !z.safe);
+      const zn = open.length ? open[Math.floor(Math.random() * open.length)] : null;
+      this.wanderTarget = zn ? randomWalkablePoint(zn.x, zn.z, zn.r * 0.6, 1.5) : randomWalkablePoint(this.x, this.z, 20, 1.5);
+    }
+    this.home = { x: this.x, z: this.z };
+    return this.moveToward(this.wanderTarget.x, this.wanderTarget.z, this.def.speed * 0.45, dt);
+  }
+
+  // Poisons and burns: a tick a second for each hero's, credited to them. True if it fell.
+  tickDots(dt) {
+    for (const [pid, dot] of this.dots) {
+      dot.t -= dt;
+      dot.acc += dt;
+      if (dot.acc >= 1 || dot.t <= 0) {
+        const dmg = Math.max(1, Math.round(dot.dps * Math.min(1, dot.acc)));
+        dot.acc = 0;
+        const by = this.sim.players.get(pid);
+        this.hp -= dmg;
+        if (by) this.hitters.set(pid, (this.hitters.get(pid) || 0) + dmg);
+        this.emit(['h', this.id, dmg, 0, 0, 0, pid]);
+        if (this.hp <= 0) { this.die(by && by.area === this.area ? by : null); return true; }
+      }
+      if (dot.t <= 0) this.dots.delete(pid);
+    }
+    return false;
   }
 
   // ---------------------------------------------------------------- attacks (each hero's game resolves the hits)
@@ -422,8 +488,11 @@ class Monster {
         this.stun = Math.max(this.stun, eff.stun * k);
         if (!d.boss && this.attack && !this.attack.summon && !this.attack.circles) { this.attack = null; this.emit(['x', this.id]); }
       }
-      if (eff.slow) { this.slowBy = eff.slow[0]; this.slow = Math.max(this.slow, eff.slow[1]); }
+      if (eff.slow) { this.slowBy = d.boss ? Math.max(eff.slow[0], 0.7) : eff.slow[0]; this.slow = Math.max(this.slow, eff.slow[1]); }
       if (eff.taunt) { this.taunt = eff.taunt; this.taunter = by; this.target = by; }
+      if (eff.dot) this.dots.set(by.pid, { dps: eff.dot[0], t: eff.dot[1], kind: eff.dot[2], acc: 0 });
+      if (eff.weak) this.weak = Math.max(this.weak, eff.weak[1]);
+      if (eff.vuln) this.vuln = Math.max(this.vuln, eff.vuln[1]);
     }
     if (amount > 0 && this.hp > 0 && !d.boss) {
       if (this.attack && this.attack.t < this.attack.hitAt) { // interrupts wind-ups: rewards aggressive play
@@ -443,7 +512,7 @@ class Monster {
     this.hp = 0;
     const credits = credit ? this.credits() : [];
     this.emit(['d', this.id, r2(this.x), r2(this.z), credits, by ? by.pid : 0, this.type, this.level], credits.map((c) => c[0]));
-    if (this.def.boss) this.area.bossDown(this);
+    if (this.def.boss) this.area.bossDown(this, credits);
   }
 
   // Who gets what for this kill: [[hero, XP share, loot 0/1], …]. The heroes who hurt it form teams: a
@@ -504,6 +573,9 @@ class Area {
     for (const sp of map.spawns || []) {
       for (let i = 0; i < sp.n; i++) this.slots.push({ ...sp, group: sp, monster: null, timer: rand(0, 1.5) });
     }
+    // a land's world boss: it comes some minutes after heroes arrive, and again ten minutes after it falls
+    const wb = !map.instanced && WORLD_BOSSES[map.id];
+    this.wb = wb ? { ...wb, timer: WORLD_BOSS_FIRST, monster: null } : null;
   }
 
   update(dt) {
@@ -513,6 +585,10 @@ class Area {
     }
     this.emptyT = 0;
     const heroes = [...this.players];
+    if (this.wb && !this.wb.monster) {
+      this.wb.timer -= dt;
+      if (this.wb.timer <= 0) this.spawnWorldBoss(heroes);
+    }
     for (const s of this.slots) {
       if (s.monster) continue;
       s.timer -= dt;
@@ -527,11 +603,24 @@ class Area {
     for (const m of this.monsters.values()) {
       if (!m.removed) continue;
       this.monsters.delete(m.id);
+      if (this.wb?.monster === m) { this.wb.monster = null; this.wb.timer = WORLD_BOSS_RETURN; }
       if (m.slot.monster === m) {
         m.slot.monster = null;
         m.slot.timer = m.def.respawn || rand(18, 28);
       }
     }
+  }
+
+  // The world boss rises somewhere in the land, away from the heroes and the camp.
+  spawnWorldBoss(heroes) {
+    const zones = zonesOf(this.map).filter((z) => !z.safe);
+    const ok = (z) => heroes.every((p) => Math.hypot(p.x - z.x, p.z - z.z) > 25);
+    const zn = zones.filter(ok)[Math.floor(Math.random() * zones.filter(ok).length)] || zones[0];
+    if (!zn) { this.wb.timer = 60; return; }
+    const at = randomWalkablePoint(zn.x, zn.z, zn.r * 0.5, 1.6);
+    const m = this.spawn({ type: this.wb.type, x: at.x, z: at.z, r: 1, n: 1, lvl: this.wb.lvl, world: true });
+    this.wb.monster = m;
+    this.sim.onWorldBoss?.(this, 'spawn', m, zn);
   }
 
   spawn(slot) {
@@ -548,10 +637,12 @@ class Area {
     return m;
   }
 
-  // A boss fell: whatever it called crumbles, and everyone here hears (a dungeon's hoard opens).
-  bossDown(boss) {
+  // A boss fell: whatever it called crumbles, and everyone here hears (a dungeon's hoard opens; a world
+  // boss's fall is told to the land).
+  bossDown(boss, credits) {
     for (const o of this.monsters.values()) if (o.summoner === boss && o.state !== 'dead') o.die(null, false);
     this.events.push({ all: true, ev: ['L', boss.type] });
+    if (boss === this.wb?.monster) this.sim.onWorldBoss?.(this, 'down', boss, credits);
   }
 }
 
@@ -630,27 +721,32 @@ export class WorldSim {
     this.players.delete(pid);
   }
 
-  // Into another area: its game starts over with what it sees there (ep tells its updates apart).
+  // Into another area (or a fresh start in the same one, e.g. rising where it fell): its game starts over
+  // with what it sees there (ep tells its updates apart), so the world forgets what that game knew.
   place(p, area) {
-    if (p.area === area) return;
-    p.area?.players.delete(p);
-    p.area = area;
-    area.players.add(p);
+    if (p.area !== area) {
+      p.area?.players.delete(p);
+      p.area = area;
+      area.players.add(p);
+    }
     p.ep++;
     p.knownM.clear();
     p.knownP.clear();
     p.lastHit = null;
+    p.wbAt = undefined; // (tell it about the world boss here, if any)
   }
 
   // Hero pid goes to map `to`: through a portal it stands at (a waystone, a dungeon's door or stairs), or,
-  // fallen (respawn), to where heroes who fall here rise. { map, x, z, yaw, ep } or { error }.
-  travel(pid, to, { respawn = false } = {}) {
+  // fallen (respawn), to where heroes who fall here rise, or with a camp scroll (camp) to this land's camp.
+  // { map, x, z, yaw, ep } or { error }.
+  travel(pid, to, { respawn = false, camp = false } = {}) {
     const p = this.players.get(pid), map = MAPS[to];
     if (!p?.area || !map) return { error: 'There is no such place.' };
     const from = p.area.map;
     let at;
-    if (respawn) {
-      if (p.alive) return { error: 'You are still standing.' };
+    if (respawn || camp) {
+      if (respawn && p.alive) return { error: 'You are still standing.' };
+      if (camp && (!p.alive || from.kind === 'arena')) return { error: 'The scroll does not work here.' };
       if (from.respawn.map !== to) return { error: 'You rise elsewhere.' };
       at = from.respawn;
     } else {
@@ -665,16 +761,33 @@ export class WorldSim {
     return { map: map.id, x: at.x, z: at.z, yaw: at.yaw ?? 0, ep: p.ep, copy: map.instanced ? (p.party ? 'party' : 'own') : null };
   }
 
+  // A party member steps through a scientist's door in space to their side (the server checked the party).
+  summon(pid, toPid) {
+    const p = this.players.get(pid), o = this.players.get(toPid);
+    if (!p?.area || !o?.area || !o.alive || !p.alive) return { error: 'The door has closed.' };
+    const map = o.area.map;
+    if (map.kind === 'arena') return { error: 'The door does not open into the arena.' };
+    if (p.level < map.minLevel) return { error: `${map.name} is for heroes of level ${map.minLevel} and up.` };
+    const area = map.instanced ? (p.party && p.party === o.party ? o.area : null) : o.area;
+    if (!area) return { error: 'The door has closed.' };
+    const a = rand(0, TAU), x = o.x + Math.cos(a) * 1.6, z = o.z + Math.sin(a) * 1.6;
+    const at = isWalkable(x, z, 0.5) ? { x, z } : { x: o.x, z: o.z };
+    this.place(p, area);
+    Object.assign(p, { x: at.x, z: at.z, yaw: o.yaw });
+    return { map: map.id, x: at.x, z: at.z, yaw: o.yaw, ep: p.ep };
+  }
+
   // A hero's game reports in: p = [x, z, yaw, move (0 still, 1 walk, 2 run), speed, alive, life 0..1,
-  // away], h = hits [[monster, damage, crit, knockback, fromX, fromZ, effects?]], ph = hits on other heroes
-  // in the arena [[hero, damage, crit, effects?]], a = actions for the others to see ({ k: kind, … }),
-  // k = looks ({ lv: level, w: weapon, … }).
+  // away, armor's share, dodge], h = hits [[monster, damage, crit, knockback, fromX, fromZ, effects?]], ph = hits
+  // on other heroes in the arena [[hero, damage, crit, effects?]], bh = help for other heroes [[hero, 'heal' |
+  // 'buff' | 'rez', value]], hd = vanish for s, a = actions for the others to see ({ k: kind, … }), k = looks
+  // ({ lv: level, w: weapon, … }).
   input(pid, m) {
     const p = this.players.get(pid);
     if (!p || !m || typeof m !== 'object') return;
     const wasAlive = p.alive;
     if (Array.isArray(m.p) && m.p.length >= 3) {
-      const [x, z, yaw, mode, sp, alive, hp, away] = m.p.map(Number);
+      const [x, z, yaw, mode, sp, alive, hp, away, dr, ev] = m.p.map(Number);
       // (only where it is: a position from before a journey is left behind)
       if (Number.isFinite(x) && Number.isFinite(z) && Number.isFinite(yaw) && p.area?.map.contains(x, z)) {
         p.x = x;
@@ -685,6 +798,8 @@ export class WorldSim {
         p.alive = alive !== 0;
         p.hp = clamp(Number.isFinite(hp) ? hp : 1, 0, 1);
         p.away = away === 1;
+        p.dr = clamp(dr || 0, 0, MAX_DR); // how much of a blow its armor takes, and its chance to dodge one
+        p.ev = clamp(ev || 0, 0, MAX_EVADE);
       }
     }
     if (m.k && typeof m.k === 'object' && JSON.stringify(m.k).length < 500) {
@@ -694,6 +809,8 @@ export class WorldSim {
     }
     if (Array.isArray(m.h)) for (const h of m.h.slice(0, 40)) this.hit(p, h);
     if (Array.isArray(m.ph)) for (const h of m.ph.slice(0, 20)) this.hitHero(p, h);
+    if (Array.isArray(m.bh)) for (const h of m.bh.slice(0, 12)) this.help(p, h);
+    if (Number(m.hd) > 0 && p.alive) p.hiddenUntil = this.time + Math.min(5, Number(m.hd));
     // fell in the arena right after another hero's blow: theirs is the win
     if (wasAlive && !p.alive && p.lastHit && this.time - p.lastHit.at < PVP_CREDIT) {
       const by = this.players.get(p.lastHit.by);
@@ -719,16 +836,37 @@ export class WorldSim {
     if (!(dmg >= 0) || (dmg === 0 && !eff)) return; // (0 damage: a skill that only stuns or taunts)
     if (Math.hypot(m.x - p.x, m.z - p.z) > 30) return; // can't have reached it from there
     p.budget--;
-    dmg = Math.min(dmg, 100 + 150 * p.level);
+    dmg = Math.min(dmg, hitCap(p.level));
+    if (eff?.dot) eff.dot[0] = Math.min(eff.dot[0], Math.round(hitCap(p.level) * 0.25));
     m.hurt(dmg, Number(h[4]), Number(h[5]), clamp(Number(h[3]) || 0, 0, 2), p, eff);
-    // the others see the number, and the stars or frost: { s: stun s, w: slow s, t: taunt s }
-    const looks = eff ? { ...(eff.stun && { s: eff.stun }), ...(eff.slow && { w: eff.slow[1] }), ...(eff.taunt && { t: eff.taunt }) } : 0;
+    // the others see the number, and the stars, frost, poison… (see effectLooks)
+    const looks = effectLooks(eff);
     m.emit(looks ? ['h', m.id, dmg, h[2] ? 1 : 0, p.pid, looks] : ['h', m.id, dmg, h[2] ? 1 : 0, p.pid]);
     if (m.hp <= 0) m.die(p);
   }
 
-  // In the arena's pit: hero p hits hero h[0] (not in p's party). The blow goes to the victim's game, which
-  // takes it with its own armor (everyone nearby sees the number); the world remembers who struck last.
+  // Hero p heals, blesses or raises hero h[0] (a friend: not a foe in the arena's pit). Its game worked out
+  // how much; the world keeps it within reason and passes it to the friend's game.
+  help(p, h) {
+    if (!Array.isArray(h) || p.budget < 1 || !p.alive) return;
+    const o = this.players.get(h[0]), kind = h[1];
+    if (!o || o === p || o.area !== p.area || o.away || Math.hypot(o.x - p.x, o.z - p.z) > HELP_RANGE) return;
+    if (p.area.map.pvp && !(p.party && p.party === o.party) && (zoneAt(p.x, p.z)?.pvp || zoneAt(o.x, o.z)?.pvp)) return; // (no help for foes)
+    let value;
+    if (kind === 'heal' || kind === 'rez') {
+      if ((kind === 'rez') === o.alive) return;
+      value = clamp(Number(h[2]) || 0, ...HELPS[kind]);
+    } else if (kind === 'buff' && Array.isArray(h[2]) && typeof h[2][0] === 'string' && h[2][0].length < 24) {
+      if (!o.alive) return;
+      value = [h[2][0], clamp(Number(h[2][1]) || 0, 0, 5000)];
+    } else return;
+    p.budget--;
+    p.area.events.push({ hero: o.pid, ev: ['B', o.pid, kind, value, p.pid] });
+  }
+
+  // In the arena's pit: hero p hits hero h[0] (not in p's party). The world works out what the blow really
+  // does (the victim's armor and dodging, which its game reports), so the striker, the victim and everyone
+  // watching see the same number; the victim's game takes exactly that. The world remembers who struck last.
   hitHero(p, h) {
     if (!Array.isArray(h) || p.budget < 1 || !p.area?.map.pvp || !p.alive) return;
     const o = this.players.get(h[0]);
@@ -739,12 +877,16 @@ export class WorldSim {
     const eff = cleanEffects(h[3]);
     if (!(dmg >= 0) || (dmg === 0 && !eff)) return;
     p.budget--;
-    dmg = Math.round(Math.min(dmg, 100 + 150 * p.level) * PVP_SCALE);
+    let miss = 0;
+    if (dmg > 0) {
+      dmg = Math.min(dmg, hitCap(p.level)) * PVP_SCALE;
+      if (Math.random() < (o.ev || 0)) { miss = 1; dmg = 0; } // dodged (smoke, evasion)
+      else dmg = Math.max(1, Math.round(dmg * (1 - (o.dr || 0)) * rand(0.92, 1.08)));
+    }
     o.lastHit = { by: p.pid, at: this.time };
-    // (a stun on a hero is short: half, and at most 1.5 s)
-    const looks = eff ? { ...(eff.stun && { s: Math.min(1.5, eff.stun * 0.5) }), ...(eff.slow && { w: eff.slow[1], f: eff.slow[0] }) } : null;
-    const ev = ['H', o.pid, dmg, h[2] ? 1 : 0, p.pid];
-    if (looks && Object.keys(looks).length) ev.push(looks);
+    // (a stun on a hero is short: half, and at most 1.5 s; a dodged blow does nothing)
+    const looks = eff && !miss ? { ...(eff.stun && { s: Math.min(1.5, eff.stun * 0.5) }), ...(eff.slow && { w: eff.slow[1], f: eff.slow[0] }) } : null;
+    const ev = ['H', o.pid, dmg, h[2] && !miss ? 1 : 0, p.pid, looks && Object.keys(looks).length ? looks : 0, miss];
     p.area.events.push({ hero: o.pid, ev });
   }
 
@@ -810,6 +952,11 @@ export class WorldSim {
       else if (e.hero !== undefined) { if (e.hero === me.pid || me.knownP.has(e.hero)) ev.push(e.ev); } // (a blow to a hero)
       else if (e.pid !== me.pid && me.knownP.has(e.pid)) ev.push(e.ev);
     }
+    // a world boss roaming this land: where it is, for everyone here (once a second, or when it comes or goes)
+    if (area.wb) {
+      const b = area.wb.monster, v = b && b.state !== 'dead' ? [b.type, r1(b.x), r1(b.z), r2(b.hp / b.maxHp)] : 0;
+      if (v ? !me.wbAt || ts - me.wbAt >= 1000 : me.wbAt !== 0) { out.wb = v; me.wbAt = v ? ts : 0; }
+    } else if (me.wbAt) { out.wb = 0; me.wbAt = 0; }
     if (m.length) out.m = m;
     if (mg.length) out.mg = mg;
     if (pl.length) out.p = pl;

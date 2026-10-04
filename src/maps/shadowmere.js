@@ -35,7 +35,6 @@ export const shadowmere = new OutdoorMap({
   props(m, put, rng) {
     put('campfire', 0, 70, { color: 0x9a6aff }, 1.1);
     put('waystone', 6, 65, {}, 0.9);
-    put('tent', -6, 64, { rotY: 0.7, color: 0x4a3a5a }, 1.5);
     put('tent', 6.5, 75, { rotY: -2.4, color: 0x3a3a4a }, 1.5);
     put('crate', -8.5, 70, { rotY: 0.3, s: 0.85 }, 0.55);
     put('barrel', 8.7, 69.5, {}, 0.45);

@@ -158,10 +158,15 @@ header .close { padding: 0 9px; font-size: 18px; line-height: 24px; }
 .eq-slot span { font: 600 10px Inter, sans-serif; color: #6f6250; }
 .eq-slot img, .bag-slot img { width: 88%; height: 88%; object-fit: contain; pointer-events: none; }
 .eq-slot:hover, .bag-slot:hover { border-color: var(--edge-hi); }
-.r-common { box-shadow: inset 0 0 0 1px rgba(232, 228, 218, .25); }
-.r-magic { box-shadow: inset 0 0 12px rgba(80, 150, 255, .55); border-color: #3e6fb8 !important; }
-.r-rare { box-shadow: inset 0 0 12px rgba(255, 210, 60, .5); border-color: #a88a24 !important; }
-.r-legendary { box-shadow: inset 0 0 14px rgba(255, 130, 40, .7); border-color: #c0621c !important; }
+.r-common, .r-low { box-shadow: inset 0 0 0 1px rgba(232, 228, 218, .25); }
+.r-mid { box-shadow: inset 0 0 12px rgba(80, 150, 255, .55); border-color: #3e6fb8 !important; }
+.r-high { box-shadow: inset 0 0 12px rgba(255, 210, 60, .5); border-color: #a88a24 !important; }
+.r-unique { box-shadow: inset 0 0 14px rgba(255, 130, 40, .75); border-color: #c0621c !important; }
+.bag-slot.cant img { filter: grayscale(.6) brightness(.7); }
+.bag-slot.cant::after { content: ''; position: absolute; inset: 0; border-radius: 8px; background: rgba(170, 30, 20, .22); pointer-events: none; }
+.bag-slot.offered { outline: 2px dashed #9be06a; outline-offset: -3px; }
+.bag-slot .plus, .eq-slot .plus { position: absolute; right: 3px; top: 1px; font: 800 10px Inter, sans-serif; color: #f6e2b0; text-shadow: 0 1px 2px #000; pointer-events: none; }
+.bag-slot .n { position: absolute; right: 4px; bottom: 1px; font: 800 11px Inter, sans-serif; color: #fff; text-shadow: 0 1px 2px #000; pointer-events: none; }
 #stats { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 16px; margin: 12px 0; font: 600 12px Inter, sans-serif; color: var(--muted); }
 #stats div { display: flex; justify-content: space-between; }
 #stats b { color: var(--text); }
@@ -742,3 +747,230 @@ body.touch #tracker { margin-top: var(--party-h, 0px); }
 /* a hero you can fight (in the pit, not in your party) */
 .plate.player.hostile .pn span { color: #ff8a7a; }
 .plate.player.hostile .hpb b { background: linear-gradient(#ff8a7a, #c8322a); }
+
+/* ------------------------------------------------------------------ the new classes */
+.c-warrior { --cls: #9ecbff; }
+.c-scientist { --cls: #d6b0ff; }
+.c-rogue { --cls: #a6ec90; }
+.c-healer { --cls: #ffe8a0; }
+
+/* ------------------------------------------------------------------ buffs, target, combo, channel */
+#buffs { position: absolute; left: calc(16px + var(--sal)); top: calc(104px + var(--sat)); display: flex; flex-wrap: wrap; gap: 4px; max-width: 300px; }
+.buff { position: relative; width: 26px; height: 26px; border-radius: 6px; display: grid; place-items: center; font: 800 10px Inter, sans-serif; font-style: normal; color: #1a120a; background: var(--c); box-shadow: 0 0 0 1px rgba(0, 0, 0, .6), 0 0 8px var(--c); }
+.buff span { position: absolute; bottom: -12px; left: 50%; transform: translateX(-50%); font: 700 9px Inter, sans-serif; color: #fff; text-shadow: 0 1px 2px #000; white-space: nowrap; }
+#tracker { margin-top: 22px; }
+body:has(#buffs:empty) #tracker { margin-top: 0; }
+
+#target { position: absolute; top: calc(14px + var(--sat)); left: 50%; transform: translateX(-50%); width: min(300px, 46vw); padding: 6px 10px 7px; text-align: center; }
+#target-name { font: 800 13px Cinzel, serif; color: #ff9a8a; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#target-name i { font: 600 11px Inter, sans-serif; color: var(--muted); font-style: normal; margin-left: 6px; }
+#target .bar .fill { background: linear-gradient(#ff6a55, #c7281c); }
+#target.friend #target-name { color: #9dffb2; }
+#target.friend .bar .fill { background: linear-gradient(#8dff9a, #2fae48); }
+#target.boss #target-name { color: var(--legendary); }
+#target.world { border-color: #ff7a1a; box-shadow: 0 0 22px rgba(255, 120, 30, .35); }
+#target-fx { display: flex; gap: 6px; justify-content: center; margin-top: 3px; font: 700 10.5px Inter, sans-serif; min-height: 0; }
+#target-fx:empty { display: none; }
+#target-fx b { padding: 1px 6px; border-radius: 4px; background: rgba(0, 0, 0, .45); }
+.fx-stun { color: #ffe066; } .fx-slow { color: #8fdcff; } .fx-dot { color: #8aff5a; } .fx-weak { color: #b0d080; } .fx-vuln { color: #ff8a7a; } .fx-calm { color: #ffd08a; }
+body:has(#target:not(.hidden)) #boss { top: 78px; }
+
+#combo { position: absolute; left: 50%; bottom: 158px; transform: translateX(-50%); text-align: center; opacity: 0; pointer-events: none; font: 800 30px Cinzel, serif; color: #fff3b0; text-shadow: 0 2px 8px #000, 0 0 14px rgba(255, 200, 80, .5); transition: opacity .3s; }
+#combo.show { opacity: 1; }
+#combo.pop { animation: combo-pop .25s ease-out; }
+#combo span { display: block; font: 800 13px Inter, sans-serif; letter-spacing: 2px; text-transform: uppercase; color: #ffd08a; }
+#combo.perfect b, #combo.perfect span { color: #fff6a0; text-shadow: 0 0 16px rgba(255, 240, 120, .9), 0 2px 6px #000; }
+#combo.skill span { color: #c9b8ff; }
+#combo.early b { display: none; }
+#combo.early span { color: #ff9a8a; font-size: 15px; }
+@keyframes combo-pop { from { transform: translateX(-50%) scale(1.5); } to { transform: translateX(-50%) scale(1); } }
+
+#channel { position: absolute; left: 50%; bottom: 200px; transform: translateX(-50%); width: 260px; text-align: center; font: 700 13px Inter, sans-serif; color: #e8dcc0; text-shadow: 0 1px 3px #000; }
+#channel .bar { margin-top: 4px; height: 10px; }
+#channel .fill { background: linear-gradient(90deg, #5ad0ff, #a8e8ff); transform: scaleX(0); transform-origin: left; }
+
+/* ------------------------------------------------------------------ the action bar */
+.slot.empty .icon { opacity: .2; }
+.slot.empty::after { content: '+'; position: absolute; inset: 0; display: grid; place-items: center; font: 700 20px Inter, sans-serif; color: rgba(240, 207, 122, .35); }
+.slot-attack.window { box-shadow: 0 0 0 2px rgba(155, 224, 106, .85), 0 0 16px rgba(155, 224, 106, .55); }
+.slot-attack.perfect { box-shadow: 0 0 0 3px #fff6a0, 0 0 22px rgba(255, 240, 140, .9); }
+.slot-auto.on { border-color: #9be06a; box-shadow: 0 0 14px rgba(155, 224, 106, .6); }
+body.auto-on #slots .slot-auto .icon { animation: spin 3s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.slot .lock { color: #ff8a7a; font-size: 16px; }
+#menu-buttons button { position: relative; }
+#skill-dot { position: absolute; top: -4px; right: -4px; width: 12px; height: 12px; border-radius: 50%; background: #ffd24a; box-shadow: 0 0 8px #ffb020; }
+@media (min-width: 901px) { .slot { width: 52px; height: 52px; } #slots { gap: 6px; } #xpbar { width: 640px; } }
+
+/* phones: the attack in the corner, six skills around it, potions and auto beside */
+body.touch #slots { width: 300px; height: 250px; }
+body.touch .slot-attack { right: 14px; bottom: 16px; width: 96px; height: 96px; }
+body.touch .slot-s1 { right: 122px; bottom: 6px; }
+body.touch .slot-s2 { right: 132px; bottom: 78px; }
+body.touch .slot-s3 { right: 104px; bottom: 148px; }
+body.touch .slot-s4 { right: 36px; bottom: 124px; }
+body.touch .slot-s5 { right: 188px; bottom: 120px; }
+body.touch .slot-s6 { right: 196px; bottom: 44px; }
+body.touch .slot-hp { right: 252px; bottom: 10px; width: 46px; height: 46px; }
+body.touch .slot-mp { right: 252px; bottom: 62px; width: 46px; height: 46px; }
+body.touch .slot-auto { right: 30px; bottom: 196px; width: 50px; height: 50px; }
+body.touch .slot-auto .key { display: block; left: auto; right: 50%; transform: translateX(50%); top: auto; bottom: -15px; font-size: 9px; }
+body.touch .slot-auto .key::after { content: 'UTO'; }
+body.touch .slot-auto .key { color: #9be06a; }
+body.touch #target { top: calc(8px + var(--sat)); width: min(240px, 40vw); padding: 4px 8px 5px; }
+body.touch #combo { bottom: auto; top: 26%; font-size: 24px; }
+body.touch #channel { bottom: auto; top: 38%; }
+body.touch #buffs { top: calc(86px + var(--sat)); }
+@media (max-width: 480px) { body.touch #buffs { top: calc(70px + var(--sat)); } }
+/* narrow portrait: the joystick's resting place above the left of the cluster */
+@media (max-width: 480px) { #stick { left: calc(76px + var(--sal)); top: calc(100% - 290px - var(--sab)); } }
+/* landscape phones: auto-hunt sits over the potions, clear of the minimap; the target frame under the menu row */
+@media (max-height: 520px) and (orientation: landscape) {
+  body.touch .slot-auto { right: 252px; bottom: 126px; }
+  body.touch #target { top: calc(54px + var(--sat)); }
+  body.touch:has(#target:not(.hidden)) #boss { top: calc(108px + var(--sat)); }
+}
+/* narrow portrait: the target frame (and a boss's bar) under the minimap, the menu buttons below them */
+@media (max-width: 480px) {
+  body.touch #target, body.touch #boss { left: auto; right: calc(12px + var(--sar)); transform: none; top: calc(132px + var(--sat)); width: min(176px, 46vw); }
+  body.touch:has(#target:not(.hidden)) #boss { top: calc(200px + var(--sat)); }
+  body.touch #menu-buttons { top: calc(200px + var(--sat)); }
+  body.touch:has(#target:not(.hidden)):has(#boss:not(.hidden)) #menu-buttons { top: calc(256px + var(--sat)); }
+  body.touch #channel { width: min(260px, 54vw); }
+}
+
+/* ------------------------------------------------------------------ character: twelve slots */
+.doll { gap: 10px; }
+.eq-col { gap: 8px; }
+.eq-slot { width: 54px; height: 54px; }
+.eq-slot.acc { border-radius: 50%; }
+.eq-slot span { font-size: 9.5px; text-align: center; }
+.eq-row { justify-content: center; gap: 14px; margin-top: 8px; }
+#char-style { color: #8fe0ff !important; }
+@media (max-height: 520px) and (orientation: landscape) {
+  #inventory .eq-slot { width: 42px; height: 42px; }
+  #inventory .eq-col { gap: 5px; }
+}
+
+/* ------------------------------------------------------------------ merchants, bank, anvil */
+#inventory:not([data-mode="shop"]) .inv-shop,
+#inventory:not([data-mode="bank"]) .inv-bank,
+#inventory:not([data-mode="anvil"]) .inv-anvil { display: none; }
+.sec-note { font: 500 11.5px/1.4 Inter, sans-serif; color: var(--muted); margin: 0 0 10px; }
+.shop-list { display: grid; gap: 5px; margin-bottom: 14px; }
+.shop-row { display: grid; grid-template-columns: 44px 1fr auto; gap: 8px; align-items: center; padding: 4px 6px; border-radius: 8px; background: rgba(0, 0, 0, .22); border: 1px solid transparent; }
+.shop-row:hover { border-color: var(--edge); }
+.shop-row .bag-slot { width: 44px; height: 44px; }
+.sr-text { min-width: 0; display: grid; }
+.sr-text b { font: 700 12.5px Inter, sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sr-text small { font: 500 10.5px Inter, sans-serif; color: var(--muted); }
+.sr-text em { color: #ff9a8a; font-style: normal; }
+.shop-row.cant .sr-text b { opacity: .6; }
+.sr-buy { display: flex; gap: 4px; }
+.sr-buy button { padding: 5px 9px; font-size: 12px; color: var(--gold); }
+.sr-buy button.short { color: #ff8a7a; }
+#sell-junk { padding: 4px 10px; font-size: 12px; }
+#bank { display: grid; grid-template-columns: repeat(10, 1fr); gap: 4px; margin-bottom: 10px; }
+#bank .bag-slot { width: auto; height: auto; aspect-ratio: 1; border-radius: 6px; }
+.bank-gold { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.bank-gold input, .trade-gold input { width: 96px; padding: 6px 8px; font: 600 13px Inter, sans-serif; color: var(--text); background: #120d09; border: 1px solid #4a3a24; border-radius: 6px; user-select: text; -webkit-user-select: text; }
+.bank-gold button { padding: 6px 10px; font-size: 12px; }
+#anvil-pick { display: grid; grid-template-columns: repeat(auto-fill, minmax(46px, 1fr)); gap: 5px; margin-bottom: 10px; }
+#anvil-pick .bag-slot { width: auto; height: auto; aspect-ratio: 1; }
+#anvil-pick .bag-slot.selected { outline: 2px solid var(--gold); outline-offset: 1px; }
+#anvil-pick .bag-slot.maxed { opacity: .5; }
+#anvil-pick .worn { position: absolute; left: 2px; bottom: 0; font: 700 8px Inter, sans-serif; font-style: normal; color: #8fe0ff; text-shadow: 0 1px 2px #000; }
+#anvil-detail { margin-bottom: 12px; }
+.anvil-item { padding: 10px; border: 1px solid #4a3a24; border-radius: 9px; background: rgba(0, 0, 0, .25); font: 600 13px Inter, sans-serif; }
+.anvil-stats { margin: 6px 0; display: grid; gap: 2px; font-size: 12px; color: var(--muted); }
+.anvil-stats .up { color: #6dff8a; }
+.anvil-cost { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin: 6px 0 8px; font-size: 12px; color: var(--gold); }
+.anvil-cost .short { color: #ff8a7a; }
+.anvil-empty { color: var(--muted); font-style: italic; font-size: 12.5px; padding: 8px 0; }
+.q-why { font: 600 11px Inter, sans-serif; color: var(--muted); }
+.quest-card.later { opacity: .65; padding: 6px 11px; }
+.quest-card.later .q-foot { margin-top: 2px; }
+
+/* ------------------------------------------------------------------ tooltips and floaters */
+#tooltip .tt-req { font-size: 11.5px; color: #c8bba4; margin: -3px 0 5px; }
+#tooltip .tt-req.bad { color: #ff8a7a; font-weight: 700; }
+#tooltip .tt-unique { color: var(--legendary); font-size: 11.5px; margin-top: 4px; }
+#tooltip .tt-plus { color: #8a7f6a; font-size: 11px; margin-top: 4px; }
+#tooltip.slots-menu .tt-actions { flex-wrap: wrap; }
+#tooltip.slots-menu .tt-actions button { flex: 0 0 calc(25% - 6px); }
+.floater.small { font-size: 13px; color: #e8dcc8; }
+.floater.dot { font-size: 12px; color: #9aff6a; }
+.floater.heal.small { font-size: 12px; }
+.plate.selected .hpb, .plate.selected .nm { display: block; }
+.plate.selected .nm { color: #ffe070; }
+.plate.selected .hpb { outline: 1px solid #ffe070; }
+.plate.world .nm { display: block; color: #ff8a2b; font: 800 14px Cinzel, serif; }
+.plate.world .hpb { display: block; width: 110px; height: 7px; }
+.plate.player.selected .pn span { text-decoration: underline; }
+
+/* ------------------------------------------------------------------ skills (src/skillui.js) */
+#skills { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 25; width: min(860px, calc(100vw - 24px)); max-height: calc(100vh - 24px); overflow-y: auto; padding: 0 14px 12px; }
+#skills header { display: flex; justify-content: space-between; align-items: center; padding: 10px 0 8px; font: 800 16px Cinzel, serif; color: var(--gold); border-bottom: 1px solid rgba(201, 162, 90, .25); margin-bottom: 10px; }
+#skills header small { font: 700 12px Inter, sans-serif; color: #ffd24a; margin-left: 8px; }
+#skill-trees { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.tree { padding: 8px; border-radius: 10px; background: rgba(0, 0, 0, .25); border-top: 3px solid var(--tc); }
+.tree-head { display: flex; align-items: center; gap: 8px; }
+.tree-head b { font: 800 15px Cinzel, serif; color: var(--tc); }
+.tree-pts { margin-left: auto; font: 800 18px Inter, sans-serif; color: #fff; }
+.tree-head button { width: 30px; height: 30px; padding: 0; font: 800 18px Inter, sans-serif; color: #221606; background: linear-gradient(#ffe7a6, #d9a53a); border-color: #f5d27a; border-radius: 50%; }
+.tree-about { font: 500 11.5px Inter, sans-serif; color: var(--muted); margin: 3px 0 4px; }
+.tree-passive { font: 600 11px Inter, sans-serif; color: #c8e8a0; margin-bottom: 8px; min-height: 14px; }
+.sk { display: grid; grid-template-columns: 44px 1fr; gap: 8px; align-items: center; padding: 5px; margin-bottom: 5px; border-radius: 8px; border: 1px solid #3b2d1d; background: rgba(20, 15, 10, .6); cursor: pointer; opacity: .45; }
+.sk.open { opacity: 1; border-color: #6a5434; }
+.sk.open:hover { border-color: var(--tc); }
+.sk.blocked { opacity: .75; }
+.sk.blocked small { color: #ff9a8a !important; }
+.sk-icon { position: relative; width: 44px; height: 44px; border-radius: 8px; background: radial-gradient(circle at 50% 30%, #3c2e1f, #1a130d); padding: 5px; }
+.sk-icon svg { width: 100%; height: 100%; }
+.sk-icon i { position: absolute; right: -4px; bottom: -4px; min-width: 18px; height: 18px; border-radius: 9px; background: var(--gold); color: #221606; font: 800 11px/18px Inter, sans-serif; font-style: normal; text-align: center; }
+.sk-text b { display: block; font: 700 12.5px Inter, sans-serif; }
+.sk-text small { font: 500 10.5px Inter, sans-serif; color: var(--muted); }
+.skill-foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 10px; font: 500 12px Inter, sans-serif; color: var(--muted); }
+.skill-foot button { font-size: 12px; padding: 5px 10px; }
+@media (max-width: 760px) { #skill-trees { grid-template-columns: 1fr; } }
+@media (max-height: 520px) and (orientation: landscape) {
+  #skill-trees { grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .sk { grid-template-columns: 34px 1fr; padding: 3px; margin-bottom: 3px; }
+  .sk-icon { width: 34px; height: 34px; padding: 3px; }
+  .tree-about { display: none; }
+}
+
+/* ------------------------------------------------------------------ trading, prompts */
+#trade { position: absolute; left: 50%; top: calc(64px + var(--sat)); transform: translateX(-50%); z-index: 27; width: min(460px, calc(100vw - 24px)); padding: 0 14px 12px; }
+#trade header { display: flex; justify-content: space-between; align-items: center; padding: 10px 0 8px; font: 800 16px Cinzel, serif; color: var(--gold); }
+#trade header small { font: 600 12px Inter, sans-serif; color: var(--muted); margin-left: 6px; }
+.trade-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.trade-side { padding: 8px; border-radius: 9px; background: rgba(0, 0, 0, .25); }
+.trade-items { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; min-height: 48px; }
+.trade-items .bag-slot { width: auto; height: auto; aspect-ratio: 1; }
+.trade-empty { grid-column: 1 / -1; font: italic 500 11.5px Inter, sans-serif; color: var(--muted); padding: 10px 0; }
+.trade-gold { display: flex; align-items: center; gap: 6px; margin-top: 8px; font: 800 14px Inter, sans-serif; color: var(--gold); }
+.trade-ok { min-height: 16px; margin-top: 6px; font: 700 12px Inter, sans-serif; color: #9be06a; }
+#trade .row { display: flex; gap: 8px; justify-content: center; margin-top: 6px; }
+#trade .claim, #prompt .go { color: #221606; font-weight: 800; background: linear-gradient(#ffe7a6, #d9a53a); border-color: #f5d27a; }
+#trade .ghost, #prompt button:not(.go) { background: none; border-color: transparent; color: var(--muted); }
+#prompt { position: absolute; left: 50%; top: calc(110px + var(--sat)); transform: translateX(-50%); z-index: 28; width: min(380px, calc(100vw - 24px)); padding: 12px 14px; font: 600 13px/1.45 Inter, sans-serif; text-align: center; }
+#prompt .row { display: flex; gap: 8px; justify-content: center; margin-top: 10px; }
+
+/* ------------------------------------------------------------------ title screen: looks; death */
+#class-pick { grid-template-columns: repeat(4, 1fr); }
+#look-pick { display: flex; gap: 8px; align-items: center; }
+#look-pick > span { font: 700 12px Inter, sans-serif; color: var(--muted); }
+.look-opt { display: flex; align-items: center; gap: 6px; padding: 4px 10px 4px 4px; background: #1d150e; border: 1px solid #4a3a24; border-radius: 20px; font: 700 12px Inter, sans-serif; }
+.look-opt img { width: 28px; height: 28px; border-radius: 50%; }
+.look-opt.on { border-color: var(--edge-hi); color: var(--gold); }
+.death-wait { font-size: 12px; margin-top: 14px !important; }
+
+/* desktop: the menu buttons stack in the bottom-right corner, the log above them (the action bar is wide) */
+body:not(.touch) #menu-buttons { flex-direction: column; align-items: stretch; gap: 5px; width: 118px; }
+body:not(.touch) #menu-buttons button { display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; }
+body:not(.touch) #log { bottom: 236px; width: 300px; }
+@media (max-width: 1180px) { body:not(.touch) #actionbar { left: calc(50% - 60px); } }
+@media (max-width: 1000px) { body:not(.touch) .slot { width: 44px; height: 44px; } body:not(.touch) #slots { gap: 4px; padding: 6px 8px; } body:not(.touch) #xpbar { width: 520px; } }
+#buyback { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 16px 6px; }
+#buyback .bag-slot { width: auto; height: auto; aspect-ratio: 1; }

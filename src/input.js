@@ -78,6 +78,7 @@ export class Input {
   keyUp(e) {
     this.held.delete(e.code);
     if (e.key === 'Meta') this.held.clear();
+    this.onKeyUp?.(e.code);
   }
 
   isHeld(dir) {

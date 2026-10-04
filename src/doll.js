@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { Humanoid } from './character.js';
 import { applyEquipmentVisuals } from './player.js';
-import { CLASSES } from './classes.js';
+import { lookOf } from './classes.js';
 
 export class Doll {
   constructor(canvas) {
@@ -23,7 +23,7 @@ export class Doll {
     this.camera.position.set(0, 1.45, 5.6);
     this.camera.lookAt(0, 1.15, 0);
     this.model = null;
-    this.setClass('knight');
+    this.setClass('warrior', 0);
     this.visible = false;
     this.t = 0;
     this.drag = null;
@@ -37,18 +37,18 @@ export class Doll {
     canvas.addEventListener('pointerup', () => { this.drag = null; });
   }
 
-  setClass(cls) {
-    const model = CLASSES[cls].model;
-    if (model === this.model) return;
+  setClass(cls, look = 0) {
+    const L = lookOf(cls, look), key = `${L.model}:${L.palette || ''}`;
+    if (key === this.model) return;
     if (this.h) this.scene.remove(this.h.group);
-    this.model = model;
-    this.h = new Humanoid(model);
+    this.model = key;
+    this.h = new Humanoid(L.model, { palette: L.palette || null });
     this.scene.add(this.h.group);
   }
 
-  setEquipment(eq, cls = 'knight') {
-    this.setClass(cls);
-    applyEquipmentVisuals(this.h, eq, cls);
+  setEquipment(eq, cls = 'warrior', look = 0) {
+    this.setClass(cls, look);
+    applyEquipmentVisuals(this.h, eq, cls, look);
   }
 
   update(dt) {

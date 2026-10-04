@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
+import { OLD_CLASSES } from '../src/classes.js';
 
 export const DATA_DIR = process.env.EMBERWOOD_DATA || path.join(os.homedir(), 'emberwood-data');
 const ACCOUNTS = path.join(DATA_DIR, 'accounts');
@@ -42,13 +43,28 @@ export function getAccount(user) {
   const lower = String(user).toLowerCase();
   if (accounts.has(lower)) return accounts.get(lower);
   const acc = readJSON(fileOf(lower), null);
-  if (acc) accounts.set(lower, acc);
+  if (acc) { migrate(acc); accounts.set(lower, acc); }
   return acc;
+}
+
+// Heroes made before the four classes become one of them (their game converts their save when they next
+// play), and every account gets a bank.
+function migrate(acc) {
+  let changed = false;
+  for (const ch of acc.characters) {
+    const was = OLD_CLASSES[ch.cls];
+    if (!was) continue;
+    ch.cls = was[0];
+    ch.look = was[1];
+    changed = true;
+  }
+  if (!acc.bank) { acc.bank = { items: [], gold: 0 }; changed = true; }
+  if (changed) dirty.add(acc.lower);
 }
 
 export function createAccount(user, { salt, hash }) {
   const lower = user.toLowerCase();
-  const acc = { user, lower, salt, hash, created: Date.now(), lastLogin: 0, characters: [] };
+  const acc = { user, lower, salt, hash, created: Date.now(), lastLogin: 0, characters: [], bank: { items: [], gold: 0 } };
   accounts.set(lower, acc);
   writeJSON(fileOf(lower), acc);
   return acc;
@@ -71,8 +87,8 @@ setInterval(flush, 5000).unref();
 // ---------------------------------------------------------------- characters
 export const nameTaken = (name) => Object.hasOwn(names, name.toLowerCase());
 
-export function addCharacter(acc, { name, cls, save = null }) {
-  const ch = { id: crypto.randomBytes(4).toString('hex'), name, cls, created: Date.now(), level: save?.level || 1, save };
+export function addCharacter(acc, { name, cls, look = 0, save = null }) {
+  const ch = { id: crypto.randomBytes(4).toString('hex'), name, cls, look, created: Date.now(), level: save?.level || 1, save, rev: 0 };
   acc.characters.push(ch);
   names[name.toLowerCase()] = acc.lower;
   writeJSON(NAMES, names);
@@ -124,4 +140,10 @@ export function saveCharacter(acc, id, save) {
   ch.saved = Date.now();
   markDirty(acc);
   return true;
+}
+
+// The account's bank, as its game last saved it (any of its heroes).
+export function saveBank(acc, bank) {
+  acc.bank = bank;
+  markDirty(acc);
 }

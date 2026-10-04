@@ -112,8 +112,9 @@ function injectGearTint(shader, uniforms) {
 }
 
 export class Humanoid {
-  constructor(charName, { scale = 1, tint = null } = {}) {
-    const c = cloneCharacter(charName);
+  // palette: repaint the character (assets.js PALETTES); tint: multiply all its colours
+  constructor(charName, { scale = 1, tint = null, palette = null } = {}) {
+    const c = cloneCharacter(charName, palette);
     this.model = c.root;
     this.bones = c.bones;
     this.meshes = c.meshes;
@@ -140,17 +141,35 @@ export class Humanoid {
     return this.group.position;
   }
 
-  equip(hand, modelName, glow = null) {
+  equip(hand, modelName, glow = null, tint = null) {
     const bone = this.bones[hand === 'r' ? 'handslotr' : 'handslotl'];
+    const key = `${modelName}|${glow}|${tint}`;
+    if (this.handKeys?.[hand] === key) return; // (already holding just that)
+    (this.handKeys ||= {})[hand] = key;
     if (this.hands[hand]) {
       bone.remove(this.hands[hand]);
       this.hands[hand] = null;
     }
     if (modelName) {
-      const m = cloneItem(modelName, glow);
+      const m = cloneItem(modelName, glow, tint);
       bone.add(m);
       this.hands[hand] = m;
     }
+  }
+
+  // Armor colours the body (its own material, so the head and limbs keep theirs); null: as it was.
+  setBodyTint(hex) {
+    const body = Object.values(this.meshes).find((m) => /_Body$/.test(m.name));
+    if (!body) return;
+    if (!this.bodyMat) {
+      this.bodyMat = body.material.clone();
+      this.bodyBase = this.bodyMat.color.clone();
+      body.material = this.bodyMat;
+      this.materials.push(this.bodyMat);
+      this.baseEmissive.push(this.bodyMat.emissive.clone());
+    }
+    this.bodyMat.color.copy(this.bodyBase);
+    if (hex !== null && hex !== undefined) this.bodyMat.color.lerp(new THREE.Color(hex), 0.55);
   }
 
   setMeshVisible(name, visible) {

@@ -25,7 +25,9 @@ export class WorldLink {
     this.queue = []; // { ts, ev }: events waiting for their moment
     this.hits = [];
     this.heroHits = [];
+    this.helps = [];
     this.acts = [];
+    this.hide = 0;
     this.lookDirty = false;
     this.sendT = 0;
     this.moveT = -IDLE_EVERY;
@@ -55,9 +57,10 @@ export class WorldLink {
     return r;
   }
 
-  // Through a portal (or, fallen, to where heroes rise): the world moves us; what we saw stays behind.
-  async travel(to, respawn = false) {
-    const r = await this.net.request('travel', { to, respawn });
+  // Through a portal (or, fallen, to where heroes rise; camp: a camp scroll; summon: a party member's door
+  // through space): the world moves us; what we saw stays behind.
+  async travel(to, { respawn = false, camp = false, summon = null } = {}) {
+    const r = await this.net.request('travel', { to, respawn, camp, summon });
     this.ep = r.ep;
     this.queue = [];
     this.hits = [];
@@ -77,6 +80,7 @@ export class WorldLink {
     this.offset = null;
     this.hits = [];
     this.heroHits = [];
+    this.helps = [];
     this.acts = [];
     this.lastKey = '';
     this.moveT = -IDLE_EVERY;
@@ -96,6 +100,7 @@ export class WorldLink {
     for (const id of m.mg || []) g.enemies.remove(id); // out of sight (far away, or long dead)
     for (const id of m.pg || []) g.others.remove(id);
     for (const ev of m.e || []) this.queue.push({ ts: m.ts, ev });
+    if (m.wb !== undefined) g.worldBoss = m.wb ? { type: m.wb[0], x: m.wb[1], z: m.wb[2], hp: m.wb[3], map: g.places.id } : null;
   }
 
   update(dt) {
@@ -115,6 +120,7 @@ export class WorldLink {
     else if (ev[0] === 'L') g.places.bossDown(ev[1]);
     else if (ev[0] === 'H') g.heroHit(ev); // (a blow in the arena: ours to take even if late)
     else if (ev[0] === 'K') g.heroDown(ev);
+    else if (ev[0] === 'B') { if (ev[1] === this.pid) g.helped(ev); else g.others.helped(ev); } // (a friend's heal or blessing)
     else if (stale) return;
     else if (ev[0] === 'p') g.others.act(ev[1], ev[2]);
     else g.enemies.event(ev);
@@ -134,9 +140,11 @@ export class WorldLink {
     }
     if (this.hits.length) { msg.h = this.hits; this.hits = []; }
     if (this.heroHits.length) { msg.ph = this.heroHits; this.heroHits = []; }
+    if (this.helps.length) { msg.bh = this.helps; this.helps = []; }
     if (this.acts.length) { msg.a = this.acts; this.acts = []; }
+    if (this.hide) { msg.hd = this.hide; this.hide = 0; }
     if (this.lookDirty) { msg.k = lookOf(this.game.player); this.lookDirty = false; }
-    if (msg.p || msg.h || msg.ph || msg.a || msg.k) this.net.send('u', msg);
+    if (msg.p || msg.h || msg.ph || msg.bh || msg.a || msg.k || msg.hd) this.net.send('u', msg);
   }
 
   // Right now, not at the next turn (e.g. the app is going to the background).
@@ -147,11 +155,12 @@ export class WorldLink {
     this.flush(0);
   }
 
-  // [x, z, yaw, move (0 still, 1 walk, 2 run), speed, alive, life 0..1, away]
+  // [x, z, yaw, move (0 still, 1 walk, 2 run), speed, alive, life 0..1, away, armor's share of a blow,
+  // chance to dodge] (the last two: the world works out other heroes' blows with them, in the arena)
   state() {
     const p = this.game.player;
     return [r2(p.pos.x), r2(p.pos.z), r2(p.yaw), p.moveMode || 0, r2(p.moveSpeed || 0), p.alive ? 1 : 0,
-      r2(Math.min(1, Math.max(0, p.hp / p.stats.maxHp))), document.hidden ? 1 : 0];
+      r2(Math.min(1, Math.max(0, p.hp / p.stats.maxHp))), document.hidden ? 1 : 0, r2(1 - (1 - p.stats.dr) * p.stats.taken), r2(p.stats.evade || 0)];
   }
 
   // Our hero hit monster e (the world applies it). eff: { stun, slow: [factor, s], taunt } from skills
@@ -168,6 +177,17 @@ export class WorldLink {
     const h = [o.id, dmg, crit ? 1 : 0];
     if (eff) h.push(eff);
     this.heroHits.push(h);
+  }
+
+  // Our hero helped another (their game takes it): kind 'heal' (a share of their Life), 'buff' ([id, strength])
+  // or 'rez' (a share of their Life to rise with).
+  help(o, kind, value) {
+    if (this.inWorld) this.helps.push([o.id, kind, value]);
+  }
+
+  // Our hero slipped out of sight (Vanish): monsters forget it for a few seconds.
+  vanish(secs) {
+    this.hide = Math.max(this.hide, secs);
   }
 
   // Something the others should see our hero do: { k: kind, … } (see others.js)

@@ -1,7 +1,8 @@
 # Emberwood
 
-A small online 3D action RPG in the browser: make an account and a hero, then fight monsters alongside other players,
-collect loot and gear up.
+A small online 3D action RPG in the browser: make an account and a hero (Warrior, Scientist, Rogue or Healer),
+then fight monsters alongside other players, gear up, upgrade your gear at the anvil, trade, and hunt the world
+bosses for unique items.
 It uses Three.js with the free **KayKit Adventurers**, **Skeletons** and **Dungeon** packs (CC0, by Kay Lousberg).
 
 ## Run it
@@ -19,17 +20,20 @@ python3 -m http.server 8765
 Then open http://localhost:8765. Pages opened from `localhost` (or your home network, e.g. `192.168.x.x`) talk to
 the server on port 8787; anything else talks to `wss://gameserver.kerimcaglar.com`. Add `?server=ws://host:port/ws`
 to point a page at another server, or `?autostart` to play offline with a hero saved in the browser (used by the
-automated tests). Three.js loads from a CDN, so you need an internet connection.
+automated tests; `&cls=scientist`, `rogue` or `healer` picks the class of a new offline hero). Three.js loads from a CDN, so you need an internet connection.
 
 ## Online play
 
 - **Accounts:** username and password. Passwords are stored as scrypt hashes; a signed token keeps you signed in
   for 30 days. Signing in somewhere else signs the older session out.
-- **Heroes:** up to 4 per account, any mix of the 4 classes (`src/classes.js`: Knight, Barbarian, Mage, Rogue, each
-  with its own model, starting gear and stats). Names are unique, 3–14 letters (Turkish letters are fine). A hero
-  saved in the browser from the single-player days can be brought online once, as a Knight.
-- **Saving:** the game sends the hero's progress to the server every few seconds and when you leave. If the line
-  drops, the game keeps going and reconnects by itself.
+- **Heroes:** up to 4 per account, any mix of the 4 classes (below), each class with two looks to pick from. Names
+  are unique, 3–14 letters (Turkish letters are fine). Heroes from before the four classes were moved over on
+  their first visit: Knights and Barbarians became Warriors, Mages Scientists, Rogues stayed Rogues. Their old
+  items were sold for them (gold ×3 of their worth), they got their class's gear for their level, some potions and
+  camp scrolls, and every skill point to spend; a notice tells them so.
+- **Saving:** the game sends the hero's progress (and the account's bank) to the server every few seconds and when
+  you leave. If the line drops, the game keeps going and reconnects by itself. Each hero has a revision number that
+  a trade bumps, so a save sent from before a trade is refused and nothing is lost or doubled.
 - **The shared world:** the monsters live on the server (`src/sim/world.js`): they spawn, wander, chase the nearest
   hero and attack, the same for everybody. You see the other heroes nearby in their class and gear, with a name tag
   and life bar, and what they do (swings, skills, ale, falling and rising). Whether a monster's blow, bolt or slam
@@ -49,15 +53,21 @@ automated tests). Three.js loads from a CDN, so you need an internet connection.
   life and land; `/p` is the party's chat; `/kick`, `/leave`, and the leader can pass the lead. A party shares one
   copy of each dungeon. Parties live on the server (a restart ends them); a member who drops out keeps their place
   for five minutes.
+- **Trading:** right-click (or tap) a hero standing near you and pick Trade. Both put in items from their bag and
+  some gold; any change takes both "accept"s back. When both accept, the server checks that every item and coin is
+  really there, swaps them in both saves and tells both games (`server/trade.mjs`).
 - **The Arena:** by waystone, from level 5. In its pit every hero but your party is a foe: a blow goes through the
-  server (both in the pit, within reach, not party) to the victim's game, which takes it with its own armor (70%
-  of the damage a monster would take; stuns on heroes are halved). Falling there costs no gold. Wins and losses are
-  kept per hero (`arena.json` in the data folder) for the champions' board in the arena's yard.
+  server (both in the pit, within reach, not party) to the victim's game. The server scales it to 45% of what it
+  would do to a monster and takes the victim's armor (and dodge) off it, so both heroes see the same number. A stun
+  on a hero is halved (1.5 s at most). Falling there costs no gold (elsewhere you lose a tenth of your gold). Wins
+  and losses are kept per hero (`arena.json` in the data folder) for the champions' board in the arena's yard.
 - **Chat:** one world channel (Enter, or the Chat button on phones); nearby heroes also show it in a bubble.
   Last 20 lines are shown to heroes who arrive.
 - **Levels:** up to 60. Quick to 10; after that each level asks for more kills of your own level (about 60 at 20,
   200 at 40, nearly 400 at 59). Monsters' life and damage, and what armor takes, grow faster past 10 with the gear.
-- **Coming next:** trading between heroes.
+- **Away:** a browser can't run a game in a hidden tab, so when you switch to another tab or app your hero waits
+  where it stands and monsters leave it alone. Auto-hunt (below) keeps going only while
+  the game is on screen.
 
 The server (`server/`, Node built-ins only) speaks JSON over one WebSocket at `/ws` and shows `{"ok":true,…}` at
 `/status`. Ten times a second it moves the world on and sends each hero's game what's around it: monsters and heroes
@@ -87,7 +97,8 @@ Live at https://emberwood.kerimcaglar.com, on DirectAdmin + LiteSpeed shared hos
   `.htaccess` sets the model MIME types and cache headers, and blocks `.git`, log files and `server/`.
 - **Game server:** a DirectAdmin "Setup Node.js App" on `gameserver.kerimcaglar.com`: application root
   `domains/emberwood.kerimcaglar.com/emberwood/server`, startup file `index.js`, the newest Node.js. No `npm install`.
-  After a `git pull` that changes `server/` (or `src/classes.js`), press Restart for the app.
+  After a `git pull` that changes `server/` or the shared files in `src/` (`sim/`, `maps/`, `items.js`,
+  `classes.js`, `monsters.js`, `camps.js`, `quest-data.js`…), press Restart for the app.
 - **Slow host, slow phones:** the host takes a second or two to answer each request, so the game asks for few:
   every code file at once (`modulepreload` links in `index.html`: list new modules there too), the item models packed
   into one file (`tools/pack-items.mjs`), every dungeon's pieces in another (`tools/pack-dungeon.mjs`, fetched on the
@@ -96,62 +107,148 @@ Live at https://emberwood.kerimcaglar.com, on DirectAdmin + LiteSpeed shared hos
 - **Hosting test:** `tools/hosting-test` measures whether a host can run the server (see its README). Hyperion passed
   with caveats: it is shared and overloaded, so expect the occasional stutter; a small VPS would remove it.
 
-## Classes and skills
+## Classes
 
-Each class has its own four skills (`src/skills.js`), unlocking at levels 1 to 4 (keys 1–4, or the round buttons
-on phones). Stuns, slows and taunts are applied by the game server, so everyone sees them: dizzy stars over a
-stunned monster, a frosty blue tint on a slowed one. Bosses shrug off most of a stun.
+Four classes (`src/classes.js`). Each fights in its own ways, chosen by the weapons it holds, and each has three
+skill trees.
 
-| Class | 1 | 2 | 3 | 4 |
-|---|---|---|---|---|
-| **Knight** (sword and shield) | Shield Bash: 120%, stuns 1.5 s | Charge: rush 7 m, 150% around you, knockback, short stun | War Cry: monsters within 9 m turn on you for 4 s; +50% armor for 8 s | Second Wind: heal 35% |
-| **Barbarian** (two-handed axe) | Cleave: wide arc, 170%, knockback | Leap Slam: jump 8 m, 180% within 3 m, slows by half for 3 s | Whirlwind: spin 1.4 s, 5 × 65% | Battle Rage: +30% attack speed, +25% damage for 8 s |
-| **Mage** (staff) | Fireball: 220% blast | Frost Nova: 120% within 5 m, slows by 60% for 4 s | Blink: teleport 8 m | Meteor: 350% within 3.5 m after a moment |
-| **Rogue** (daggers) | Twin Strike: 2 × 90%, more crits | Fan of Knives: 7 knives, 80% each | Smoke Bomb: stuns within 4 m for 2 s; half of the blows at you miss for 4 s | Shadow Step: appear behind an enemy 12 m away, 250%, more crits |
+| Class | Ways to fight | Strengths |
+|---|---|---|
+| **Warrior** | Sword (or axe) and shield · two one-handed weapons · one great weapon (two-handed sword or axe, spear, maul) | Most Life and armor; taunts, shields, whirlwinds and huge two-handed blows |
+| **Scientist** | Long staff (15% faster attacks, more spell power; the big fire and frost spells) · short staff and a book (the book adds spell power; poisons, curses, party teleport) | Fire and frost from range, the best at many monsters at once; fragile |
+| **Rogue** | Two daggers (assassin) · a bow (archer) | Critical hits, the fastest feet; Swiftness (+move speed for 10 minutes) on any friendly hero |
+| **Healer** | Mace and shield · a warrior's two-handed sword, spear or maul (not Raptor and the other warrior-only weapons) | Heals, blessings that last 10 minutes, resurrection; fights alone with holy fire but kills slower than the rest |
 
-Percentages are of weapon damage; the mage's spells (and the mage's basic attack, an arcane bolt from the staff
-instead of a swing) also scale with Spell Power. Other heroes' skills play out on your screen the same way, from
-the same code, without the damage (their game deals it).
+Basic attacks: melee weapons swing, bows shoot arrows, staves and short staves fire bolts. Spell power raises the
+damage of spells (a Scientist's and a Healer's), weapon damage the rest.
 
-## Controls
+## Skills
 
-**Desktop:** WASD to move · left click to attack (hold to keep swinging) · 1–4 skills · Q ale (heal) · I bag · E use what's in reach (merchant, stash, notice board, waystones, dungeon doors, chests) · Enter chat (`/p` party, `/invite Name`) · click a hero's name to invite them · mouse wheel to zoom · Esc settings · M mute
+A hero gets **one skill point per level** and puts it in one of their class's three trees (K, or the Skills
+button). A tree's four skills open at 1, 6, 15 and 30 points in it; every point makes its skills 1.2% stronger and
+adds the tree's own small bonus. Sixty points can't fill everything: go all in on one or two trees, or spread
+out and be good at more but best at nothing. The skill window takes every point back for a fee (free below
+level 10). Click (or tap) an open skill to put it on one of the 8 action slots.
 
-**Phones and tablets** (switches automatically on the first touch): a floating joystick on the left half of the screen
-(push a little to walk, fully to run), a hold-to-attack sword button and skill buttons on the right. On touch screens,
-attacks and skills aim at the nearest enemy. In the bag, tap an item to see it, then Equip or Sell. Chat opens a line
-at the top of the screen (the keyboard covers the bottom); the last three lines stay there for a while.
+| Class | Trees (skills in the order they open) |
+|---|---|
+| Warrior | **Arms:** Power Strike, Cleave, Charge, Execute · **Guard:** War Cry, Shield Bash, Shield Wall, Last Stand · **Fury:** Battle Rage, Whirlwind, Leap Slam, Earthshatter |
+| Scientist | **Pyrology:** Fireball, Flame Wave, Inferno, Meteor · **Cryology:** Ice Bolt, Frost Nova, Blizzard, Glacial Prison · **Alchemy:** Toxic Flask, Blink, Teleport Party, Plague |
+| Rogue | **Assassination:** Backstab, Poison Blade, Shadow Step, Eviscerate · **Marksmanship:** Power Shot, Multi-Shot, Crippling Arrow, Arrow Rain · **Shadow:** Swiftness, Smoke Bomb, Vanish, Shadow Mantle |
+| Healer | **Restoration:** Heal, Renew, Resurrection, Circle of Healing · **Blessing:** Blessing of Vitality, Holy Armor, Divine Shield, Sanctuary · **Retribution:** Smite, Holy Strike, Judgement, Consecration |
 
-**Camp:** Wren the merchant sells ale and gear around your level (new stock every 5 minutes and on level-up),
-buys back anything you sold this session, and can sell all your common items at once. The stash chest next to
-the stall holds 30 items; both are saved with your character.
+Some skills need a weapon: shield skills a shield, Earthshatter a two-handed weapon, the big staff spells a long
+staff, Teleport Party and Plague a book, dagger and bow skills their weapon. Skills cost mana as a share of the
+level's mana pool, so they cost the same at every level. Heals and blessings go on the friendly hero you picked
+(or you); the 10-minute blessings (Swiftness, Blessing of Vitality, Holy Armor) are kept when you log out.
+Teleport Party opens a door: every party member, anywhere, is asked whether to step through to the caster.
 
-**Quests:** the notice board on the east side of camp has a five-part story (the meadow slimes, the bandit hideout,
-the cultists at the stones, the graveyard, then Grok) and three bounties that are rerolled when you claim or skip them
-(slay monsters, pick up gold, find magic items). Accepted quests show under your portrait with their progress, and
-their zone gets a dashed gold ring on the minimap. When one is done, go back to the board to claim gold, XP, ale or
-an item; a golden "!" over the board means there's a new story quest or a reward waiting.
+Stuns, slows, poisons, weakening and the like are applied by the game server, so everyone sees them; bosses shrug
+off most of a stun. Each skill is one definition (`src/skills/*.js`) that plays out the same on every screen, and
+only the caster's game deals its damage.
 
-**The Forgotten Crypt:** the crypt door at the east end of the graveyard leads down to a dungeon (level 7 – 9):
-a hall of bones, a chapel, an ossuary and a vault full of skeletons, two chests that refill every few minutes, and
-the sanctum of **Morvain the Lich**. He fires bolt volleys, drops violet grave circles that erupt a moment later
-(step out!), raises skeletons at 70% and 40% life, blinks away when you stand on top of him, and is enraged below
-30%. When he falls, his minions crumble and the hoard behind him opens. The stairs in the first room lead back up.
-The story then goes on through the other lands.
+**Balance:** with the same level and gear, the classes kill a monster of their level in a few seconds: sword
+and shield is the baseline; two weapons, great weapons and daggers are 15–40% faster; the long staff is fastest
+alone and on groups; the bow is a little faster and safe at range; a Healer is 10–20% slower with Retribution (and
+much slower when built for healing). In the Arena the skills hit heroes at 45%.
 
-**Beyond the waystones:** the waystone in camp takes you (from level 8) to three more lands, each with five zones,
-its own monsters (tinted KayKit models: raiders, ice witches, frost archers, ash knights, cinder cultists, wraiths,
-death knights, night stalkers…), weather, a camp with a waystone back, a boss who calls for help at 70% and 40% life
-and rages below 30%, and the door of a dungeon with chests and a boss's hoard:
+## Fighting
 
-| Land | Levels | Boss | Dungeon (levels, boss) |
+- **Targets:** click (or tap) a monster to target it; Z picks the nearest (again: the next). The target's frame shows
+  its Life and what's on it (poisoned, slowed, weakened…).
+- **Combos:** R (or the sword button) attacks your target. Press again just as a blow lands (the attack slot
+  flashes) and the next blow comes faster and harder: four in a chain (×1, ×1.04, ×1.08, ×1.2), +5% for a perfect
+  press, and the chain starts over after the fourth. Too early breaks it. A skill cast in that moment is stronger
+  too. Holding R (or the button) keeps swinging without the bonus.
+- **Auto-hunt:** T (or AUTO) fights the monsters around where you switched it on, picks up loot and drinks a
+  potion when hurt. Moving stops it.
+
+## Items
+
+Every item has a fixed name and fixed stats: a Giant Sword is always the same Giant Sword (`src/items.js`).
+Items come in three classes, **low** (levels 1–19), **middle** (20–39) and **high** (40–60), and every hero class
+has its own weapons and clothes in each. Clothes are four-piece sets per class and item class (the Warrior's are
+Plate, Chitin and Shell; the Scientist's Linen, Alchemist and Aether; the Rogue's Leather, Stalker and Nightshade;
+the Healer's Chain, Blessed and Seraph).
+
+| Class | Low | Middle | High |
 |---|---|---|---|
-| Frostfang Highlands (snow) | 10 – 22 | Hrimgar the Frost Jarl | Rimeheart Caverns (20 – 24, Vorrak the Rime King) |
-| Cinderfall Wastes (ash and lava) | 22 – 40 | Vulkhar the Ashen King | The Molten Forge (38 – 42, Forgemaster Kaldur) |
-| Shadowmere (twilight marsh) | 40 – 58 | Malakar the Hollow King | The Abyssal Vault (56 – 60, Nyxara, Queen of the Abyss) |
+| Warrior | Short Sword, Large Axe, Blade Axe, Giant Sword* | Mirage Sword, Glaive*, Sword of the Dead, Gigantic Axe | Raptor, Iron Impact*, Wyrmfang, Titan Greatsword* |
+| Scientist | Oak Staff, Copper Rod, Ember Staff, Galvanic Rod; Field Notes (book) | Frostwood Staff, Alchemist's Rod, Stormcaller, Catalyst Rod; Codex of Elements | Arcanum Staff, Aether Rod, Archmage's Spire, Philosopher's Rod; Tome of Ascension |
+| Rogue | Dagger, Short Bow, Kris, Hunter's Bow | Stiletto, Composite Bow, Viper Fang, Longbow | Nightfang, Elven Bow, Soul Reaper, Dragonbone Bow |
+| Healer | Iron Mace, Morning Star (and the * weapons) | Holy Mace, Flanged Mace | Lightbringer, Seraph's Scepter |
+
+\* Warriors and Healers both can use these. Shields (Round, Kite, Tower) are for both too.
+
+- **Accessories:** rings, earrings, necklaces and belts (copper, silver, gold), for every class. Nobody sells them:
+  they only drop from monsters.
+- **Unique items:** only the world bosses (below) drop them, one in five kills, every unique of the boss's item
+  class equally likely: weapons, shields, books and accessories, never clothes. They are a quarter stronger
+  than normal items of their level.
+- **Upgrades:** Brom the blacksmith in Emberwood's camp upgrades any item up to **+7** (normal items start at +1,
+  uniques at +0). Each + adds a tenth of the item's main stats. It never fails, so it costs recipes of the item's
+  class (one up to +4, two for +5 and +6, three for +7) and a little gold. Brom sells the recipes (low 900, middle
+  6 500, high 32 000 gold); quests, bosses and world bosses give some.
+
+## Camps
+
+Every land's camp has a **weaponsmith** and an **armorer** (their class's gear up to the land's level), a
+**provisioner** (healing and mana potions, elixirs of might, iron and vigor that last 10 minutes, camp scrolls that
+take you back to the nearest camp), a **banker**, and a **notice board** with the land's quests. Emberwood's camp
+also has **Brom's anvil**. Merchants buy anything you sell, and sell back the last things you sold.
+
+The **bank** is one for the whole account: 60 slots and gold, shared by all your heroes at every banker.
+
+## Quests
+
+89 quests, 22–23 in each land with its dungeons (`src/quest-data.js`). Each is done once: the board offers the
+next as you grow and finish earlier ones. They ask for kills, things that drop while the quest is on, places to
+find, people to talk to, and a few first steps (spend a skill point, wear a helmet, bank something, upgrade at the
+anvil). Rewards are XP, gold, potions, gear for your class and recipes. Accepted quests show under your portrait
+with their progress, and their zone gets a dashed gold ring on the minimap; a golden "!" over a board means there's
+a new quest or a reward waiting. Any board takes a finished quest back.
+
+## Places
+
+**Emberwood** is where every hero starts: meadows of slimes, a bandit hideout, cultists at the standing stones,
+the graveyard and Grok's lair. The crypt door at the east end of the graveyard leads down to **the Forgotten Crypt**
+(levels 7–9) and **Morvain the Lich**: bolt volleys, violet grave circles that erupt a moment later (step out!),
+skeletons raised at 70% and 40% life, blinking away when you stand on him, enraged below 30%.
+
+The waystone in camp takes you (from level 8) to three more lands, each with five zones, its own monsters, weather,
+a camp, a boss who calls for help at 70% and 40% life and rages below 30%, and a dungeon. Every dungeon's boss
+room has a **trapdoor down** to a deeper, harder floor with its own boss:
+
+| Land | Levels | Boss | Dungeon (levels, boss) | Deeper (levels, boss) |
+|---|---|---|---|---|
+| Emberwood | 1 – 10 | Grok the Brute | Forgotten Crypt (7 – 9, Morvain the Lich) | The Bone Pits (11 – 14, the Bone Colossus) |
+| Frostfang Highlands (snow) | 10 – 22 | Hrimgar the Frost Jarl | Rimeheart Caverns (20 – 24, Vorrak the Rime King) | The Frozen Deep (25 – 28, Ymira of the Deep) |
+| Cinderfall Wastes (ash and lava) | 22 – 40 | Vulkhar the Ashen King | The Molten Forge (38 – 42, Forgemaster Kaldur) | The Magma Core (43 – 46, the Magmaborn) |
+| Shadowmere (twilight marsh) | 40 – 58 | Malakar the Hollow King | The Abyssal Vault (56 – 60, Nyxara) | The Void Below (60 – 62, the Void Herald) |
+
+**World bosses** roam the lands: Gorehorn the Wanderer in Emberwood (low class uniques), Skadi the Frost Giant in
+Frostfang (low), Ignis, the Living Pyre in Cinderfall (middle) and Umbra the Devourer in Shadowmere (high). One rises
+a few minutes after heroes arrive in a land, and ten minutes after it falls. It walks from zone to zone and never
+attacks first, but once struck it fights everyone who hit it, calls for help, and has about five times the
+strength of the land's boss: bring a party. The world chat announces when one rises and falls, and a ☠ marks it on
+the minimap.
 
 The lands' shapes are in `src/maps/*.js` (an `OutdoorMap` or `DungeonMap` each, shared with the server); `lands.js`,
 `dungeon.js` and `arena.js` draw them, and `places.js` switches between them.
+
+## Controls
+
+**Desktop:** left click the ground to walk there (WASD also move) · left click a monster to target and attack it
+· Z nearest target · R attack (combos: see above) · 1–8 skills (at your target, at the cursor for areas, at the
+friend you clicked for heals) · T auto-hunt · Q healing potion · X mana potion · E talk to people in camp, use
+waystones, doors and trapdoors · I (or B, Tab) character and bag · K skills · H help · right click a hero: party or
+trade · Enter chat (`/p` party, `/invite Name`) · mouse wheel zoom · Esc let go of the target, or settings · M mute
+
+**Phones and tablets** (switches automatically on the first touch): a floating joystick on the left of the screen
+(push a little to walk, fully to run), the sword button (tap for each blow of a combo, hold to keep swinging), six
+skill buttons around it, the two potions and AUTO beside them. Tap a monster to target it, a hero for party or
+trade. Without a target, attacks and skills go at the nearest enemy. In the bag, tap an item to see it, then Use,
+Equip or Sell. Chat opens a line at the top of the screen (the keyboard covers the bottom).
 
 ## Sound and settings
 
@@ -192,17 +289,17 @@ Variants: `?size=192`, `?size=512&maskable` (Android adaptive icon), `?size=180&
 
 | What you see | Source |
 |---|---|
-| Knight, bandits, cultists, boss, Wren the merchant (Ranger) | KayKit Adventurers character models (`assets/characters`) |
+| Heroes, bandits, cultists, bosses, the camp's people | KayKit Adventurers character models (`assets/characters`), recolored per class look and per land (`assets.js` repaints the swatch textures) |
 | Skeleton minions, warriors, rogues, mages | KayKit Skeletons character models (`assets/characters/Skeleton_*`); glowing eyes come from the pack's `Glow` material |
 | Bone weapons and shields (skeleton loot) | KayKit Skeletons item models (`assets/items/Skeleton_*`) |
 | Walk / run / idle / hit / death / throw animations | KayKit shared rig animations (`assets/animations`) |
-| Swords, axes, shields, staff, ale mug | KayKit item models (`assets/items`, packed into `items.glb`), attached to the `handslot` bones |
+| Swords, axes, daggers, bows, staves, shields, books | KayKit item models (`assets/items`, packed into `items.glb`), attached to the `handslot` bones; maces, spears and mauls are built in code (`gear.js`) |
 | Helmets and cape | Parts of the Knight model, shown or hidden when equipped |
 | Gloves and boots on the knight | The Knight's hands/feet are recolored by a shader that follows the skinning weights of the hand/forearm and foot/toe/shin bones (`character.js`) |
-| Gloves, boots and rings (icons, loot on the ground) | Small procedural models (`gear.js`); the packs have none |
+| Gloves, boots, rings, earrings, necklaces, belts, recipes, potions (icons, loot on the ground) | Small procedural models (`gear.js`); the packs have none |
 | Sword swings | Generated in code (`character.js`); the free pack has no attack clips |
 | Terrain, trees, rocks, grass, water, camps, graveyard | Generated in code (`terrain.js` places them, `world.js` draws them), flat-shaded to match KayKit |
-| Market stall, stash chest and notice board | Generated in code (`town.js`), with the pack's items as wares on the counter |
+| Market stall, bank, anvil, notice board | Generated in code (`npcs.js`), with the pack's items as wares on the counter |
 | The crypt: walls, floors, pillars, stairs, torches, banners, chests, props | KayKit Dungeon models, packed into one file (`assets/dungeon/crypt.glb`), placed on a 4 m grid and merged into two meshes (`dungeon.js`); walls on the camera side are clipped low |
 | Morvain the Lich | The Skeleton Mage, scaled up and tinted violet, with a glowing staff; his rune circle is a shader (`dungeon.js`) |
 | Slimes | Generated in code (`enemies.js`) |
@@ -212,10 +309,12 @@ Variants: `?size=192`, `?size=512&maskable` (Android adaptive icon), `?size=180&
 
 ## Code map
 
-- `src/game.js`: renderer, camera, aim, damage, rewards, save
+- `src/game.js`: renderer, camera, damage, rewards, helping other heroes, save
 - `src/input.js`: keyboard, mouse, joystick and touch buttons (also clears keys the browser never "releases")
-- `src/player.js`: stats, leveling, inventory, buffs, and the looks other players see
-- `src/skills.js`: the classes' skills: one definition plays them for our hero (with the damage) and for others
+- `src/control.js`: targeting, click-to-move, attacking and casting at a target, auto-hunt
+- `src/player.js`: stats, leveling, combos, inventory, skill points, buffs, and the looks other players see
+- `src/skills.js`: the skill trees, buffs and mana costs; `src/skills/*.js`: the 48 skills, one definition plays
+  each for our hero (with the damage) and for others; `src/skillui.js`: the skill window
 - `src/sim/world.js`: the shared world the server runs: monster AI, spawns, the crypt, heroes, who sees what
 - `src/link.js`: the game's side of it: smooth movement between updates, attacks played out, what we report back
 - `src/local.js`: the same world running in the page, for offline play (`?autostart`)
@@ -224,16 +323,19 @@ Variants: `?size=192`, `?size=512&maskable` (Android adaptive icon), `?size=180&
 - `src/monsters.js`: monster types and the spawn table; `src/terrain.js`: ground height, zones, what blocks the way
   (with fixed seeds, so the game and the server agree); `src/crypt-map.js`: the crypt's map, walls and paths
   (these three, `classes.js`, `util.js` and `noise.js` are plain data and math, shared with the server)
-- `src/items.js`: item bases (weapons, shields, helmets, capes, gloves, boots, rings), rarities, affixes, loot rolls
-- `src/gear.js`: procedural glove/boot/ring models
-- `src/town.js`: the camp: merchant, stall, stash chest, notice board, shop stock, buyback, stash transfers
-- `src/dungeon.js`: the crypt drawn: its pieces, torch lights, chests, the way in and out
+- `src/items.js`: every item (weapons, clothes, accessories, uniques, potions, recipes), tiers, upgrades, loot rolls
+- `src/gear.js`: procedural models (maces, spears, mauls, gloves, boots, accessories, potions, recipes)
+- `src/camps.js`: who stands in each camp (shared with the server); `src/npcs.js`: the camp's people drawn, their
+  stock, buying, selling and the anvil; `src/bank.js`: the account's bank
+- `src/trade.js`, `server/trade.mjs`: trading between heroes
+- `src/dungeon.js`: the dungeons drawn: their pieces, torch lights, chests, the way in, out and down;
+  `src/maps/depths.js`: the deeper floors
 - `src/audio.js`, `src/music.js`, `src/ambience.js`: sound effects, generative music, ambience (mixer and volumes in `audio.js`)
 - `src/settings.js`: saved player settings
 - `src/classes.js`: the playable classes (shared with the server)
 - `src/net.js`, `src/account.js`: the connection to the game server, and the sign-in / hero screens
 - `server/`: the game server (`main.mjs` messages, `store.mjs` accounts on disk, `auth.mjs` passwords and tokens, `ws.mjs` WebSocket)
-- `src/quests.js`: the story quests, bounty templates, progress and rewards
+- `src/quest-data.js`: every quest; `src/quests.js`: the notice boards, progress and rewards
 - `src/combat.js`: projectiles and ground loot
 - `src/ui.js`, `style.css`: HUD, action bar, minimap, inventory, tooltips
 - `src/character.js`, `src/animator.js`: model setup, animation blending, procedural swings
@@ -243,7 +345,7 @@ Variants: `?size=192`, `?size=512&maskable` (Android adaptive icon), `?size=180&
 KayKit's other free packs (Forest, Halloween…) use the same rig and style. The Skeletons pack was added this way:
 
 - **New monster:** copy the `.glb` into `assets/characters/`, add its name to `CHARACTERS` in `assets.js`, and add an entry to `ENEMY_TYPES` and `SPAWNS` in `monsters.js` (then restart the game server). The skeleton entries show the options: `offhand` (shield), `style: 'chop'`, `eyes` (glow color), `bolt` (caster projectile color), `loot: 'bone'` (loot table).
-- **New weapon or shield:** copy the `.gltf`, `.bin` and texture into `assets/items/`, add the model name to `ITEM_MODELS` in `assets.js`, add a base to `BASES` in `items.js`, then repack: `node tools/pack-items.mjs` (it packs every `ITEM_MODELS` model into `assets/items/items.glb`, which the game loads instead of the ~50 separate files).
+- **New weapon or shield:** copy the `.gltf`, `.bin` and texture into `assets/items/`, add the model name to `ITEM_MODELS` in `assets.js`, add an item to `items.js`, then repack: `node tools/pack-items.mjs` (it packs every `ITEM_MODELS` model into `assets/items/items.glb`, which the game loads instead of the ~50 separate files).
 - **More crypt pieces:** name any Dungeon pack model in `crypt-map.js` (e.g. `put('barrel_large', x, z)`), then repack:
   `node tools/pack-dungeon.mjs "<KayKit_Dungeon_Pack_1.1_FREE>/Assets/gltf"`. It writes every model `dungeon.js`
   names into `assets/dungeon/crypt.glb`, one file instead of ~80 (the host is slow to answer each request).

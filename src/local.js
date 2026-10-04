@@ -28,10 +28,12 @@ export class LocalWorld {
       return { t: 'entered', pid: 1, chat: [], online: 1, ...where };
     }
     if (t === 'travel') {
-      const r = this.sim.travel(1, String(data.to || ''), { respawn: !!data.respawn });
+      if (data.summon) throw new Error('The door has closed.');
+      const r = this.sim.travel(1, String(data.to || ''), { respawn: !!data.respawn, camp: !!data.camp });
       if (r.error) throw new Error(r.error);
       return { t: 'traveled', ...r };
     }
+    if (t === 'recall' || t.startsWith('trade')) throw new Error('That needs other heroes: play online.');
     if (t === 'exit') {
       this.sim.leave(1);
       return { t: 'exited' };

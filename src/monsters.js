@@ -62,7 +62,32 @@ export const ENEMY_TYPES = {
   shadow_archer: { name: 'Shadow Archer', kind: 'caster', archer: true, model: 'Ranger', weapon: 'bow_withString', tint: 0x4a4060, bolt: 0xa05aff, hp: 62, dmg: 15, speed: 4.2, range: 14, keep: 9, atkCd: 1.8, aggro: 15, xp: 52, radius: 0.5, gold: [6, 14], drop: 0.35 },
   hollow_king: { name: 'Malakar the Hollow King', kind: 'humanoid', model: 'Skeleton_Warrior', weapon: 'Skeleton_Axe', weaponGlow: 0xa05aff, offhand: 'Skeleton_Shield_Large_A', style: 'chop', scale: 2.0, tint: 0x6a5a7e, undead: true, eyes: 0xc07aff, boss: true, summons: ['dread_skeleton', 'dread_minion'], hp: 360, dmg: 30, speed: 3.8, range: 3.3, atkCd: 1.6, atkDur: 1.0, aggro: 15, xp: 460, radius: 1.1, gold: [160, 260], drop: 1, respawn: 120, loot: 'bone' },
   abyss_queen: { name: 'Nyxara, Queen of the Abyss', kind: 'caster', model: 'Mage', weapon: 'staff', weaponGlow: 0xff4ad8, tint: 0x9a7ab0, scale: 1.8, boss: true, lich: true, summons: ['dread_minion', 'death_knight'], bolt: 0xff4ad8, hp: 520, dmg: 30, speed: 3.4, range: 15, keep: 7, atkCd: 1.8, aggro: 16, xp: 900, radius: 0.9, gold: [240, 360], drop: 1, respawn: 150 },
+
+
+  // ---- the deeper floors: the Bone Pits, the Frozen Deep, the Magma Core, the Void Below
+  bone_guard: { name: 'Bone Guard', kind: 'humanoid', model: 'Skeleton_Warrior', weapon: 'Skeleton_Axe', offhand: 'Skeleton_Shield_Large_B', style: 'chop', scale: 1.2, tint: 0xe8dcc0, undead: true, eyes: 0x6dffd8, hp: 140, dmg: 17, speed: 3.4, range: 2.3, atkCd: 1.7, atkDur: 0.85, aggro: 12, xp: 62, radius: 0.62, gold: [7, 15], drop: 0.36, loot: 'bone' },
+  bone_colossus: { name: 'The Bone Colossus', kind: 'humanoid', model: 'Skeleton_Warrior', weapon: 'Skeleton_Axe', weaponGlow: 0x6dffd8, offhand: 'Skeleton_Shield_Large_A', style: 'chop', scale: 2.3, tint: 0xf0e6d0, undead: true, eyes: 0x6dffd8, boss: true, summons: ['bone_guard', 'skeleton_minion'], hp: 500, dmg: 26, speed: 3.4, range: 3.4, atkCd: 1.7, atkDur: 1.0, aggro: 16, xp: 800, radius: 1.15, gold: [160, 240], drop: 1, respawn: 150, loot: 'bone' },
+  ymira: { name: 'Ymira of the Deep', kind: 'caster', model: 'Mage', weapon: 'staff', weaponGlow: 0x8fdcff, tint: 0xc8e8ff, scale: 1.8, boss: true, lich: true, summons: ['frostbone', 'ice_witch'], bolt: 0x9fe4ff, hp: 540, dmg: 29, speed: 3.4, range: 15, keep: 7, atkCd: 1.9, aggro: 16, xp: 880, radius: 0.9, gold: [200, 300], drop: 1, respawn: 150 },
+  magmaborn: { name: 'The Magmaborn', kind: 'humanoid', model: 'Barbarian', weapon: 'axe_2handed', weaponGlow: 0xff5a10, tint: 0x8a3a20, style: 'chop', scale: 2.2, boss: true, summons: ['molten_brute', 'ember_skeleton'], hp: 600, dmg: 32, speed: 3.6, range: 3.4, atkCd: 1.6, atkDur: 1.0, aggro: 16, xp: 940, radius: 1.15, gold: [240, 340], drop: 1, respawn: 150 },
+  void_herald: { name: 'The Void Herald', kind: 'caster', model: 'Skeleton_Mage', weapon: 'Skeleton_Staff', weaponGlow: 0xff4ad8, tint: 0x8a7ab0, scale: 2.0, boss: true, lich: true, undead: true, eyes: 0xff4ad8, summons: ['death_knight', 'wraith'], bolt: 0xff4ad8, hp: 640, dmg: 32, speed: 3.4, range: 15, keep: 7, atkCd: 1.7, aggro: 16, xp: 1000, radius: 0.95, gold: [280, 400], drop: 1, respawn: 150 },
+
+  // ---- world bosses: they roam a land and leave heroes alone until struck (passive); five times a camp
+  // boss. worldBoss: the class of unique items they carry. Each comes back ten minutes after it falls.
+  gorehorn: { name: 'Gorehorn the Wanderer', kind: 'humanoid', model: 'Barbarian', weapon: 'axe_2handed', weaponGlow: 0xffa040, tint: 0xb0906a, style: 'chop', scale: 2.4, boss: true, worldBoss: 'low', passive: true, summons: ['bandit', 'slime_red'], hp: 1350, dmg: 30, speed: 3.6, range: 3.6, atkCd: 1.7, atkDur: 1.1, aggro: 18, xp: 2400, radius: 1.25, gold: [90, 160], drop: 1 },
+  skadi: { name: 'Skadi the Frost Giant', kind: 'humanoid', model: 'Barbarian', weapon: 'axe_2handed', weaponGlow: 0x8fdcff, tint: 0xc8dcf0, style: 'chop', scale: 2.6, boss: true, worldBoss: 'low', passive: true, summons: ['frost_raider', 'raider_berserker'], hp: 1500, dmg: 34, speed: 3.6, range: 3.8, atkCd: 1.7, atkDur: 1.1, aggro: 18, xp: 3200, radius: 1.3, gold: [140, 220], drop: 1 },
+  ignis: { name: 'Ignis, the Living Pyre', kind: 'humanoid', model: 'Skeleton_Warrior', weapon: 'Skeleton_Axe', weaponGlow: 0xff5a10, offhand: 'Skeleton_Shield_Large_A', style: 'chop', scale: 2.6, tint: 0xa05a3a, undead: true, eyes: 0xff6a10, boss: true, worldBoss: 'mid', passive: true, summons: ['ember_skeleton', 'molten_brute'], hp: 1650, dmg: 38, speed: 3.6, range: 3.8, atkCd: 1.6, atkDur: 1.0, aggro: 18, xp: 4200, radius: 1.3, gold: [220, 320], drop: 1, loot: 'bone' },
+  umbra: { name: 'Umbra the Devourer', kind: 'caster', model: 'Skeleton_Mage', weapon: 'Skeleton_Staff', weaponGlow: 0xb07aff, tint: 0x5a4a7a, scale: 2.5, undead: true, eyes: 0xc07aff, boss: true, lich: true, worldBoss: 'high', passive: true, summons: ['death_knight', 'night_stalker'], bolt: 0xb07aff, hp: 1800, dmg: 40, speed: 3.4, range: 16, keep: 7, atkCd: 1.8, aggro: 18, xp: 5200, radius: 1.2, gold: [300, 440], drop: 1 },
 };
+
+// Where each land's world boss roams (its level), and how long after it falls it comes back.
+export const WORLD_BOSSES = {
+  emberwood: { type: 'gorehorn', lvl: 12 },
+  frostfang: { type: 'skadi', lvl: 22 },
+  cinderfall: { type: 'ignis', lvl: 40 },
+  shadowmere: { type: 'umbra', lvl: 58 },
+};
+export const WORLD_BOSS_FIRST = 180; // s after heroes arrive in a land (the world keeps time only where heroes are)
+export const WORLD_BOSS_RETURN = 600; // s after it falls
 
 export const SPAWNS = [
   { type: 'slime', x: 0, z: -30, r: 10, n: 6, lvl: 1 },

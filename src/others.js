@@ -6,9 +6,10 @@
 import * as THREE from 'three';
 import { Humanoid } from './character.js';
 import { heightAt, zoneAt } from './world.js';
-import { applyEquipmentVisuals, equipmentFromLook, boltAction } from './player.js';
+import { applyEquipmentVisuals, equipmentFromLook, boltAction, arrowAction } from './player.js';
 import { SKILLS, auraTick } from './skills.js';
-import { CLASSES } from './classes.js';
+import { blessFx } from './skills/common.js';
+import { CLASSES, lookOf } from './classes.js';
 import { lerp, angleDiff, clamp, yawTo, has } from './util.js';
 
 const JUMP = 6; // m between two updates: a teleport (respawn), not a run
@@ -20,9 +21,11 @@ export class RemotePlayer {
     this.game = game;
     this.id = r.i;
     this.name = String(r.n || '?');
-    this.cls = has(CLASSES, r.c) ? r.c : 'knight';
+    this.cls = has(CLASSES, r.c) ? r.c : 'warrior';
     this.level = 1;
-    this.h = new Humanoid(CLASSES[this.cls].model);
+    this.look = Number.isInteger(r.k?.m) ? r.k.m : 0;
+    const L = lookOf(this.cls, this.look);
+    this.h = new Humanoid(L.model, { palette: L.palette || null });
     this.group = this.h.group;
     this.pos = this.group.position;
     this.radius = 0.5;
@@ -54,7 +57,7 @@ export class RemotePlayer {
 
   setLook(k, level) {
     this.level = clamp(Math.round(Number(level) || this.level), 1, 99);
-    applyEquipmentVisuals(this.h, equipmentFromLook(k), this.cls);
+    applyEquipmentVisuals(this.h, equipmentFromLook(k), this.cls, this.look);
     if (this.plate) this.game.ui.refreshPlayerPlate(this);
   }
 
@@ -201,7 +204,7 @@ export class RemotePlayer {
     switch (a.k) {
       case 'sw': { // a weapon swing: { s: style, d: duration }
         if (!this.alive) return;
-        const dur = clamp(Number(a.d) || 0.5, 0.15, 2), style = ['slash', 'backslash', 'chop'].includes(a.s) ? a.s : 'slash';
+        const dur = clamp(Number(a.d) || 0.5, 0.15, 2), style = ['slash', 'backslash', 'chop', 'stab', 'cleave'].includes(a.s) ? a.s : 'slash';
         this.endAction();
         this.h.startSwing(dur, style);
         if (vol) g.sfx.play('swing', 0.45 * vol);
@@ -210,21 +213,21 @@ export class RemotePlayer {
           tick: (dt, s) => {
             if (s.hit || s.t < dur * 0.45) return;
             s.hit = true;
-            if (style === 'chop') g.fx.arc(this.pos, this.yaw, { span: 1.3, rIn: 0.5, rOut: 2.8, color: 0xfff2d0, dur: 0.2 });
+            if (style === 'chop' || style === 'cleave') g.fx.arc(this.pos, this.yaw, { span: 1.3, rIn: 0.5, rOut: 2.8, color: 0xfff2d0, dur: 0.2 });
             else g.fx.arc(this.pos, this.yaw, { span: 2.1, rIn: 0.6, rOut: 2.4, color: 0xfff2d0, dur: 0.22, reverse: style === 'backslash' });
           },
         };
         break;
       }
       case 'sk': this.skill(a); break; // a skill: { id, x, z: where it was aimed, or where they went }
-      case 'bo': { // the mage's bolt: { x, z }
+      case 'bo': case 'ar': { // a staff's bolt or an arrow: { x, z }
         if (!this.alive) return;
         const x = Number(a.x), z = Number(a.z);
         if (!Number.isFinite(x) || !Number.isFinite(z)) return;
         const at = new THREE.Vector3(x, heightAt(x, z), z);
         this.endAction();
         this.faceToward(at);
-        this.action = { t: 0, dur: 0.4, ...boltAction(this, at, false) };
+        this.action = { t: 0, dur: 0.4, ...(a.k === 'ar' ? arrowAction(this, at, false) : boltAction(this, at, false)) };
         break;
       }
       case 'dr': g.fx.heal(this.pos); if (vol) g.sfx.play('drink', 0.6 * vol); break;
@@ -240,17 +243,31 @@ export class RemotePlayer {
   }
 
   // A skill they used: the same show as ours (skills.js), without the damage (their game deals it).
+  // { id, x, z: where it went, t: what it was cast at (a monster's id, h<hero id>, or 0: themselves), pw }
   skill(a) {
     if (!this.alive || typeof a.id !== 'string' || !has(SKILLS, a.id)) return;
-    const tx = Number(a.x), tz = Number(a.z);
+    const g = this.game, tx = Number(a.x), tz = Number(a.z);
     const at = Number.isFinite(tx) && Number.isFinite(tz) ? new THREE.Vector3(tx, heightAt(tx, tz), tz) : null;
+    let target = null;
+    if (a.t === 0) target = this;
+    else if (typeof a.t === 'string' && a.t[0] === 'h') { const id = Number(a.t.slice(1)); target = id === g.link.pid ? g.player : g.others.byId.get(id) || null; }
+    else if (Number.isFinite(a.t)) target = g.enemies.byId.get(a.t) || null;
     this.endAction();
-    this.action = SKILLS[a.id].cast(this, at, false);
+    this.action = SKILLS[a.id].cast(this, { at, target, pw: clamp(Number(a.pw) || 1, 1, 2) }, false);
   }
 }
 
 // The other heroes our hero can see, by the world's id.
 export class RemotePlayers {
+  // A hero helped another we can see ([B, them, kind, value, by]): the glow of it.
+  helped([, id, kind]) {
+    const o = this.byId.get(id), g = this.game;
+    if (!o) return;
+    if (kind === 'heal') g.fx.heal(o.pos);
+    else if (kind === 'buff') blessFx(g, o.pos, 0xffe08a, 16);
+    else if (kind === 'rez') g.fx.levelUp(o.pos);
+  }
+
   constructor(game) {
     this.game = game;
     this.list = [];

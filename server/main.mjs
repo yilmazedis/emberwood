@@ -9,6 +9,9 @@ import * as store from './store.mjs';
 import { hashPassword, checkPassword, makeToken, readToken } from './auth.mjs';
 import { CLASSES, MAX_CHARACTERS, NAME_RULE, USER_RULE } from '../src/classes.js';
 import { WorldSim, TICK, PROTOCOL } from '../src/sim/world.js';
+import { ITEMS } from '../src/items.js';
+import { ENEMY_TYPES } from '../src/monsters.js';
+import * as trades from './trade.mjs';
 
 const PORT = Number(process.env.PORT) || 8787;
 const MAX_SAVE = 200 * 1024; // bytes of JSON per character save
@@ -38,7 +41,7 @@ setInterval(() => { const now = Date.now(); for (const [ip, ts] of attempts) if 
 // ---------------------------------------------------------------- sessions
 const online = new Map(); // account (lower case) -> connection
 
-const charList = (acc) => acc.characters.map(({ id, name, cls, level }) => ({ id, name, cls, level }));
+const charList = (acc) => acc.characters.map(({ id, name, cls, look, level }) => ({ id, name, cls, look: look || 0, level }));
 const heroes = new Map(); // character id -> the connection playing it
 
 // ---------------------------------------------------------------- the world
@@ -50,6 +53,18 @@ world.onHeroDown = (winner, loser) => {
   store.arenaResult({ ...cw.char, level: winner.level }, { ...cl.char, level: loser.level });
   const msg = { t: 'chat', s: 1, x: `⚔ ${cw.char.name} defeated ${cl.char.name} in the Arena!` };
   for (const p of winner.area.players) inWorld.get(p.pid)?.send(msg);
+};
+// a world boss rises in a land, or falls: everyone in that land hears
+world.onWorldBoss = (area, kind, boss, info) => {
+  const name = ENEMY_TYPES[boss.type].name, land = area.map.name;
+  let text;
+  if (kind === 'spawn') text = `⚠ ${name} roams ${land}${info?.name ? `, near ${info.name}` : ''}. It leaves heroes alone unless they strike first.`;
+  else {
+    const top = Array.isArray(info) ? info.find((c) => c[2] === 1) : null, who = top ? inWorld.get(top[0])?.char?.name : null;
+    text = `☠ ${name} has fallen${who ? ` to ${who}${info.length > 1 ? ' and friends' : ''}` : ''}! It will be back in ten minutes.`;
+  }
+  const msg = { t: 'chat', s: 1, x: text };
+  for (const p of area.players) inWorld.get(p.pid)?.send(msg);
 };
 const inWorld = new Map(); // hero id in the world (pid) -> connection
 let lastPid = 0;
@@ -63,6 +78,7 @@ function announce(text, except = null) {
 
 function leaveWorld(c, quiet = false) {
   if (!c.pid) return;
+  if (c.char) { trades.cancelFor(c.char.id, 'They left.'); recalls.delete(c.char.id); }
   world.leave(c.pid);
   inWorld.delete(c.pid);
   c.pid = null;
@@ -200,6 +216,21 @@ function checkSave(save) {
   return save;
 }
 
+// An account's bank as its game sends it: up to 60 known items and some gold.
+const BANK_SIZE = 60;
+function checkBank(bank) {
+  if (!bank || typeof bank !== 'object' || !Array.isArray(bank.items) || bank.items.length > BANK_SIZE) throw new Oops('Bad bank data.');
+  if (JSON.stringify(bank).length > MAX_SAVE / 2) throw new Oops('Bank data too large.');
+  const items = bank.items.map((it) => (it && typeof it === 'object' && typeof it.k === 'string' && Object.hasOwn(ITEMS, it.k) ? it : null));
+  return { items, gold: Math.max(0, Math.floor(Number(bank.gold) || 0)) };
+}
+
+// ---------------------------------------------------------------- a scientist's door through space
+// Teleport Party: every member of the caster's party in the world is asked; whoever says yes in time steps
+// through to the caster's side.
+const RECALL_FOR = 30000;
+const recalls = new Map(); // member's character id -> { from: caster's pid, at }
+
 // ---------------------------------------------------------------- messages
 const handlers = {
   hello: () => ({ t: 'hello', v: PROTOCOL, online: online.size, world: inWorld.size }),
@@ -236,12 +267,12 @@ const handlers = {
   createChar(c, m) {
     const acc = needAccount(c);
     const name = String(m.name || '').trim(), cls = String(m.cls || '');
-    if (!CLASSES[cls]) throw new Oops('Pick a class.');
+    if (!Object.hasOwn(CLASSES, cls)) throw new Oops('Pick a class.');
+    const look = Math.max(0, Math.min(CLASSES[cls].looks.length - 1, Math.round(Number(m.look) || 0)));
     if (!NAME_RULE.test(name)) throw new Oops('Names are 3–14 letters, no spaces or numbers.');
     if (acc.characters.length >= MAX_CHARACTERS) throw new Oops(`You can have up to ${MAX_CHARACTERS} characters.`);
     if (store.nameTaken(name)) throw new Oops('Someone already has that name.');
-    const save = m.save ? checkSave(m.save) : null;
-    const ch = store.addCharacter(acc, { name, cls, save });
+    const ch = store.addCharacter(acc, { name, cls, look, save: null });
     console.log(`${acc.user} created ${cls} ${name}`);
     return { t: 'chars', chars: charList(acc), created: ch.id };
   },
@@ -271,13 +302,17 @@ const handlers = {
       mem.gone = 0;
       mem.level = ch.level;
     }
-    return { t: 'char', char: { id: ch.id, name: ch.name, cls: ch.cls, save: ch.save } };
+    return { t: 'char', char: { id: ch.id, name: ch.name, cls: ch.cls, look: ch.look || 0, save: ch.save, bank: acc.bank, rev: ch.rev || 0 } };
   },
 
+  // The hero (and the account's bank). A save from before the hero's last trade is refused: it was on its
+  // way while the trade happened, and would undo it.
   save(c, m) {
     const acc = needAccount(c);
     if (!c.char) throw new Oops('No character in play.');
+    if ((Number(m.rev) || 0) < (c.char.rev || 0)) return { t: 'saved', stale: 1 };
     store.saveCharacter(acc, c.char.id, checkSave(m.save));
+    if (m.bank) store.saveBank(acc, checkBank(m.bank));
     return { t: 'saved' }; // (only sent when the game asked for an answer: before a reload)
   },
 
@@ -374,12 +409,37 @@ const handlers = {
     return { t: 'led' };
   },
 
-  // Through a waystone, a dungeon's door or its stairs (or, fallen, back to where heroes rise).
+  // Through a waystone, a dungeon's door or its stairs (or, fallen, back to where heroes rise; camp: with a
+  // camp scroll; summon: through a party member's door in space).
   travel(c, m) {
     if (!c.pid) throw new Oops('Step into the world first.');
-    const r = world.travel(c.pid, String(m.to || ''), { respawn: !!m.respawn });
+    trades.cancelFor(c.char.id, 'They went away.');
+    let r;
+    if (m.summon) {
+      const offer = recalls.get(c.char.id);
+      recalls.delete(c.char.id);
+      if (!offer || Date.now() - offer.at > RECALL_FOR) throw new Oops('The door has closed.');
+      r = world.summon(c.pid, offer.from);
+    } else r = world.travel(c.pid, String(m.to || ''), { respawn: !!m.respawn, camp: !!m.camp });
     if (r.error) throw new Oops(r.error);
     return { t: 'traveled', ...r };
+  },
+
+  // Teleport Party: ask every member of our party in the world to step through to us.
+  recall(c) {
+    if (!c.pid) throw new Oops('Step into the world first.');
+    const party = partyOf(c.char.id), me = world.players.get(c.pid);
+    if (!party) throw new Oops('You are not in a party.');
+    if (me?.area?.map.kind === 'arena') throw new Oops('The door does not open into the arena.');
+    let n = 0;
+    for (const id of party.members.keys()) {
+      const mc = heroes.get(id);
+      if (id === c.char.id || !mc?.pid) continue;
+      recalls.set(id, { from: c.pid, at: Date.now() });
+      mc.send({ t: 'recall', from: c.char.name, map: me?.area?.map.id || '' });
+      n++;
+    }
+    return { t: 'recalled', n };
   },
 
   // Where our hero is, what it hit and did (see WorldSim.input); no reply, the world's updates are it.
@@ -416,6 +476,13 @@ const handlers = {
     return { t: 'said' };
   },
 
+  // ---- trading (server/trade.mjs)
+  tradeRequest: (c, m) => trades.request(c, m, ctx),
+  tradeAnswer: (c, m) => trades.answer(c, m, ctx),
+  tradeOffer: (c, m) => trades.offer(c, m, ctx),
+  tradeAccept: (c, m) => trades.accept(c, m, ctx),
+  tradeCancel: (c) => trades.cancel(c, ctx),
+
   logout(c) {
     leaveWorld(c);
     dropHero(c);
@@ -427,6 +494,8 @@ const handlers = {
 };
 
 const OPEN_TO_ALL = new Set(['hello', 'register', 'login', 'resume']);
+// what trading needs from here
+const ctx = { world, heroes, inWorld, store, checkSave, Oops };
 
 async function handle(c, text) {
   let m;

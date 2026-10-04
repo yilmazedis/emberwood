@@ -249,4 +249,43 @@ export class DungeonMap {
     // the stairs up, rising north out of the start room
     this.put('stairs', this.midX(this.stairs.c), this.cellZ(this.stairs.r));
   }
+
+  // Dress a whole dungeon from its plan (the deeper floors): the shell, torches along the north walls,
+  // banners between them, pillars in the big rooms, a chest in each side room, the boss's hoard, odds and ends
+  // in the start room. opts: { seed, banner: model, plain: walls to pick from, dirt }
+  autoDress({ seed = 7, banner = 'banner_patternA_red', plain, dirt = false } = {}) {
+    this.shell({ seed, plain, dirt });
+    const rng = mulberry32(seed + 99);
+    for (const [letter, R] of Object.entries(this.rooms)) {
+      const r0 = this.rowOf(R.z0 + 0.1), c0 = this.colOf(R.x0 + 0.1), c1 = this.colOf(R.x1 - 0.1), wide = c1 - c0 + 1;
+      // torches (and a banner now and then) on the north wall
+      let k = 0;
+      for (let c = c0; c <= c1; c++) {
+        if (this.open(r0 - 1, c) || this.tile(r0 - 1, c) === 'U') continue;
+        if ((c - c0) % 2 === (wide > 3 ? 1 : 0)) this.torch(r0, c, 'n');
+        else if (letter !== 'S' && k++ % 2 === 0 && rng() < 0.8) this.banner(banner, r0, c, 'n');
+      }
+      const w = R.x1 - R.x0, h = R.z1 - R.z0;
+      if (letter === 'B') {
+        for (const sx of [-1, 1]) for (const dz of [-h / 4, h / 4]) this.put('pillar_decorated', R.cx + sx * (w / 2 - 3.5), R.cz + dz, { collide: 1.0 });
+        this.chest({ id: 'hoard', model: 'chest_gold', x: R.cx, z: R.z0 + 1.6, rot: 0, hoard: true, name: 'The Hoard', title: 'Sealed while its keeper lives' });
+        this.put('coin_stack_large', R.cx - 2.6, R.z0 + 1.3, { collide: 0.7 });
+        for (let i = 0; i < 5; i++) {
+          const a = (i / 5) * Math.PI * 2 + 0.4;
+          this.put('candle_triple', R.cx + Math.cos(a) * Math.min(7, w / 3), R.cz + Math.sin(a) * Math.min(5, h / 3), { rot: rng() * 6 });
+        }
+        continue;
+      }
+      if (letter === 'S') {
+        this.put('barrel_small', R.x0 + 1.2, R.z1 - 1.2, { collide: 0.5 });
+        this.put('box_stacked', R.x1 - 1.4, R.z1 - 1.4, { rot: 0.4, collide: 0.9 });
+        continue;
+      }
+      if (w >= 16 && h >= 8) for (const sx of [-1, 1]) this.put(rng() < 0.5 ? 'pillar' : 'pillar_decorated', R.cx + sx * (w / 2 - 4), R.cz, { collide: 0.95 });
+      const corner = rng() < 0.5 ? -1 : 1;
+      this.chest({ id: `chest_${letter}`, model: 'chest', x: R.cx + corner * (w / 2 - 1.5), z: R.z1 - 1.6, rot: Math.PI, name: 'Old Chest', title: 'Left in the dark' });
+      const odd = ['barrel_large', 'crates_stacked', 'rubble_half', 'box_large', 'keg'][Math.floor(rng() * 5)];
+      this.put(odd, R.cx - corner * (w / 2 - 1.5), R.z0 + 1.5, { rot: rng() * 3, collide: 0.8 });
+    }
+  }
 }

@@ -30,8 +30,8 @@
      level by level. -->
 <style id="boot-style">html, body { margin: 0; background: #0e0b08; } body > * { visibility: hidden; }</style>
 <script type="module">
-  const CDN = 'https://cdn.jsdelivr.net/gh/yilmazedis/emberwood@ew-b69411e42be2/';
-  const MODULES = ['account.js', 'ambience.js', 'animator.js', 'arena.js', 'assets.js', 'audio.js', 'character.js', 'chat.js', 'classes.js', 'combat.js', 'doll.js', 'dungeon-map.js', 'dungeon.js', 'enemies.js', 'fx.js', 'game.js', 'gear.js', 'input.js', 'items.js', 'lands.js', 'link.js', 'local.js', 'main.js', 'maps.js', 'maps/arena.js', 'maps/cinderfall.js', 'maps/crypt.js', 'maps/frostfang.js', 'maps/shadowmere.js', 'monsters.js', 'music.js', 'net.js', 'noise.js', 'others.js', 'outdoor-map.js', 'party.js', 'places.js', 'player.js', 'quests.js', 'settings.js', 'sim/world.js', 'skills.js', 'terrain.js', 'town.js', 'ui.js', 'update.js', 'util.js', 'version.js', 'world.js'];
+  const CDN = 'https://cdn.jsdelivr.net/gh/yilmazedis/emberwood@ew-88b3c190c196/';
+  const MODULES = ['account.js', 'ambience.js', 'animator.js', 'arena.js', 'assets.js', 'audio.js', 'bank.js', 'camps.js', 'character.js', 'chat.js', 'classes.js', 'combat.js', 'control.js', 'doll.js', 'dungeon-map.js', 'dungeon.js', 'enemies.js', 'fx.js', 'game.js', 'gear.js', 'input.js', 'items.js', 'lands.js', 'link.js', 'local.js', 'main.js', 'maps.js', 'maps/arena.js', 'maps/cinderfall.js', 'maps/crypt.js', 'maps/depths.js', 'maps/frostfang.js', 'maps/shadowmere.js', 'monsters.js', 'music.js', 'net.js', 'noise.js', 'npcs.js', 'others.js', 'outdoor-map.js', 'party.js', 'places.js', 'player.js', 'quest-data.js', 'quests.js', 'settings.js', 'sim/world.js', 'skills.js', 'skills/common.js', 'skills/healer.js', 'skills/rogue.js', 'skills/scientist.js', 'skills/warrior.js', 'skillui.js', 'terrain.js', 'trade.js', 'ui.js', 'update.js', 'util.js', 'version.js', 'world.js'];
   const q = new URLSearchParams(location.search); // (?nocdn: everything from here; ?cdn: from the CDN anywhere)
   const live = (location.hostname === 'emberwood.kerimcaglar.com' || q.has('cdn')) && !q.has('nocdn');
   const show = () => document.getElementById('boot-style')?.remove(); // (the page stays hidden until it's styled)
@@ -90,6 +90,19 @@
       <div class="bar mp"><div class="fill" id="mp-fill"></div><span id="mp-text"></span></div>
     </div>
   </div>
+  <!-- what's on our hero now: blessings, elixirs, skills' boosts -->
+  <div id="buffs"></div>
+
+  <!-- the selected target (src/control.js): click or tap one, Z for the nearest foe, Esc to let go -->
+  <div id="target" class="panel hidden">
+    <div id="target-name"></div>
+    <div class="bar"><div class="fill" id="target-fill"></div><span id="target-text"></span></div>
+    <div id="target-fx"></div>
+  </div>
+  <!-- the basic attack's combo (src/player.js COMBO) -->
+  <div id="combo"><b id="combo-n"></b><span id="combo-word"></span></div>
+  <!-- reading a camp scroll -->
+  <div id="channel" class="hidden"><span id="channel-text"></span><div class="bar"><div class="fill" id="channel-fill"></div></div></div>
 
   <div id="boss" class="hidden">
     <div id="boss-name"></div>
@@ -133,57 +146,97 @@
   <div id="menu-buttons">
     <button id="btn-chat" title="Chat (Enter)">Chat <kbd>Enter</kbd></button>
     <button id="btn-bag" title="Inventory (I)">Bag <kbd>I</kbd></button>
+    <button id="btn-skills" title="Skills (K)">Skills <kbd>K</kbd><i id="skill-dot" class="hidden"></i></button>
     <button id="btn-help" title="Controls (H)">Help <kbd>H</kbd></button>
     <button id="btn-settings" title="Settings (Esc)">Settings <kbd>Esc</kbd></button>
   </div>
 
   <div id="inventory" class="hidden" data-mode="character">
     <section class="panel inv-left inv-character">
-      <header><span>Character</span><button class="close" data-close="inventory" aria-label="Close">×</button></header>
+      <header><span>Character <small id="char-style"></small></span><button class="close" data-close="inventory" aria-label="Close">×</button></header>
       <div class="doll">
         <div class="eq-col">
-          <div class="eq-slot" data-slot="head"><span>Head</span></div>
-          <div class="eq-slot" data-slot="weapon"><span>Weapon</span></div>
+          <div class="eq-slot" data-slot="head"></div>
+          <div class="eq-slot" data-slot="body"></div>
+          <div class="eq-slot" data-slot="hands"></div>
+          <div class="eq-slot" data-slot="feet"></div>
         </div>
         <canvas id="doll-canvas" width="180" height="220"></canvas>
         <div class="eq-col">
-          <div class="eq-slot" data-slot="back"><span>Back</span></div>
-          <div class="eq-slot" data-slot="offhand"><span>Off-hand</span></div>
+          <div class="eq-slot" data-slot="weapon"></div>
+          <div class="eq-slot" data-slot="offhand"></div>
+          <div class="eq-slot acc" data-slot="neck"></div>
+          <div class="eq-slot acc" data-slot="belt"></div>
         </div>
       </div>
       <div class="eq-row">
-        <div class="eq-slot" data-slot="hands"><span>Hands</span></div>
-        <div class="eq-slot" data-slot="ring1"><span>Ring</span></div>
-        <div class="eq-slot" data-slot="ring2"><span>Ring</span></div>
-        <div class="eq-slot" data-slot="feet"><span>Feet</span></div>
+        <div class="eq-slot acc" data-slot="ear1"></div>
+        <div class="eq-slot acc" data-slot="ear2"></div>
+        <div class="eq-slot acc" data-slot="ring1"></div>
+        <div class="eq-slot acc" data-slot="ring2"></div>
       </div>
       <div id="stats"></div>
     </section>
-    <!-- the merchant (open at the stall in camp) -->
-    <section class="panel inv-left inv-vendor">
-      <header><span>Wren <small>Merchant</small></span><button class="close" data-close="inventory" aria-label="Close">×</button></header>
-      <div class="sec-title">For sale <small id="restock"></small></div>
-      <div class="shop-grid" id="shop"></div>
+    <!-- a merchant: weapons, armor, potions and scrolls, or recipes (src/npcs.js) -->
+    <section class="panel inv-left inv-shop">
+      <header><span id="shop-title">Merchant</span><button class="close" data-close="inventory" aria-label="Close">×</button></header>
+      <div id="shop-note" class="sec-note"></div>
+      <div class="shop-list" id="shop"></div>
       <div class="sec-title">Sold recently <small>buy back for what you got</small></div>
       <div class="shop-grid" id="buyback"></div>
-      <button id="sell-commons" class="wide"></button>
     </section>
-    <!-- the stash chest (open at the chest in camp) -->
-    <section class="panel inv-left inv-stash">
-      <header><span>Stash <small id="stash-count"></small></span><button class="close" data-close="inventory" aria-label="Close">×</button></header>
-      <div id="stash"></div>
+    <!-- the bank: shared by every hero of the account (src/bank.js) -->
+    <section class="panel inv-left inv-bank">
+      <header><span>Bank <small id="bank-count"></small></span><button class="close" data-close="inventory" aria-label="Close">×</button></header>
+      <div class="sec-note">Everything here is shared by all your heroes.</div>
+      <div id="bank"></div>
+      <div class="bank-gold"><span class="gold"><i class="coin"></i><b id="bank-gold">0</b></span>
+        <input id="gold-amount" type="number" min="0" step="1" placeholder="Amount" inputmode="numeric">
+        <button id="gold-in">Deposit</button><button id="gold-out">Withdraw</button></div>
     </section>
-    <!-- the quest notice board (open at the board in camp) -->
+    <!-- a land's notice board (src/quests.js) -->
     <section class="panel inv-left inv-board">
-      <header><span>Notice Board <small>quests</small></span><button class="close" data-close="inventory" aria-label="Close">×</button></header>
+      <header><span>Notice Board <small id="board-land"></small></span><button class="close" data-close="inventory" aria-label="Close">×</button></header>
       <div id="quest-list"></div>
+    </section>
+    <!-- Brom's anvil (src/npcs.js): upgrade an item with recipes -->
+    <section class="panel inv-left inv-anvil">
+      <header><span>Brom's Anvil <small>upgrades never fail</small></span><button class="close" data-close="inventory" aria-label="Close">×</button></header>
+      <div class="sec-note">Pick an item you wear or carry. Each step takes recipes of the item's class and a fee; +7 is the most.</div>
+      <div id="anvil-pick"></div>
+      <div id="anvil-detail"></div>
+      <div class="sec-title">Recipes <small>Brom sells them</small></div>
+      <div class="shop-list" id="recipes"></div>
     </section>
     <section class="panel inv-right">
       <header><span>Bag <small id="bag-hint"></small></span><button class="close" data-close="inventory" aria-label="Close">×</button></header>
       <div id="bag"></div>
-      <footer><span class="gold"><i class="coin"></i><b id="gold">0</b></span></footer>
+      <footer><span class="gold"><i class="coin"></i><b id="gold">0</b></span><button id="sell-junk" class="ghost hidden"></button></footer>
     </section>
   </div>
+
+  <!-- skills (src/skillui.js): three trees a class, a point a level -->
+  <div id="skills" class="panel hidden">
+    <header><span>Skills <small id="skill-points"></small></span><button class="close" data-close="skills" aria-label="Close">×</button></header>
+    <div id="skill-trees"></div>
+    <div class="skill-foot"><span id="skill-hint"></span><button id="skill-reset" class="ghost"></button></div>
+  </div>
+
+  <!-- trading with another hero (src/trade.js) -->
+  <div id="trade" class="panel hidden">
+    <header><span>Trade <small id="trade-with"></small></span><button class="close" id="trade-close" aria-label="Close">×</button></header>
+    <div class="trade-cols">
+      <div class="trade-side mine"><div class="sec-title">You give</div><div class="trade-items" id="trade-mine"></div>
+        <label class="trade-gold"><i class="coin"></i><input id="trade-gold" type="number" min="0" step="1" value="0" inputmode="numeric"></label><div class="trade-ok" id="trade-ok-mine"></div></div>
+      <div class="trade-side theirs"><div class="sec-title">You get</div><div class="trade-items" id="trade-theirs"></div>
+        <div class="trade-gold"><i class="coin"></i><b id="trade-their-gold">0</b></div><div class="trade-ok" id="trade-ok-theirs"></div></div>
+    </div>
+    <div class="sec-note" id="trade-note">Click items in your bag to offer them. Both press Accept to swap.</div>
+    <div class="row"><button id="trade-accept" class="claim">Accept</button><button id="trade-cancel" class="ghost">Cancel</button></div>
+  </div>
+
+  <!-- a question: a trade, a door through space… (ui.prompt) -->
+  <div id="prompt" class="panel hidden" role="dialog"><div id="prompt-text"></div><div class="row" id="prompt-buttons"></div></div>
 
   <div id="tooltip" class="hidden"></div>
 
@@ -205,37 +258,27 @@
   <div id="help" class="panel hidden">
     <header><span>Controls</span><button class="close" data-close="help">×</button></header>
     <ul class="desk-only">
-      <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Move</li>
-      <li><kbd>Left click</kbd> Attack toward cursor (hold to keep swinging)</li>
-      <li><kbd>1</kbd>–<kbd>4</kbd> Skills, aimed at the cursor</li>
-      <li><kbd>Q</kbd> Drink ale (heal)</li>
-      <li><kbd>I</kbd> / <kbd>B</kbd> Character &amp; bag</li>
-      <li><kbd>E</kbd> Trade with Wren the merchant, open your stash, or read the notice board (in camp)</li>
-      <li>Accept quests at the notice board, then come back to claim the reward. The golden <b>!</b> means something is waiting.</li>
-      <li>The crypt door in the graveyard leads down to a dungeon and its boss, <b>Morvain the Lich</b>. Step out of his violet circles!</li>
-      <li>The <b>waystone</b> in camp takes you to other lands (from level 8): Frostfang, Cinderfall and Shadowmere, each with its own boss and dungeon. Dungeons are a copy of your own (your party's).</li>
-      <li>The <b>Arena</b> (by waystone, from level 5): in its pit, heroes fight heroes, all but their own party. No gold is lost there; the champions' board counts the wins.</li>
-      <li><kbd>Enter</kbd> Chat with everyone in the world (Enter again to send, Esc to cancel)</li>
-      <li><kbd>Mouse wheel</kbd> Zoom</li>
-      <li><kbd>Esc</kbd> Settings: music, sound, graphics, leave the game · <kbd>M</kbd> mute</li>
-      <li>Walk over loot to pick it up. The camp is safe and heals you fast.</li>
-      <li>Hunting together? Click a hero's name to <b>invite them to a party</b> (or type <kbd>/invite Name</kbd>). Up to 8: you share the XP of kills near you (more for each member), take turns on the loot, and share a copy of each dungeon. <kbd>/p</kbd> talks to the party.</li>
+      <li><kbd>Left click</kbd> on the ground: walk there (hold to keep walking) · <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> also move</li>
+      <li><kbd>Left click</kbd> a monster: target it and attack · <kbd>Z</kbd> targets the nearest (again: the next) · <kbd>Esc</kbd> lets go</li>
+      <li><kbd>R</kbd> attack your target. <b>Combos:</b> press again just as a blow lands (the attack slot flashes) for a faster, stronger chain of up to four; too early breaks it. A skill in that moment is stronger too.</li>
+      <li><kbd>1</kbd>–<kbd>8</kbd> skills: at your target, at the cursor (areas), or on a friend you clicked (heals, blessings)</li>
+      <li><kbd>T</kbd> auto-hunt: your hero fights the monsters around where you switched it on, picks up loot and drinks when hurt. Any move stops it. It runs while the game is on screen: in another tab your hero just waits, and monsters leave it alone.</li>
+      <li><kbd>Q</kbd> healing potion · <kbd>X</kbd> mana potion · <kbd>E</kbd> talk to people in camp, use waystones and doors</li>
+      <li><kbd>I</kbd> character &amp; bag · <kbd>K</kbd> skills: a point every level, in three trees. Spread out or go all in.</li>
+      <li><kbd>Right click</kbd> another hero: invite to your party, or trade with them</li>
+      <li>Every camp has a <b>weaponsmith</b>, an <b>armorer</b>, a <b>provisioner</b> (potions, elixirs, camp scrolls), a <b>banker</b> (one bank for all your heroes) and a <b>notice board</b>. Brom's <b>anvil</b> in Emberwood upgrades items to +7 with recipes.</li>
+      <li><b>World bosses</b> roam the lands now and then. They leave you alone unless you strike first, they are very hard, and they carry <b>unique</b> items.</li>
+      <li><kbd>Enter</kbd> chat · <kbd>Mouse wheel</kbd> zoom · <kbd>Esc</kbd> settings · <kbd>M</kbd> mute</li>
     </ul>
     <ul class="touch-only">
-      <li><b>Left thumb</b> anywhere on the left side: move. Push a little to walk, all the way to run.</li>
-      <li><b>Hold the sword</b> to keep attacking the nearest enemy.</li>
-      <li><b>Skill buttons</b> aim at the nearest enemy for you.</li>
-      <li><b>Ale</b> heals 40% of your life.</li>
-      <li><b>Bag</b>: tap an item to see it, then Equip or Sell.</li>
-      <li><b>Settings</b>: music and sound volume, graphics, camera distance, and leaving the game.</li>
-      <li><b>In camp</b>: tap <b>Trade</b> above Wren the merchant, <b>Open</b> above your stash chest, or <b>Read</b> at the notice board.</li>
-      <li>Accept quests at the notice board, then come back to claim the reward. The golden <b>!</b> means something is waiting.</li>
-      <li>The crypt door in the graveyard leads down to a dungeon and its boss, <b>Morvain the Lich</b>. Step out of his violet circles!</li>
-      <li>The <b>waystone</b> in camp takes you to other lands (from level 8): Frostfang, Cinderfall and Shadowmere, each with its own boss and dungeon. Dungeons are a copy of your own (your party's).</li>
-      <li>The <b>Arena</b> (by waystone, from level 5): in its pit, heroes fight heroes, all but their own party. No gold is lost there.</li>
-      <li><b>Chat</b>: talk to everyone in the world.</li>
-      <li>Walk over loot to pick it up. The camp is safe and heals you fast.</li>
-      <li>Hunting together? Tap a hero's name to <b>invite them to a party</b>. Up to 8: you share the XP of kills near you (more for each member), take turns on the loot, and share a copy of each dungeon. <b>/p</b> in chat talks to the party.</li>
+      <li><b>Left thumb</b> anywhere on the left side: move.</li>
+      <li><b>Tap</b> a monster to target it, a hero to see what you can do with them.</li>
+      <li><b>Tap the sword</b> to attack your target: tap again just as each blow lands for a combo. <b>Hold</b> it to keep swinging.</li>
+      <li><b>Skill buttons</b> go at your target (or the nearest foe), heals at the friend you tapped.</li>
+      <li><b>AUTO</b> hunts on its own around where you are, while the game stays open on screen. <b>Potions</b> by the sword.</li>
+      <li><b>Skills</b>: a point every level, in three trees. <b>Bag</b>: tap an item to see it.</li>
+      <li>Every camp has merchants, a banker (one bank for all your heroes) and a notice board; Brom's anvil in Emberwood upgrades items.</li>
+      <li>World bosses roam now and then: hard, and they carry unique items.</li>
     </ul>
   </div>
 
@@ -266,6 +309,7 @@
     <h1 id="death-title">You have fallen</h1>
     <p id="death-text">Your gold pouch feels lighter…</p>
     <button id="respawn">Rise again at camp</button>
+    <p class="death-wait">A healer nearby can raise you where you lie.</p>
   </div>
 
   <div id="loading">
@@ -296,8 +340,8 @@
         <div class="acc-title">New hero</div>
         <div id="class-pick"></div>
         <div id="class-desc" class="acc-desc"></div>
+        <div id="look-pick"></div>
         <input id="char-name" placeholder="Hero name" maxlength="14" autocomplete="off" autocapitalize="words" autocorrect="off" spellcheck="false">
-        <label id="import-row" class="acc-check hidden"><input type="checkbox" id="char-import" checked> Bring my level <span id="import-level"></span> knight saved on this device</label>
         <button type="submit" class="acc-main">Create hero</button>
         <div class="acc-err" id="create-err"></div>
         <button type="button" class="acc-link" id="create-back">Back</button>
@@ -308,8 +352,8 @@
       </div>
     </div>
     <button id="start" class="hidden">Enter the woods</button>
-    <div class="load-help desk-only">WASD move · Click attack · 1–4 skills · Q ale · I bag</div>
-    <div class="load-help touch-only">Left thumb moves · hold the sword to attack · best in landscape</div>
+    <div class="load-help desk-only">Click to move and attack · Z target · R attack · 1–8 skills · K skills · I bag</div>
+    <div class="load-help touch-only">Left thumb moves · tap foes to target · tap the sword to attack · best in landscape</div>
     <button id="install" class="hidden">Install as app</button>
     <div id="ios-install" class="hidden">Play it like an app: tap <b>Share</b> <svg class="share-glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M8 7l4-4 4 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M7 10H5v11h14V10h-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg> then <b>Add to Home Screen</b></div>
   </div>

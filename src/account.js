@@ -5,20 +5,10 @@ import { Assets } from './assets.js';
 import { savedToken, PROTOCOL } from './net.js';
 import { reloadForUpdate } from './update.js';
 
-const LOCAL_SAVE = 'emberwood-save-v1'; // the single-player save from before accounts
-const IMPORTED = 'emberwood-save-imported';
 const VIEWS = ['acc-login', 'acc-chars', 'acc-create', 'acc-wait'];
 const $ = (id) => document.getElementById(id);
-const portrait = (cls) => Assets.icons[`portrait_${cls}`] || Assets.icons.portrait;
+const portrait = (cls, look = 0) => Assets.icons[`portrait_${cls}_${look}`] || Assets.icons[`portrait_${cls}`] || Assets.icons.portrait;
 const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
-
-function localSave() {
-  try {
-    if (localStorage.getItem(IMPORTED)) return null;
-    const s = JSON.parse(localStorage.getItem(LOCAL_SAVE) || 'null');
-    return s && Number.isInteger(s.level) ? s : null;
-  } catch { return null; }
-}
 
 export class AccountScreen {
   constructor(net, { onPlay }) {
@@ -28,7 +18,8 @@ export class AccountScreen {
     this.user = '';
     this.chars = [];
     this.selected = null;
-    this.cls = 'knight';
+    this.cls = 'warrior';
+    this.look = 0;
     $('acc-login').addEventListener('submit', (e) => { e.preventDefault(); this.submitLogin(); });
     $('acc-switch').addEventListener('click', () => this.showLogin(this.mode === 'login' ? 'register' : 'login'));
     $('char-play').addEventListener('click', () => this.play());
@@ -45,7 +36,11 @@ export class AccountScreen {
     $('char-list').addEventListener('dblclick', (e) => { if (e.target.closest('.char-item[data-id]')) this.play(); });
     $('class-pick').addEventListener('click', (e) => {
       const b = e.target.closest('.class-opt');
-      if (b) { this.cls = b.dataset.cls; this.renderClasses(); }
+      if (b) { this.cls = b.dataset.cls; this.look = 0; this.renderClasses(); }
+    });
+    $('look-pick').addEventListener('click', (e) => {
+      const b = e.target.closest('.look-opt');
+      if (b) { this.look = Number(b.dataset.look) || 0; this.renderClasses(); }
     });
   }
 
@@ -152,7 +147,7 @@ export class AccountScreen {
     $('acc-online').textContent = n ? `${n} ${n === 1 ? 'hero is' : 'heroes are'} in the world right now` : '';
     $('char-list').innerHTML = this.chars.map((c) => `
       <button type="button" class="char-item${c.id === this.selected ? ' on' : ''}" data-id="${c.id}">
-        <img src="${portrait(c.cls)}" alt=""><b>${escapeHtml(c.name)}</b><span>Level ${c.level} ${CLASSES[c.cls]?.name || ''}</span>
+        <img src="${portrait(c.cls, c.look)}" alt=""><b>${escapeHtml(c.name)}</b><span>Level ${c.level} ${CLASSES[c.cls]?.name || ''}</span>
       </button>`).join('') + (this.chars.length < MAX_CHARACTERS ? '<button type="button" class="char-item new">+ New hero</button>' : '');
     $('char-play').disabled = !this.selected;
     $('char-del').classList.toggle('hidden', !this.selected);
@@ -170,15 +165,15 @@ export class AccountScreen {
     this.showChars(charId);
   }
 
+  // The four classes, and the looks of the one picked.
   renderClasses() {
     $('class-pick').innerHTML = CLASS_IDS.map((id) => `
       <button type="button" class="class-opt${id === this.cls ? ' on' : ''}" data-cls="${id}">
-        <img src="${portrait(id)}" alt=""><b>${CLASSES[id].name}</b><span>${CLASSES[id].role}</span>
+        <img src="${portrait(id, id === this.cls ? this.look : 0)}" alt=""><b>${CLASSES[id].name}</b><span>${CLASSES[id].role}</span>
       </button>`).join('');
     $('class-desc').textContent = CLASSES[this.cls].desc;
-    const save = localSave();
-    $('import-row').classList.toggle('hidden', !save || this.cls !== 'knight');
-    if (save) $('import-level').textContent = save.level;
+    $('look-pick').innerHTML = `<span>Look</span>${CLASSES[this.cls].looks.map((L, i) => `
+      <button type="button" class="look-opt${i === this.look ? ' on' : ''}" data-look="${i}"><img src="${portrait(this.cls, i)}" alt="">${L.name}</button>`).join('')}`;
   }
 
   showCreate() {
@@ -194,10 +189,8 @@ export class AccountScreen {
     const name = $('char-name').value.trim();
     const err = (m) => { $('create-err').textContent = m; };
     if (!NAME_RULE.test(name)) return err('Names are 3–14 letters, no spaces or numbers.');
-    const save = this.cls === 'knight' && $('char-import').checked ? localSave() : null;
     try {
-      const r = await this.ask('createChar', { name, cls: this.cls, save });
-      if (save) try { localStorage.setItem(IMPORTED, '1'); } catch { /* private mode */ }
+      const r = await this.ask('createChar', { name, cls: this.cls, look: this.look });
       this.chars = r.chars;
       this.showChars(r.created);
     } catch (e) {

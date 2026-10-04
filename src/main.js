@@ -66,8 +66,11 @@ const updates = new UpdateNotice({ beforeReload: () => game.saveAndWait() });
 // The title screen fades out when a hero enters the world, and comes back on "Leave game".
 let hideT = 0;
 let accounts = null; // the sign-in and hero screens (online play)
-// ?autostart: play offline with the hero saved in this browser (automated tests, no server needed)
-const offline = new URLSearchParams(location.search).has('autostart');
+// ?autostart: play offline with the hero saved in this browser (automated tests, no server needed);
+// ?cls=healer picks the class of a new one
+const query = new URLSearchParams(location.search);
+const offline = query.has('autostart');
+const localClass = () => (['warrior', 'scientist', 'rogue', 'healer'].includes(query.get('cls')) ? query.get('cls') : 'warrior');
 
 function hideTitle() {
   loading.classList.add('gone');
@@ -98,6 +101,11 @@ function attachWorld(net) {
   net.on('chat', (m) => game.chat.receive(m));
   net.on('party', (m) => game.party.receive(m));
   net.on('partyInvite', (m) => game.party.invited(m));
+  net.on('recall', (m) => game.recalled(m));
+  net.on('tradeAsk', (m) => game.trade.asked(m));
+  net.on('tradeState', (m) => game.trade.state(m));
+  net.on('tradeDone', (m) => game.trade.done(m));
+  net.on('tradeClosed', (m) => game.trade.closed(m));
 }
 
 game.onLeave = (why) => {
@@ -125,7 +133,7 @@ game.init((f, label) => {
     text.textContent = 'Ready';
     startBtn.classList.remove('hidden');
     const go = () => {
-      if (!game.started) { enter({ id: 'local', name: 'Sir Ember', cls: 'knight', save: game.loadSave() }); return; }
+      if (!game.started) { enter({ id: 'local', name: 'Sir Ember', cls: localClass(), look: 0, save: game.loadSave() }); return; }
       goFullscreen();
       hideTitle();
       game.resume();

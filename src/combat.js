@@ -1,14 +1,15 @@
-// Projectiles (fireballs, bolts, knives, meteors, cultist orbs) and ground loot. owner: 'player' (ours:
-// they deal damage), 'remote' (another hero's: for show, their game deals the damage) or 'enemy' (they
-// hurt our hero). Options: mult (× weapon damage; spell: false = not scaled by Spell Power), aoe
+// Projectiles (fireballs, bolts, arrows, flasks, meteors, cultist orbs) and ground loot. owner: 'player'
+// (ours: they deal damage), 'remote' (another hero's: for show, their game deals the damage) or 'enemy'
+// (they hurt our hero). Options: mult (× weapon damage; spell: false = not scaled by Spell Power), aoe
 // (blast radius), small (a light touch: no smoke or ring), noLight, meteor (a bigger crash), glide
 // (fly level at this height over the ground, following it: heroes' shots, so they never sail over a
-// slime or dive into a bump; they end on a monster, a wall or at their range).
+// slime or dive into a bump; they end on a monster, a wall or at their range), homing (a foe it steers
+// toward), eff (what it does besides damage: link.hit), knock, pierce (on through everything it meets,
+// each once), arrow (a long thin shaft), lob (an arc this high, landing at `to`: onLand(at) is called).
 import * as THREE from 'three';
-import { cloneItem } from './assets.js';
+import { cloneItem, itemModel } from './assets.js';
 import { heightAt, resolveCollision, wallAt } from './world.js';
-import { RARITY, BASES } from './items.js';
-import { buildGearModel } from './gear.js';
+import { itemDef, itemName, itemColor } from './items.js';
 import { hdr } from './fx.js';
 import { rand } from './util.js';
 
@@ -30,37 +31,61 @@ export class Projectiles {
 
   spawn(o) {
     const dir = o.dir ? o.dir.clone() : o.to.clone().sub(o.from);
-    if (o.glide) dir.y = 0;
+    if (o.glide || o.lob) dir.y = 0;
     dir.normalize();
     const mesh = new THREE.Mesh(this.geo, new THREE.MeshBasicMaterial({ color: hdr(o.color, 3.2) }));
     mesh.scale.setScalar(o.size || 0.3);
+    if (o.arrow) mesh.scale.set((o.size || 0.14) * 0.7, (o.size || 0.14) * 0.7, (o.size || 0.14) * 5.5);
     mesh.position.copy(o.from);
     this.game.scene.add(mesh);
     const light = o.noLight ? null : this.game.fx.claimLight(mesh, o.color, 5, 7);
-    this.list.push({ ...o, pos: o.from.clone(), dir, mesh, light, traveled: 0, t: 0 });
+    const lob = o.lob ? { from: o.from.clone(), to: o.to.clone(), len: Math.max(0.5, Math.hypot(o.to.x - o.from.x, o.to.z - o.from.z)) } : null;
+    this.list.push({ ...o, pos: o.from.clone(), dir, mesh, light, traveled: 0, t: 0, lobPath: lob, hitSet: o.pierce ? new Set() : null });
   }
 
   update(dt) {
     const g = this.game;
     for (let i = this.list.length - 1; i >= 0; i--) {
       const p = this.list[i];
+      if (p.homing && p.homing.alive && p.homing.pos) { // steer toward the foe it was shot at
+        const want = new THREE.Vector3(p.homing.pos.x - p.pos.x, 0, p.homing.pos.z - p.pos.z);
+        if (want.lengthSq() > 0.01) p.dir.lerp(want.normalize(), Math.min(1, dt * 9)).normalize();
+      }
       const step = p.speed * dt;
       p.pos.addScaledVector(p.dir, step);
       if (p.glide) p.pos.y += (heightAt(p.pos.x, p.pos.z) + p.glide - p.pos.y) * Math.min(1, dt * 12); // down from the hand, then level
       p.traveled += step;
       p.t += dt;
+      if (p.lobPath) { // a thrown flask: an arc that lands on its spot
+        const L = p.lobPath, k = Math.min(1, p.traveled / L.len);
+        p.pos.x = L.from.x + (L.to.x - L.from.x) * k;
+        p.pos.z = L.from.z + (L.to.z - L.from.z) * k;
+        p.pos.y = L.from.y + (heightAt(L.to.x, L.to.z) - L.from.y) * k + Math.sin(Math.PI * k) * p.lob;
+      }
       p.mesh.position.copy(p.pos);
-      p.mesh.scale.setScalar((p.size || 0.3) * (1 + Math.sin(p.t * 30) * 0.08));
+      if (p.arrow) p.mesh.lookAt(p.pos.x + p.dir.x, p.pos.y, p.pos.z + p.dir.z);
+      else p.mesh.scale.setScalar((p.size || 0.3) * (1 + Math.sin(p.t * 30) * 0.08));
       if (p.light) p.light.light.position.copy(p.pos);
-      g.fx.add.emit({ pos: p.pos, count: 2, spread: 0.12, velSpread: 0.5, color: hdr(p.color, 2.4), colorEnd: hdr(p.trail || p.color, 0.3), size: (p.size || 0.3) * 1.6, sizeEnd: 0.02, life: 0.35, drag: 2 });
+      if (!p.arrow || Math.random() < 0.4) g.fx.add.emit({ pos: p.pos, count: p.arrow ? 1 : 2, spread: 0.12, velSpread: 0.5, color: hdr(p.color, 2.4), colorEnd: hdr(p.trail || p.color, 0.3), size: (p.size || 0.3) * (p.arrow ? 0.8 : 1.6), sizeEnd: 0.02, life: p.arrow ? 0.18 : 0.35, drag: 2 });
 
       let hit = null;
-      if (p.owner !== 'enemy') {
-        for (const e of p.owner === 'player' ? g.foes : g.enemies.list) {
-          if (!e.alive || e.state === 'spawn') continue;
+      if (p.lobPath) {
+        if (p.traveled >= p.lobPath.len) hit = 'ground';
+      } else if (p.owner !== 'enemy') {
+        for (const e of p.owner === 'player' ? g.foes : [...g.enemies.list, ...g.others.list.filter((o) => o.hostile)]) {
+          if (!e.alive || e.state === 'spawn' || p.hitSet?.has(e)) continue;
           const dx = e.pos.x - p.pos.x, dz = e.pos.z - p.pos.z;
           // (the projectile's own size counts: a bolt at chest height still hits a knee-high slime)
-          if (Math.hypot(dx, dz) < e.radius + p.radius && p.pos.y + p.radius > e.pos.y - 0.2 && p.pos.y - p.radius < e.pos.y + e.height + 0.3) { hit = e; break; }
+          if (Math.hypot(dx, dz) < e.radius + p.radius && p.pos.y + p.radius > e.pos.y - 0.2 && p.pos.y - p.radius < e.pos.y + e.height + 0.3) {
+            if (p.hitSet) { // (an arrow that goes on: hit it, and keep flying)
+              p.hitSet.add(e);
+              if (p.owner === 'player') g.damageEnemy(e, g.player.rollDamage(p.mult, p.spell !== false), p.pos, p.knock ?? 0.3, p.eff || null);
+              g.fx.sparks(p.pos, p.color, 8, 3);
+              continue;
+            }
+            hit = e;
+            break;
+          }
         }
       } else {
         // our hero (it hurts), or another hero in the way (it bursts on them; their game counts it)
@@ -97,12 +122,13 @@ export class Projectiles {
       if (vol) g.sfx.play(p.small ? 'hit' : p.meteor ? 'slam' : 'explode', p.small ? 0.5 * vol : vol);
       if (p.meteor && vol) g.sfx.play('explode', vol);
       if (p.meteor) g.shake(0.55 * vol);
+      if (p.onLand) p.onLand(new THREE.Vector3(p.pos.x, heightAt(p.pos.x, p.pos.z), p.pos.z));
       if (p.owner !== 'player') return; // someone else's: their game deals the damage
       if (!p.small) g.shake(0.25);
       const targets = p.aoe
         ? g.foes.filter((e) => e.alive && e.state !== 'spawn' && Math.hypot(e.pos.x - p.pos.x, e.pos.z - p.pos.z) < p.aoe + e.radius)
         : hit && hit !== 'ground' ? [hit] : [];
-      for (const e of targets) g.damageEnemy(e, g.player.rollDamage(p.mult, p.spell !== false), p.pos, p.small ? 0.2 : 0.8);
+      for (const e of targets) g.damageEnemy(e, g.player.rollDamage(p.mult, p.spell !== false), p.pos, p.knock ?? (p.small ? 0.2 : 0.8), p.eff || null);
     } else {
       if (vol) g.sfx.play('zap', vol);
       if (hit === g.player) g.damagePlayer(p.dmg, null);
@@ -166,43 +192,32 @@ export class LootManager {
     const a = rand(0, Math.PI * 2), s = rand(1.2, 2.6);
     const l = { kind, group, obj, data, vel: new THREE.Vector3(Math.cos(a) * s, rand(4.5, 6), Math.sin(a) * s), landed: false, t: 0, bounces: 0 };
     if (kind === 'item') {
-      const r = RARITY[data.rarity];
-      if (r.beam) {
-        l.beam = new THREE.Mesh(beamGeo, beamMaterial(r.beam));
+      const d = itemDef(data), beam = d.unique ? 0xff7a1a : d.stack ? null : { mid: 0x4d8dff, high: 0xffd23f }[d.tier];
+      if (beam) {
+        l.beam = new THREE.Mesh(beamGeo, beamMaterial(beam));
         l.beam.visible = false;
         group.add(l.beam);
       }
-      l.label = this.game.ui.createLabel(data.name, r.color, (out) => out.copy(group.position).setY(group.position.y + 0.95));
+      l.label = this.game.ui.createLabel(`${itemName(data)}${data.n > 1 ? ` ×${data.n}` : ''}`, itemColor(data), (out) => out.copy(group.position).setY(group.position.y + 0.95));
     }
     this.list.push(l);
     return l;
   }
 
   dropItem(item, pos) {
+    const d = itemDef(item);
+    if (!d) return;
     let obj;
-    const gear = BASES[item.base]?.gear;
-    if (item.model) {
-      obj = cloneItem(item.model);
-      obj.scale.setScalar(0.62);
-      obj.rotation.set(0, 0, item.slot === 'weapon' ? 1.25 : 0);
-    } else if (gear) {
-      obj = buildGearModel(gear);
-      obj.scale.setScalar(gear.kind === 'ring' ? 0.9 : 0.8);
-    } else {
-      obj = makeBag();
-    }
+    if (d.stack) obj = d.kind === 'potion' ? cloneItem('mug_full') : makeBag();
+    else obj = itemModel(item);
+    if (d.model) obj.rotation.set(0, 0, d.kind === 'weapon' ? 1.25 : 0);
+    obj.scale.setScalar(d.stack ? 0.55 : d.model ? 0.62 : d.kind === 'acc' ? 0.9 : 0.8);
     this._spawn('item', obj, pos, item);
-    this.game.sfx.play('drop', item.rarity === 'legendary' ? 1 : 0.6);
+    this.game.sfx.play('drop', d.unique ? 1 : 0.6);
   }
 
   dropGold(amount, pos) {
     this._spawn('gold', makeCoins(amount), pos, amount);
-  }
-
-  dropPotion(pos) {
-    const o = cloneItem('mug_full');
-    o.scale.setScalar(0.55);
-    this._spawn('potion', o, pos, 1);
   }
 
   remove(l) {
@@ -249,22 +264,21 @@ export class LootManager {
         const k = Math.min(1, dt * 10);
         gp.x += dx * k; gp.z += dz * k;
         if (d < 0.6) {
-          if (l.kind === 'gold') g.addGold(l.data, gp);
-          else g.addPotion(gp);
+          g.addGold(l.data, gp);
           this.remove(l);
         }
       } else if (l.kind === 'item' && l.landed && d < 1.3) {
+        const n = l.data.n;
         if (p.addItem(l.data)) {
-          g.ui.log(`Picked up <b style="color:${RARITY[l.data.rarity].color}">${l.data.name}</b>`);
+          g.ui.log(`Picked up <b style="color:${itemColor(l.data)}">${itemName(l.data)}${n > 1 ? ` ×${n}` : ''}</b>`);
           g.sfx.play('pickup');
-          g.quests.onEvent('loot', { rarity: l.data.rarity });
           this.remove(l);
         } else if (this.fullMsgT <= 0) {
           g.ui.centerMsg('Your bag is full');
           this.fullMsgT = 3;
         }
       }
-      if (l.t > (l.kind === 'item' && l.data.rarity !== 'common' ? 240 : 120)) this.remove(l);
+      if (l.t > (l.kind === 'item' && (itemDef(l.data)?.unique || itemDef(l.data)?.tier !== 'low') ? 300 : 150)) this.remove(l);
     }
     this.list = this.list.filter((l) => !l.dead);
   }

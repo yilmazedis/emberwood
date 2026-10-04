@@ -242,14 +242,12 @@ function planProps(rng) {
   const barrel = (x, z) => put('barrel', x, z, {}, 0.45);
 
   // --- Camp
-  campfire(0, 0);
-  tent(-5.8, -2.8, 0.9, 0xc9a06a);
-  tent(5.4, -3.6, -0.8, 0x9c5a3c);
+  campfire(0, 0); // (the merchants, the banker, the blacksmith and the board: camps.js)
   tent(-2.5, 6.4, 2.9, 0x6f8fa8);
   put('bench', 0, 2.3, { rotY: 0 });
   put('bench', 2.1, -1.2, { rotY: 1.05 });
   put('bench', -2.1, -1.1, { rotY: -1.05 });
-  crate(-7.2, 1.2, 0.3); crate(-7.9, 2.2, 0.8, 0.7); barrel(7.4, -1.2); barrel(8.0, -0.3);
+  barrel(7.4, -1.2); barrel(8.0, -0.3);
   put('signpost', 2.6, -9);
   put('waystone', 5.5, 5.5, {}, 0.9); // to the other lands (maps.js WAYSTONE)
   // palisade ring with gaps for paths
