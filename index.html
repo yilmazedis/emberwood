@@ -26,11 +26,12 @@
 </script>
 <!-- The game's code, styles and models come from jsDelivr's CDN on the live site, pinned to this version's tag
      (the host is slow to serve files); anywhere else, or if the CDN fails, from here. tools/stamp-version.mjs
-     writes the tag and the module list. Every module is asked for at once: otherwise the browser finds them
-     level by level. -->
+     writes the tag and the module list. Every file is fetched up front (otherwise the browser finds them level
+     by level), a dozen at a time, and a refused or dropped one is asked for again: the CDN sometimes cuts a new
+     connection short, and a module that failed to load stays failed in its page (a fetch doesn't). -->
 <style id="boot-style">html, body { margin: 0; background: #0e0b08; } body > * { visibility: hidden; }</style>
 <script type="module">
-  const CDN = 'https://cdn.jsdelivr.net/gh/yilmazedis/emberwood@ew-88b3c190c196/';
+  const CDN = 'https://cdn.jsdelivr.net/gh/yilmazedis/emberwood@ew-952b23df26a4/';
   const MODULES = ['account.js', 'ambience.js', 'animator.js', 'arena.js', 'assets.js', 'audio.js', 'bank.js', 'camps.js', 'character.js', 'chat.js', 'classes.js', 'combat.js', 'control.js', 'doll.js', 'dungeon-map.js', 'dungeon.js', 'enemies.js', 'fx.js', 'game.js', 'gear.js', 'input.js', 'items.js', 'lands.js', 'link.js', 'local.js', 'main.js', 'maps.js', 'maps/arena.js', 'maps/cinderfall.js', 'maps/crypt.js', 'maps/depths.js', 'maps/frostfang.js', 'maps/shadowmere.js', 'monsters.js', 'music.js', 'net.js', 'noise.js', 'npcs.js', 'others.js', 'outdoor-map.js', 'party.js', 'places.js', 'player.js', 'quest-data.js', 'quests.js', 'settings.js', 'sim/world.js', 'skills.js', 'skills/common.js', 'skills/healer.js', 'skills/rogue.js', 'skills/scientist.js', 'skills/warrior.js', 'skillui.js', 'terrain.js', 'trade.js', 'ui.js', 'update.js', 'util.js', 'version.js', 'world.js'];
   const q = new URLSearchParams(location.search); // (?nocdn: everything from here; ?cdn: from the CDN anywhere)
   const live = (location.hostname === 'emberwood.kerimcaglar.com' || q.has('cdn')) && !q.has('nocdn');
@@ -44,28 +45,56 @@
     l.onerror = () => { l.remove(); reject(new Error(`${l.href} did not load`)); };
     document.head.append(l);
   });
-  const code = (base) => {
-    for (const m of MODULES) {
+  // the three.js files the game loads, through the import map above
+  const lib = JSON.parse(document.querySelector('script[type="importmap"]').textContent).imports;
+  const THREE = [lib.three, ...['loaders/GLTFLoader.js', 'postprocessing/EffectComposer.js', 'postprocessing/MaskPass.js',
+    'postprocessing/OutputPass.js', 'postprocessing/Pass.js', 'postprocessing/RenderPass.js', 'postprocessing/ShaderPass.js',
+    'postprocessing/UnrealBloomPass.js', 'shaders/CopyShader.js', 'shaders/LuminosityHighPassShader.js',
+    'shaders/OutputShader.js', 'utils/BufferGeometryUtils.js', 'utils/SkeletonUtils.js'].map((f) => lib['three/addons/'] + f)];
+  // into the browser's cache, `at` at a time; a refused, dropped or failing one is tried 3 more times
+  const fetchAll = (urls, at) => {
+    let next = 0;
+    const one = async (url) => {
+      for (let i = 0; ; i++) {
+        let res = null;
+        try { res = await fetch(url); } catch (err) { if (i >= 3) throw err; }
+        if (res?.ok) { await res.arrayBuffer(); return; }
+        if (res && (res.status < 500 || i >= 3)) throw new Error(`${url}: HTTP ${res.status}`);
+        await new Promise((r) => setTimeout(r, 250 * (i + 1)));
+      }
+    };
+    return Promise.all(Array.from({ length: at }, async () => { while (next < urls.length) await one(urls[next++]); }));
+  };
+  // then the game, its modules all asked for at once (from the cache, for the CDN's)
+  const code = async (base) => {
+    const files = MODULES.map((m) => `${base}src/${m}`);
+    await fetchAll(base === CDN ? [...files, ...THREE] : THREE, 12); // (the site's own files may not be kept)
+    for (const f of files) {
       const l = document.createElement('link');
       l.rel = 'modulepreload';
-      l.href = `${base}src/${m}`;
+      l.href = f;
       document.head.append(l);
     }
     return import(`${base}src/main.js`);
   };
-  if (live) {
-    try {
-      await styles(CDN);
+  // A module that failed stays failed in its page (three.js too, which comes from the CDN either way), so a
+  // failed start is tried again in a fresh page: from the site, twice at most (counted for this tab).
+  let tries = 0;
+  try { tries = Number(sessionStorage.getItem('ew-boot-tries')) || 0; } catch { /* no storage */ }
+  const fromCdn = live && !tries;
+  try {
+    if (fromCdn) { await styles(CDN); show(); } else styles('./').then(show, show);
+    await code(fromCdn ? CDN : './');
+    try { sessionStorage.removeItem('ew-boot-tries'); } catch { /* no storage */ }
+  } catch (err) {
+    console.warn(`the game did not load (try ${tries + 1})`, err);
+    let again = false;
+    try { if (tries < 2) { sessionStorage.setItem('ew-boot-tries', String(tries + 1)); again = true; } } catch { /* no storage */ }
+    if (again) location.reload();
+    else {
       show();
-      await code(CDN);
-    } catch (err) {
-      console.warn('the CDN failed: loading from the site', err);
-      styles('./').then(show, show);
-      await code('./');
+      document.getElementById('load-text').textContent = 'The game could not load. Check your connection, then refresh the page.';
     }
-  } else {
-    styles('./').then(show, show);
-    await code('./');
   }
 </script>
 </head>
