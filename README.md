@@ -53,8 +53,8 @@ automated tests; `&cls=scientist`, `rogue` or `healer` picks the class of a new 
   life and land; `/p` is the party's chat; `/kick`, `/leave`, and the leader can pass the lead. A party shares one
   copy of each dungeon. Parties live on the server (a restart ends them); a member who drops out keeps their place
   for five minutes.
-- **Trading:** right-click (or tap) a hero standing near you and pick Trade. Both put in items from their bag and
-  some gold; any change takes both "accept"s back. When both accept, the server checks that every item and coin is
+- **Trading:** right-click (or tap) a hero standing near you and pick Trade. The bag opens with the trade beside it:
+  click (or tap) items in the bag to put them in, set some gold; any change takes both "accept"s back. When both accept, the server checks that every item and coin is
   really there, swaps them in both saves and tells both games (`server/trade.mjs`).
 - **The Arena:** by waystone, from level 5. In its pit every hero but your party is a foe: a blow goes through the
   server (both in the pit, within reach, not party) to the victim's game. The server scales it to 45% of what it
@@ -139,7 +139,8 @@ level 10). Click (or tap) an open skill to put it on one of the 8 action slots.
 
 Some skills need a weapon: shield skills a shield, Earthshatter a two-handed weapon, the big staff spells a long
 staff, Teleport Party and Plague a book, dagger and bow skills their weapon. Skills cost mana as a share of the
-level's mana pool, so they cost the same at every level. Heals and blessings go on the friendly hero you picked
+level's mana pool, so they cost the same at every level, and enough that a long fight needs mana potions (mana
+comes back slowly, four times faster in a camp). Heals and blessings go on the friendly hero you picked
 (or you); the 10-minute blessings (Swiftness, Blessing of Vitality, Holy Armor) are kept when you log out.
 Teleport Party opens a door: every party member, anywhere, is asked whether to step through to the caster.
 
@@ -160,8 +161,9 @@ much slower when built for healing). In the Arena the skills hit heroes at 45%.
   flashes) and the next blow comes faster and harder: four in a chain (×1, ×1.04, ×1.08, ×1.2), +5% for a perfect
   press, and the chain starts over after the fourth. Too early breaks it. A skill cast in that moment is stronger
   too. Holding R (or the button) keeps swinging without the bonus.
-- **Auto-hunt:** T (or AUTO) fights the monsters around where you switched it on, picks up loot and drinks a
-  potion when hurt. Moving stops it.
+- **Auto-hunt:** T (or AUTO) fights the monsters around where you switched it on, picks up gold and items between
+  fights and drinks a potion when hurt. Moving stops it. With a full bag (a red "!" on the bag button) it leaves
+  items where they lie and keeps hunting.
 
 ## Items
 
@@ -180,8 +182,12 @@ the Healer's Chain, Blessed and Seraph).
 
 \* Warriors and Healers both can use these. Shields (Round, Kite, Tower) are for both too.
 
+- **Drops are rare:** a monster drops an item now and then (a slime about one time in forty, a knight one in
+  fifteen), and the best ones for its level least often. A boss drops one item, sometimes a recipe too; a chest
+  in a dungeon, one now and then. Gold drops often.
 - **Accessories:** rings, earrings, necklaces and belts (copper, silver, gold), for every class. Nobody sells them:
   they only drop from monsters.
+- **Potions** of a kind all go in one bag slot, however many.
 - **Unique items:** only the world bosses (below) drop them, one in five kills, every unique of the boss's item
   class equally likely: weapons, shields, books and accessories, never clothes. They are a quarter stronger
   than normal items of their level.
@@ -229,8 +235,10 @@ room has a **trapdoor down** to a deeper, harder floor with its own boss:
 **World bosses** roam the lands: Gorehorn the Wanderer in Emberwood (low class uniques), Skadi the Frost Giant in
 Frostfang (low), Ignis, the Living Pyre in Cinderfall (middle) and Umbra the Devourer in Shadowmere (high). One rises
 a few minutes after heroes arrive in a land, and ten minutes after it falls. It walks from zone to zone and never
-attacks first, but once struck it fights everyone who hit it, calls for help, and has about five times the
-strength of the land's boss: bring a party. The world chat announces when one rises and falls, and a ☠ marks it on
+attacks first, but once struck it fights everyone who hit it and calls for help. It has ten times the Life of the
+land's boss and armor that takes a tenth off every blow (its own blows are a boss's): bring a party. Bosses walk
+through trees and rocks instead of getting stuck on them. A world boss drops gold, one item or recipe, and one
+time in five a unique. The world chat announces when one rises and falls, and a ☠ marks it on
 the minimap.
 
 The lands' shapes are in `src/maps/*.js` (an `OutdoorMap` or `DungeonMap` each, shared with the server); `lands.js`,
@@ -241,14 +249,18 @@ The lands' shapes are in `src/maps/*.js` (an `OutdoorMap` or `DungeonMap` each, 
 **Desktop:** left click the ground to walk there (WASD also move) · left click a monster to target and attack it
 · Z nearest target · R attack (combos: see above) · 1–8 skills (at your target, at the cursor for areas, at the
 friend you clicked for heals) · T auto-hunt · Q healing potion · X mana potion · E talk to people in camp, use
-waystones, doors and trapdoors · I (or B, Tab) character and bag · K skills · H help · right click a hero: party or
-trade · Enter chat (`/p` party, `/invite Name`) · mouse wheel zoom · Esc let go of the target, or settings · M mute
+waystones, doors and trapdoors · I (or B, Tab) character and bag · K skills · H help · F full screen · right click a
+hero: party or trade · right click an item: everything you can do with it · Enter chat (`/p` party, `/invite Name`) ·
+mouse wheel zoom · Esc let go of the target, or settings · M mute. The menu is the row of icons in the bottom right
+corner, under the log (what you picked up, gold included).
 
 **Phones and tablets** (switches automatically on the first touch): a floating joystick on the left of the screen
 (push a little to walk, fully to run), the sword button (tap for each blow of a combo, hold to keep swinging), six
 skill buttons around it, the two potions and AUTO beside them. Tap a monster to target it, a hero for party or
 trade. Without a target, attacks and skills go at the nearest enemy. In the bag, tap an item to see it, then Use,
-Equip or Sell. Chat opens a line at the top of the screen (the keyboard covers the bottom).
+Equip or Sell. Chat opens a line at the top of the screen (the keyboard covers the bottom). The page can't be zoomed
+by accident (a quick double tap or two fingers on the buttons used to zoom iPhones in, leaving the game shifted). A
+web page can't lock the screen's turning on iPhones; on Android it goes full screen and stays sideways.
 
 ## Sound and settings
 

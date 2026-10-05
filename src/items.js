@@ -280,8 +280,9 @@ for (const d of Object.values(ITEMS)) if (d.unique) UNIQUES[d.tier].push(d.key);
 
 // ---------------------------------------------------------------- things you use up
 // potions heal (or fill mana) by a share of the maximum; elixirs boost for ten minutes; the camp scroll takes
-// you to the camp of the land you're in; recipes are what the anvil needs to upgrade an item.
-const stack = (key, def) => add(key, { stack: def.stack || 50, ...def });
+// you to the camp of the land you're in; recipes are what the anvil needs to upgrade an item. Potions of a
+// kind all go in one slot, however many.
+const stack = (key, def) => add(key, { stack: def.stack || (def.kind === 'potion' ? 9999 : 50), ...def });
 stack('hp_potion_1', { name: 'Minor Healing Potion', kind: 'potion', use: 'hp', amount: 0.3, level: 1, price: 15, icon: 'potion_red', desc: 'Restores 30% of your maximum Life.' });
 stack('hp_potion_2', { name: 'Healing Potion', kind: 'potion', use: 'hp', amount: 0.45, level: 15, price: 70, icon: 'potion_red2', desc: 'Restores 45% of your maximum Life.' });
 stack('hp_potion_3', { name: 'Greater Healing Potion', kind: 'potion', use: 'hp', amount: 0.6, level: 35, price: 240, icon: 'potion_red3', desc: 'Restores 60% of your maximum Life.' });
@@ -387,16 +388,17 @@ export function upgradeCost(it) {
 // accessory; never better than a step above the monster.
 export function rollDrop(level, cls) {
   const tier = tierAt(level);
-  const roll = Math.random();
-  if (roll < 0.28) { // an accessory of this class of items
+  if (Math.random() < 0.15) { // an accessory of this class of items (nobody sells them)
     const keys = Object.values(ITEMS).filter((d) => d.kind === 'acc' && !d.unique && d.tier === tier && d.level <= level + 4).map((d) => d.key);
     if (keys.length) return makeItem(pick(keys));
   }
-  // weapons and clothes no more than a few levels above the monster, and not far below it
+  // weapons and clothes no more than a few levels above the monster, and not far below it; the newest of
+  // them (the best for a hero hunting here) come less often than older ones
   const fits = (d) => !d.unique && !d.stack && d.kind !== 'acc' && d.level <= level + 2 && d.level >= Math.max(1, level - 14);
   const pool = Object.values(ITEMS).filter(fits);
   if (!pool.length) return null;
-  const d = weightedPick(pool.map((x) => ({ x, w: (x.classes?.includes(cls) ? 3 : 1) * (x.kind === 'armor' ? 0.6 : 1) }))).x;
+  const weight = (x) => (x.classes?.includes(cls) ? 3 : 1) * (x.kind === 'armor' ? 0.6 : 1) * (x.level >= level - 4 ? 0.35 : 1);
+  const d = weightedPick(pool.map((x) => ({ x, w: weight(x) }))).x;
   return makeItem(d.key);
 }
 

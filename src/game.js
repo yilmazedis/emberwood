@@ -16,7 +16,7 @@ import { Projectiles, LootManager } from './combat.js';
 import { UI } from './ui.js';
 import { Doll } from './doll.js';
 import { Sfx } from './audio.js';
-import { rollDrop, rollPotion, rollUnique, makeItem, itemName, itemColor } from './items.js';
+import { rollDrop, rollPotion, rollUnique, makeItem, itemName, itemColor, tierAt } from './items.js';
 import { monsterXp } from './monsters.js';
 import { Input } from './input.js';
 import { Npcs } from './npcs.js';
@@ -34,6 +34,9 @@ import { loadSettings, saveSettings } from './settings.js';
 import { angleDiff, yawTo, randInt, rand, chance, clamp } from './util.js';
 
 const SAVE_KEY = 'emberwood-save-v1'; // the local save (offline play: ?autostart)
+// A monster with armor (the world bosses) takes less of poison and burning on it too.
+const throughArmor = (e, eff) => (e.def.armor && eff?.dot ? { ...eff, dot: [eff.dot[0] * (1 - e.def.armor), eff.dot[1], eff.dot[2]] } : eff);
+const ITEM_DROP = 0.2; // a monster's chance of an item is this share of its drop value (a slime ~2%, a knight ~7%)
 
 export class Game {
   constructor() {
@@ -98,6 +101,9 @@ export class Game {
     this.onTitle = false; // left the game (back on the title screen)
     this.applyQuality(this.settings.quality);
     window.addEventListener('resize', () => this.onResize());
+    // (a phone reports its new size a little after it turns, and the page's own box says it best)
+    window.addEventListener('orientationchange', () => { for (const ms of [80, 350, 900]) setTimeout(() => this.onResize(), ms); });
+    if (window.ResizeObserver) new ResizeObserver(() => this.onResize()).observe(container);
     // app in the background: save, and let the music and ambience rest
     document.addEventListener('visibilitychange', () => {
       if (!this.started) return;
@@ -125,7 +131,7 @@ export class Game {
     this.composer.setPixelRatio(ratio);
     this.bloom.enabled = !low;
     this.sun.castShadow = !low;
-    this.onResize();
+    this.onResize(true);
   }
 
   // The hero to play: { id, name, cls, look, save, bank, rev } from the server (or the local one when offline).
@@ -298,6 +304,7 @@ export class Game {
         case 'KeyK': this.ui.skills.toggle(); break;
         case 'KeyI': case 'KeyB': case 'Tab': this.ui.toggleInventory(); e.preventDefault(); break;
         case 'KeyH': this.ui.togglePanel('help'); break;
+        case 'KeyF': this.ui.toggleFullscreen(); break;
         case 'KeyE': this.interact(); break;
         case 'KeyM': this.ui.toggleSound(); break;
         case 'Escape': this.ui.escape(); break;
@@ -624,6 +631,7 @@ export class Game {
   affectEnemy(e, eff) {
     if (!e.alive) return;
     if (e.isHero) { if (eff.stun || eff.slow || eff.dot) this.link.hitHero(e, eff.dot ? 1 : 0, false, eff); return; }
+    eff = throughArmor(e, eff);
     this.link.hit(e, 0, false, 0, this.player.pos, eff);
     e.applyStatus(eff);
   }
@@ -640,7 +648,9 @@ export class Game {
       this.sfx.play(crit ? 'crit' : 'hit');
       return amount;
     }
+    if (e.def.armor) amount = Math.max(1, Math.round(amount * (1 - e.def.armor)));
     if (e.vulnT > 0) amount = Math.round(amount * (1 + (e.vulnBy || 0.2)));
+    eff = throughArmor(e, eff);
     this.link.hit(e, amount, crit, knock, fromPos, eff);
     if (eff) e.applyStatus(eff);
     e.hurt(amount);
@@ -728,27 +738,27 @@ export class Game {
     if (!loot) return;
     const at = pos.clone();
     const gold = () => Math.round(randInt(d.gold[0], d.gold[1]) * (1 + 0.2 * (level - 1)));
+    const recipe = () => makeItem(`recipe_${tierAt(level)}`);
     if (chance(0.75)) this.loot.dropGold(gold(), at);
-    if (chance(d.boss ? 1 : 0.06)) this.loot.dropItem(rollPotion(level), at);
-    if (d.worldBoss) { // the roaming ones: a unique one time in five, and plenty else
+    if (!d.boss && chance(0.05)) this.loot.dropItem(rollPotion(level), at);
+    if (d.worldBoss) { // the roaming ones: a unique one time in five, and one thing more
       for (let i = 0; i < 4; i++) this.loot.dropGold(gold(), at);
       if (chance(0.2)) {
         const u = rollUnique(d.worldBoss);
         this.loot.dropItem(u, at);
         this.ui.log(`<b style="color:${itemColor(u)}">${itemName(u)}</b>! A unique item drops.`, 'lvl');
       }
-      for (let i = 0; i < 3; i++) { const it = rollDrop(level, p.cls); if (it) this.loot.dropItem(it, at); }
-      this.loot.dropItem(makeItem(`recipe_${d.worldBoss}`, { n: 1 + randInt(0, 1) }), at);
-      this.loot.dropItem(rollPotion(level), at);
+      const it = chance(0.5) ? makeItem(`recipe_${d.worldBoss}`) : rollDrop(level, p.cls);
+      if (it) this.loot.dropItem(it, at);
       this.ui.log(`<b>${d.name}</b> has been slain!`, 'lvl');
       this.shake(0.6 * this.volAt(at));
-    } else if (d.boss) {
-      for (let i = 0; i < 2; i++) { const it = rollDrop(level + 1, p.cls); if (it) this.loot.dropItem(it, at); }
-      if (chance(0.3)) this.loot.dropItem(makeItem(level >= 40 ? 'recipe_high' : level >= 20 ? 'recipe_mid' : 'recipe_low'), at);
-      this.loot.dropItem(rollPotion(level), at);
+    } else if (d.boss) { // one thing, now and then a recipe too
+      const it = rollDrop(level + 1, p.cls);
+      if (it) this.loot.dropItem(it, at);
+      if (chance(0.25)) this.loot.dropItem(recipe(), at);
       this.ui.log(`<b>${d.name}</b> has been slain!`, 'lvl');
       this.shake(0.5 * this.volAt(at));
-    } else if (chance(d.drop * 0.7)) {
+    } else if (chance(d.drop * ITEM_DROP)) {
       const it = rollDrop(level, p.cls);
       if (it) this.loot.dropItem(it, at);
     }
@@ -832,6 +842,17 @@ export class Game {
     this.ui.floater(new THREE.Vector3(pos.x, pos.y + 1, pos.z), `+${n}g`, 'gold');
     this.sfx.play('gold');
     this.ui.refreshInventory();
+    // in the log: coins picked up close together add up on one line
+    const g = this.goldLine, now = performance.now();
+    if (g && g.el.isConnected && now - g.at < 6000) {
+      g.n += n;
+      g.at = now;
+      g.el.innerHTML = `Picked up <b>${g.n} gold</b>`;
+      g.el.parentNode.appendChild(g.el); // (to the bottom, as the newest)
+      this.ui.keepLine(g.el);
+    } else {
+      this.goldLine = { n, at: now, el: this.ui.log(`Picked up <b>${n} gold</b>`, 'gold') };
+    }
   }
 
   // Something that runs a while every frame (burning ground, a rain of arrows): fn(dt, t) returns true to
@@ -980,8 +1001,14 @@ export class Game {
     }
   }
 
-  onResize() {
-    const w = Math.max(1, window.innerWidth), h = Math.max(1, window.innerHeight);
+  // The size of the page's box for the game, not of the part of the page on screen (which is smaller while
+  // a phone has the page zoomed in: sizing to that left the game in a corner).
+  onResize(force = false) {
+    const box = this.renderer.domElement.parentElement;
+    const w = Math.max(1, box?.clientWidth || window.innerWidth), h = Math.max(1, box?.clientHeight || window.innerHeight);
+    if (!force && w === this._w && h === this._h) return;
+    this._w = w;
+    this._h = h;
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(w, h);

@@ -8,7 +8,7 @@ import { SKILLS } from './skills.js';
 
 const AUTO_RANGE = 15; // m from where auto was switched on that it hunts
 const AUTO_LEASH = 26; // …and it walks back if it ends up farther than this
-const LOOT_RANGE = 9;
+const LOOT_RANGE = AUTO_RANGE + 3; // (what falls where its monster fell)
 
 export class Control {
   constructor(game, player) {
@@ -225,8 +225,8 @@ export class Control {
     } else if (this.moveTo) {
       goal = this.moveTo;
       if (Math.hypot(goal.x - p.pos.x, goal.z - p.pos.z) < 0.35) { this.moveTo = null; goal = null; }
-    } else if (this.auto && !t && Math.hypot(this.auto.anchor.x - p.pos.x, this.auto.anchor.z - p.pos.z) > 3) {
-      goal = this.lootSpot() || this.auto.anchor;
+    } else if (this.auto && !t) { // between fights: what fell, else back to the hunting ground
+      goal = this.lootSpot() || (Math.hypot(this.auto.anchor.x - p.pos.x, this.auto.anchor.z - p.pos.z) > 3 ? this.auto.anchor : null);
     }
     if (!goal) return null;
     let gx = goal.x, gz = goal.z;
@@ -276,6 +276,9 @@ export class Control {
     if (p.hp < p.stats.maxHp * 0.35) p.drink('hp');
     if (p.mp < p.stats.maxMp * 0.15) p.drink('mp');
     const away = Math.hypot(a.anchor.x - p.pos.x, a.anchor.z - p.pos.z);
+    // nothing on us: pick up what fell close by first (steer walks there)
+    const threat = g.enemies.list.some((e) => this.isFoe(e) && e.state === 'chase' && this.dist(e) < 14);
+    if (!threat && this.lootSpot(8)) { if (this.target && !this.pending) this.setTarget(null); return; }
     if (this.isFoe(this.target) && (Math.hypot(this.target.pos.x - a.anchor.x, this.target.pos.z - a.anchor.z) < AUTO_LEASH || this.target.state === 'chase')) return;
     if (away > AUTO_LEASH) { this.setTarget(null); return; } // (walk back first)
     const next = this.nearestFoe(AUTO_RANGE, a.anchor);
@@ -284,14 +287,17 @@ export class Control {
     else if (this.target && !this.isFoe(this.target)) this.setTarget(null);
   }
 
-  // The nearest loot on the ground near the hunting ground (auto walks over it).
-  lootSpot() {
-    const a = this.auto, g = this.game;
-    let best = null, bd = LOOT_RANGE;
-    for (const l of g.loot.list) {
-      if (!l.landed) continue;
-      const d = Math.hypot(l.group.position.x - a.anchor.x, l.group.position.z - a.anchor.z);
-      if (d < bd) { bd = d; best = l.group.position; }
+  // The nearest loot on the ground around the hunting ground (within `near` of us), that we can take: with
+  // a full bag only gold and what joins a stack (else we'd stand on it for ever).
+  lootSpot(near = Infinity) {
+    const a = this.auto, p = this.p;
+    let best = null, bd = near;
+    for (const l of this.game.loot.list) {
+      if (!l.landed || l.dead || (l.kind === 'item' && !p.hasRoomFor(l.data))) continue;
+      const at = l.group.position;
+      if (Math.hypot(at.x - a.anchor.x, at.z - a.anchor.z) > LOOT_RANGE) continue;
+      const d = Math.hypot(at.x - p.pos.x, at.z - p.pos.z);
+      if (d < bd) { bd = d; best = at; }
     }
     return best;
   }

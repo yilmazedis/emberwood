@@ -129,6 +129,7 @@ export class UI {
     $('btn-help').addEventListener('click', () => this.togglePanel('help'));
     $('btn-settings').addEventListener('click', () => this.toggleSettings());
     $('btn-skills').addEventListener('click', () => this.skills.toggle());
+    $('btn-full').addEventListener('click', () => this.toggleFullscreen());
     this.bindSettings();
     $('respawn').addEventListener('click', () => this.game.player.respawn());
     this.skills = new SkillWindow(game, this);
@@ -274,6 +275,7 @@ export class UI {
     }
     t.classList.remove('hidden');
     t.classList.add('menu');
+    this.tipTarget = null; // (a menu stays where it opened: it doesn't follow the mouse like a tooltip)
     this.menuAnchor = anchor;
     anchor.classList.add('selected');
     const r = anchor.getBoundingClientRect();
@@ -300,7 +302,7 @@ export class UI {
     this.menuAnchor = null;
     this.menuTemp?.remove();
     this.menuTemp = null;
-    this.el.tooltip.classList.remove('menu');
+    this.el.tooltip.classList.remove('menu', 'slots-menu');
     this.hideTip();
   }
 
@@ -655,14 +657,23 @@ export class UI {
   }
 
   // ---------------------------------------------------------------- messages
+  // A line in the log (desktop; the last 12 stay 20 s). Returns it, so it can be added to (gold pickups).
   log(html, cls = '') {
     const d = document.createElement('div');
     d.className = cls;
     d.innerHTML = html;
     this.el.log.appendChild(d);
-    while (this.el.log.children.length > 6) this.el.log.firstChild.remove();
-    setTimeout(() => d.classList.add('fade'), 7000);
-    setTimeout(() => d.remove(), 8200);
+    while (this.el.log.children.length > 12) this.el.log.firstChild.remove();
+    this.keepLine(d);
+    return d;
+  }
+
+  keepLine(d, ms = 20000) {
+    clearTimeout(d._fade);
+    clearTimeout(d._gone);
+    d.classList.remove('fade');
+    d._fade = setTimeout(() => d.classList.add('fade'), ms - 1200);
+    d._gone = setTimeout(() => d.remove(), ms);
   }
 
   centerMsg(text) {
@@ -727,6 +738,7 @@ export class UI {
 
   // mode: 'character' (I), 'shop', 'bank', 'board' or 'anvil' (at someone in camp: npc). The bag is always shown.
   openInventory(mode = 'character', npc = null) {
+    if (this.game.trade?.isOpen && mode !== 'trade') return; // (the bag stays beside the trade until it ends)
     this.closeMenu();
     this.hideTip();
     this.skills.close();
@@ -743,6 +755,7 @@ export class UI {
 
   closeInventory() {
     if (!this.invOpen) return;
+    if (this.invMode === 'trade' && this.game.trade?.isOpen) { this.game.trade.cancel(); return; } // (closing the bag ends the trade)
     this.el.inventory.classList.add('hidden');
     this.invOpen = false;
     this.npc = null;
@@ -750,6 +763,13 @@ export class UI {
     this.game.npcs?.close();
     this.closeMenu();
     this.hideTip();
+  }
+
+  // Desktop: the whole screen for the game (F, or the button); F again (or Esc) to leave it.
+  toggleFullscreen() {
+    if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
+    else if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => this.centerMsg('Full screen is not available here'));
+    else this.centerMsg('Full screen is not available here');
   }
 
   toggleInventory() {
@@ -863,9 +883,12 @@ export class UI {
   refreshInventory() {
     const p = this.game.player;
     this.el.gold.textContent = p.gold;
+    $('btn-bag').classList.toggle('full', p.freeSlot() < 0); // (a full bag: nothing new fits)
     if (!this.invOpen) return;
     p.bag.forEach((it, i) => this.paintSlot(this.bagSlots[i], it));
-    this.el.bagHint.textContent = this.touch ? 'tap an item for options' : this.invMode === 'bank' ? 'click to bank it' : this.atMerchant() ? 'click to sell · right-click for more' : 'click to equip or use · right-click for more';
+    const tap = this.touch ? 'tap' : 'click';
+    this.el.bagHint.textContent = this.invMode === 'trade' ? `${tap} an item to offer it`
+      : this.touch ? 'tap an item for options' : this.invMode === 'bank' ? 'click to bank it' : this.atMerchant() ? 'click to sell · right-click for more' : 'click to equip or use · right-click for more';
     const junk = this.atMerchant() && p.bag.some((it) => it && this.isJunk(it));
     $('sell-junk').classList.toggle('hidden', !junk);
     if (junk) $('sell-junk').textContent = 'Sell what you can\'t use';
@@ -1046,7 +1069,9 @@ export class UI {
       ${cmp}${hint ? `<div class="tt-hint">${hint}</div>` : ''}`;
   }
 
+  // Tooltips share their box with menus: while a menu is open, hovering things doesn't touch it.
   showTip(target, htmlFn) {
+    if (this.menuAnchor) return;
     const html = htmlFn();
     if (!html) return;
     this.tipTarget = target;
@@ -1062,6 +1087,7 @@ export class UI {
 
   hideTip() {
     this.tipTarget = null;
+    if (this.menuAnchor) return;
     this.el.tooltip.classList.add('hidden');
   }
 

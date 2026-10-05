@@ -1,7 +1,7 @@
 // Trading with another hero (the server does the swap: server/trade.mjs). Ask from their menu (right-click or
-// tap them); when they say yes a window opens for both: click items in the bag to put them in (again to take
-// them out), set some gold, and accept. Any change takes both accepts back; when both have accepted, the
-// server swaps and tells our game the bag and gold we have now.
+// tap them); when they say yes the bag opens for both with the trade beside it: click items in the bag to put
+// them in (again to take them out), set some gold, and accept. Any change takes both accepts back; when both
+// have accepted, the server swaps and tells our game the bag and gold we have now.
 import { itemDef, itemName, itemColor } from './items.js';
 import { has } from './util.js';
 import { CLASSES } from './classes.js';
@@ -13,7 +13,6 @@ const MAX_ITEMS = 12;
 export class Trade {
   constructor(game) {
     this.game = game;
-    this.el = $('trade');
     this.isOpen = false;
     this.mine = { items: [], gold: 0, ok: false };
     this.theirs = { items: [], gold: 0, ok: false };
@@ -100,8 +99,8 @@ export class Trade {
     const ui = this.game.ui;
     if (!this.isOpen) {
       this.isOpen = true;
-      this.el.classList.remove('hidden');
-      ui.openInventory('character');
+      ui.openInventory('trade');
+      $('trade-note').textContent = `${ui.touch ? 'Tap' : 'Click'} items in your bag to offer them (again to take them back), and set any gold. When you both accept, they swap.`;
       this.game.sfx.play('page');
     }
     this.mine = m.mine;
@@ -124,7 +123,7 @@ export class Trade {
   // The swap happened: our bag and gold as they are now (and the save number after it).
   done(m) {
     const g = this.game, p = g.player;
-    if (Array.isArray(m.bag)) p.bag = Array.from({ length: p.bag.length }, (_, i) => (m.bag[i] && itemDef(m.bag[i]) ? m.bag[i] : null));
+    if (Array.isArray(m.bag)) { p.bag = Array.from({ length: p.bag.length }, (_, i) => (m.bag[i] && itemDef(m.bag[i]) ? m.bag[i] : null)); p.compactStacks(); }
     p.gold = Math.max(0, Math.round(Number(m.gold) || 0));
     g.rev = Number(m.rev) || g.rev;
     const got = this.theirs.items.map((it) => `<b style="color:${itemColor(it)}">${itemName(it)}</b>`).join(', ');
@@ -140,11 +139,12 @@ export class Trade {
   }
 
   close() {
+    const ui = this.game.ui;
     this.isOpen = false;
     this.mine = { items: [], gold: 0, ok: false };
     this.theirs = { items: [], gold: 0, ok: false };
-    this.el.classList.add('hidden');
-    this.game.ui.refreshInventory();
+    if (ui.invOpen && ui.invMode === 'trade') ui.closeInventory();
+    else ui.refreshInventory();
   }
 }
 

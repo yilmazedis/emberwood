@@ -44,7 +44,29 @@ installBtn.addEventListener('click', async () => {
 window.addEventListener('appinstalled', () => installBtn.classList.add('hidden'));
 if (isIOS && !standalone) iosHint.classList.remove('hidden'); // Safari has no install prompt
 
-// On phones in the browser: go fullscreen and lock to landscape where supported (Android).
+// Phones: no zooming the page by accident (a quick double tap, or two fingers on the buttons). iPhones ignore
+// the page's "no zoom" setting, and a zoomed-in page shows only a corner of the game, shifted.
+for (const type of ['gesturestart', 'gesturechange', 'gestureend']) {
+  document.addEventListener(type, (e) => e.preventDefault(), { passive: false });
+}
+document.addEventListener('touchmove', (e) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
+document.addEventListener('dblclick', (e) => e.preventDefault(), { passive: false });
+// …and if it happened anyway (or the page slid aside), put it back
+const viewport = document.querySelector('meta[name="viewport"]');
+const steady = () => {
+  if (document.activeElement?.matches?.('input, textarea')) return; // (typing: the keyboard may move things)
+  if (window.visualViewport && window.visualViewport.scale > 1.01 && viewport) {
+    const c = viewport.content;
+    viewport.content = `${c}, minimum-scale=1`; // (setting it again makes the browser zoom back out)
+    requestAnimationFrame(() => { viewport.content = c; });
+  }
+  if (window.scrollX || window.scrollY) window.scrollTo(0, 0);
+};
+window.visualViewport?.addEventListener('resize', steady);
+window.visualViewport?.addEventListener('scroll', steady);
+window.addEventListener('orientationchange', () => setTimeout(steady, 400));
+
+// On phones in the browser: go fullscreen and lock to landscape where supported (Android; iPhones can't).
 async function goFullscreen() {
   if (standalone || !document.body.classList.contains('touch')) return;
   try {

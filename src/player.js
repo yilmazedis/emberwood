@@ -217,6 +217,7 @@ export class Player {
     this.gold = Math.max(0, Math.round(s.gold || 0));
     const valid = (it) => (it && typeof it === 'object' && has(ITEMS, it.k) ? it : null);
     this.bag = Array.from({ length: BAG_SIZE }, (_, i) => valid(s.bag?.[i]));
+    this.compactStacks();
     this.equipment = emptyEquipment();
     for (const slot of SLOTS) this.equipment[slot] = valid(s.equipment?.[slot]);
     this.quests = Array.isArray(s.quests?.done) ? s.quests : freshQuests();
@@ -272,7 +273,7 @@ export class Player {
     const s = {
       maxHp: 90 + L * 14, maxMp: 40 + L * 6, armor: L * 1.5, levelDmg: L * 0.9, dmgMin: 2, dmgMax: 4, speed: 1.3,
       dmgPct: 0.05 * (L - 1), dmgMult: c.dmg, atkSpd: c.atkSpd, moveSpd: c.moveSpd, crit: 0.05 + c.crit, spell: 1 + c.spell,
-      regen: 1 + L * 0.25, mpRegen: (1 + L * 0.12) * Math.sqrt(c.mp), evade: 0, reach: 0, ranged: null, weapon: null,
+      regen: 1 + L * 0.25, mpRegen: 0.75 * (1 + L * 0.12) * Math.sqrt(c.mp), evade: 0, reach: 0, ranged: null, weapon: null,
       hpPct: 0, armorPct: 0, mpRegenPct: 0, spellPct: 0, dotPct: 0, healPct: 0, typePct: 0, taken: 1,
     };
     // weapons: the main hand's damage and speed; a second one-handed weapon adds an eighth of its damage
@@ -375,6 +376,30 @@ export class Player {
   // ---------------------------------------------------------------- the bag
   freeSlot() {
     return this.bag.findIndex((x) => !x);
+  }
+
+  // Stacks of a kind join up as far as they can (potions used to stop at 50 a slot).
+  compactStacks() {
+    for (let i = 0; i < this.bag.length; i++) {
+      const it = this.bag[i], d = it && itemDef(it);
+      if (!d?.stack) continue;
+      for (let j = 0; j < i && this.bag[i]; j++) {
+        const into = this.bag[j];
+        if (!into || into.k !== it.k || into.n >= d.stack) continue;
+        const take = Math.min(it.n, d.stack - into.n);
+        into.n += take;
+        it.n -= take;
+        if (it.n <= 0) this.bag[i] = null;
+      }
+    }
+  }
+
+  // Can this go in the bag (a free slot, or a stack of its kind with room)?
+  hasRoomFor(item) {
+    const d = itemDef(item);
+    if (!d) return false;
+    if (this.freeSlot() >= 0) return true;
+    return !!d.stack && this.bag.some((it) => it && it.k === item.k && it.n + (item.n || 1) <= d.stack);
   }
 
   // Put an item in the bag (stackables join a stack of the same kind first). False if there's no room.

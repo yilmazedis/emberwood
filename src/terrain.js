@@ -111,8 +111,9 @@ export function addCollider(x, z, r) {
   grid.get(k).push(c);
 }
 
-// Push a circle at pos (anything with x and z) out of whatever it overlaps.
-export function resolveCollision(pos, radius) {
+// Push a circle at pos (anything with x and z) out of whatever it overlaps. props = false: only the land's
+// edges and walls hold it, not trees, rocks and the like (bosses go through them rather than get stuck).
+export function resolveCollision(pos, radius, props = true) {
   const region = regionAt(pos.x, pos.z);
   if (region) {
     region.resolve(pos, radius);
@@ -124,6 +125,7 @@ export function resolveCollision(pos, radius) {
     const dp = Math.hypot(px, pz), pr = POND.r - 0.4 + radius;
     if (dp < pr && dp > 1e-4) { pos.x = POND.x + (px / dp) * pr; pos.z = POND.z + (pz / dp) * pr; }
   }
+  if (!props) return;
   const ix = Math.floor(pos.x / GRID), iz = Math.floor(pos.z / GRID);
   for (let a = -1; a <= 1; a++) {
     for (let b = -1; b <= 1; b++) {

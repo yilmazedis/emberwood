@@ -259,16 +259,15 @@ export class DungeonView {
       c.unlocked = false; // sealed again until its boss falls again
       g.loot.dropGold(Math.round(randInt(150, 240) * (1 + 0.12 * (lvl - 9))), at);
       g.loot.dropGold(Math.round(randInt(60, 110) * (1 + 0.12 * (lvl - 9))), at);
-      drop(lvl + 1);
-      drop(lvl);
-      if (chance(0.5)) g.loot.dropItem(makeItem(lvl >= 40 ? 'recipe_high' : lvl >= 20 ? 'recipe_mid' : 'recipe_low'), at);
-      g.loot.dropItem(rollPotion(lvl), at);
+      if (chance(0.5)) drop(lvl + 1);
+      if (chance(0.25)) g.loot.dropItem(makeItem(lvl >= 40 ? 'recipe_high' : lvl >= 20 ? 'recipe_mid' : 'recipe_low'), at);
+      else g.loot.dropItem(rollPotion(lvl), at);
       g.fx.burst(new THREE.Vector3(c.x, FLOOR_Y + 1.2, c.z), 0xffc860, 40, 4);
       g.ui.log(`You loot <b>${c.name}</b>.`, 'gold');
     } else {
       g.loot.dropGold(Math.round(randInt(30, 60) * (1 + 0.2 * (lvl - 1))), at);
-      if (chance(0.6)) drop(lvl);
-      if (chance(0.5)) g.loot.dropItem(rollPotion(lvl), at);
+      if (chance(0.25)) drop(lvl);
+      if (chance(0.4)) g.loot.dropItem(rollPotion(lvl), at);
     }
   }
 

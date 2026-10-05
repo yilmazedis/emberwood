@@ -309,7 +309,7 @@ class Monster {
         this.z += (ez / dd) * (rr - dd);
       }
     }
-    resolveCollision(this, this.radius);
+    resolveCollision(this, this.radius, !d.boss);
     this.speed = speed;
   }
 

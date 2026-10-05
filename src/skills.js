@@ -71,7 +71,8 @@ const PASSIVE_TEXT = {
 export const passiveText = (tree, points = 1) => Object.entries(tree.passive).map(([k, v]) => PASSIVE_TEXT[k](v * points)).join(', ');
 
 // Mana a skill costs at a level (its share of that level's base pool).
-export const manaCost = (sk, level) => Math.round(sk.mp * (40 + 6 * level));
+export const MANA_COST = 1.6; // (skills cost this many times their share, so mana runs low in a long fight)
+export const manaCost = (sk, level) => Math.round(sk.mp * MANA_COST * (40 + 6 * level));
 
 // Timed effects on a hero (Player.recompute applies them): { dur (s), and what they change }. A buff's
 // value (v) is its strength when cast (some grow with the caster's points). Long ones (blessings, elixirs)

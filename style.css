@@ -242,6 +242,9 @@ html, body {
 }
 #inventory, #help, #settings { touch-action: pan-y; }
 button { touch-action: manipulation; }
+/* phones: no double-tap zoom anywhere in the game, and nothing at all but taps on the thumb buttons */
+body.touch :where(#ui *) { touch-action: manipulation; }
+body.touch #slots .slot, body.touch #menu-buttons button { touch-action: none; }
 
 body:not(.touch) .touch-only { display: none !important; }
 body.touch .desk-only { display: none !important; }
@@ -294,7 +297,8 @@ body.touch .slot-potion { right: 200px; bottom: 14px; width: 54px; height: 54px;
 body.touch .slot.pressed { transform: scale(0.93); box-shadow: 0 0 0 3px rgba(255, 215, 120, 0.5); }
 
 body.touch #menu-buttons { top: calc(150px + var(--sat)); bottom: auto; right: calc(12px + var(--sar)); flex-direction: column; align-items: flex-end; }
-body.touch #menu-buttons button { padding: 9px 14px; }
+body.touch #menu-buttons button { width: 46px; height: 46px; }
+body.touch #menu-buttons svg { width: 24px; height: 24px; }
 body.touch #menu-buttons kbd { display: none; }
 body.touch #minimap-wrap { transform: scale(0.72); transform-origin: top right; }
 body.touch #hud-player { transform: scale(0.85); transform-origin: top left; }
@@ -798,7 +802,12 @@ body:has(#target:not(.hidden)) #boss { top: 78px; }
 body.auto-on #slots .slot-auto .icon { animation: spin 3s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .slot .lock { color: #ff8a7a; font-size: 16px; }
-#menu-buttons button { position: relative; }
+#menu-buttons button { position: relative; display: grid; place-items: center; width: 40px; height: 40px; padding: 0; }
+#menu-buttons svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+#menu-buttons .bag-full { display: none; position: absolute; top: -5px; right: -5px; width: 16px; height: 16px; border-radius: 50%; background: #e0442c; color: #fff; font: 800 11px/16px Inter, sans-serif; font-style: normal; text-align: center; box-shadow: 0 0 8px rgba(255, 80, 40, .8); }
+#btn-bag.full .bag-full { display: block; }
+#btn-bag.full { border-color: #e0442c; }
+:fullscreen #btn-full path { d: path('M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5'); }
 #skill-dot { position: absolute; top: -4px; right: -4px; width: 12px; height: 12px; border-radius: 50%; background: #ffd24a; box-shadow: 0 0 8px #ffb020; }
 @media (min-width: 901px) { .slot { width: 52px; height: 52px; } #slots { gap: 6px; } #xpbar { width: 640px; } }
 
@@ -941,9 +950,9 @@ body.touch #buffs { top: calc(86px + var(--sat)); }
 }
 
 /* ------------------------------------------------------------------ trading, prompts */
-#trade { position: absolute; left: 50%; top: calc(64px + var(--sat)); transform: translateX(-50%); z-index: 27; width: min(460px, calc(100vw - 24px)); padding: 0 14px 12px; }
-#trade header { display: flex; justify-content: space-between; align-items: center; padding: 10px 0 8px; font: 800 16px Cinzel, serif; color: var(--gold); }
+#inventory:not([data-mode="trade"]) .inv-trade { display: none; }
 #trade header small { font: 600 12px Inter, sans-serif; color: var(--muted); margin-left: 6px; }
+#trade-note { margin-top: 10px; }
 .trade-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .trade-side { padding: 8px; border-radius: 9px; background: rgba(0, 0, 0, .25); }
 .trade-items { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; min-height: 48px; }
@@ -966,11 +975,11 @@ body.touch #buffs { top: calc(86px + var(--sat)); }
 .look-opt.on { border-color: var(--edge-hi); color: var(--gold); }
 .death-wait { font-size: 12px; margin-top: 14px !important; }
 
-/* desktop: the menu buttons stack in the bottom-right corner, the log above them (the action bar is wide) */
-body:not(.touch) #menu-buttons { flex-direction: column; align-items: stretch; gap: 5px; width: 118px; }
-body:not(.touch) #menu-buttons button { display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; }
-body:not(.touch) #log { bottom: 236px; width: 300px; }
-@media (max-width: 1180px) { body:not(.touch) #actionbar { left: calc(50% - 60px); } }
+/* desktop: the menu's icons in a row in the bottom-right corner, the log above them */
+body:not(.touch) #menu-buttons { gap: 6px; }
+body:not(.touch) #menu-buttons button { width: 38px; height: 38px; }
+body:not(.touch) #log { bottom: 66px; width: 300px; }
+@media (max-width: 1300px) { body:not(.touch) #actionbar { left: calc(50% - 80px); } }
 @media (max-width: 1000px) { body:not(.touch) .slot { width: 44px; height: 44px; } body:not(.touch) #slots { gap: 4px; padding: 6px 8px; } body:not(.touch) #xpbar { width: 520px; } }
 #buyback { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 16px 6px; }
 #buyback .bag-slot { width: auto; height: auto; aspect-ratio: 1; }
