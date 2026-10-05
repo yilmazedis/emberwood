@@ -23,7 +23,9 @@ export class AccountScreen {
     $('acc-login').addEventListener('submit', (e) => { e.preventDefault(); this.submitLogin(); });
     $('acc-switch').addEventListener('click', () => this.showLogin(this.mode === 'login' ? 'register' : 'login'));
     $('char-play').addEventListener('click', () => this.play());
-    $('char-del').addEventListener('click', () => this.remove());
+    $('char-del').addEventListener('click', () => this.askRemove());
+    $('char-del-yes').addEventListener('click', () => this.remove());
+    $('char-del-no').addEventListener('click', () => $('char-del-ask').classList.add('hidden'));
     $('acc-logout').addEventListener('click', () => this.logout());
     $('acc-create').addEventListener('submit', (e) => { e.preventDefault(); this.create(); });
     $('create-back').addEventListener('click', () => this.showChars());
@@ -151,6 +153,7 @@ export class AccountScreen {
       </button>`).join('') + (this.chars.length < MAX_CHARACTERS ? '<button type="button" class="char-item new">+ New hero</button>' : '');
     $('char-play').disabled = !this.selected;
     $('char-del').classList.toggle('hidden', !this.selected);
+    $('char-del-ask').classList.add('hidden');
     $('chars-err').textContent = '';
     this.view('acc-chars');
   }
@@ -198,9 +201,18 @@ export class AccountScreen {
     }
   }
 
+  // Deleting asks first, right here (a browser's pop-up takes a phone out of full screen).
+  askRemove() {
+    const c = this.chars.find((x) => x.id === this.selected);
+    if (!c) return;
+    $('char-del-text').innerHTML = `Delete <b>${escapeHtml(c.name)}</b>, your level ${c.level} ${CLASSES[c.cls].name.toLowerCase()}, forever?`;
+    $('char-del-ask').classList.remove('hidden');
+  }
+
   async remove() {
     const c = this.chars.find((x) => x.id === this.selected);
-    if (!c || !window.confirm(`Delete ${c.name}, your level ${c.level} ${CLASSES[c.cls].name.toLowerCase()}, forever?`)) return;
+    $('char-del-ask').classList.add('hidden');
+    if (!c) return;
     try {
       this.chars = (await this.ask('deleteChar', { id: c.id })).chars;
       this.showChars();

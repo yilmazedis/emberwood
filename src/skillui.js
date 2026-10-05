@@ -27,8 +27,11 @@ export class SkillWindow {
     $('skill-reset').addEventListener('click', () => {
       const p = this.game.player, fee = p.respecFee();
       if (!p.spentPoints()) return;
-      if (!window.confirm(`Take back all ${p.spentPoints()} skill points${fee ? ` for ${fee} gold` : ''}?`)) return;
-      if (p.resetSkills()) this.refresh();
+      // (the game's own question: a browser's pop-up takes a phone out of full screen)
+      this.ui.prompt(`Take back all <b>${p.spentPoints()}</b> skill points${fee ? ` for <b>${fee} gold</b>` : ''}? You can spend them again at once.`, [
+        ['Take them back', () => { if (p.resetSkills()) this.refresh(); }, 'go'],
+        ['Keep them', () => {}],
+      ]);
     });
   }
 

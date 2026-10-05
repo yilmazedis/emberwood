@@ -270,9 +270,9 @@ Everything you hear is synthesized live with WebAudio; there are no audio files.
   in the crypt, and a drum-driven battle theme whenever a boss is fighting you; they crossfade.
 - **Ambience** (`ambience.js`): wind and birdsong in the woods, crows and stronger wind in the graveyard, water by the
   pond, crackling near fires; in the crypt a low rumble, a draft, dripping water and more echo.
-- **Settings** (Esc, or the Settings button): music, sound effect and ambience volume, mute, graphics quality (Low turns
-  off shadows and glow and draws fewer pixels, for older phones), frame rate (60, or 30 to save battery and keep a
-  laptop or phone cooler), camera distance (phones have no mouse wheel), and
+- **Settings** (Esc, or the Settings button): music, sound effect and ambience volume, mute, graphics quality (Low, Mid,
+  High (the default) or Ultra: below), frame rate (60, or 30 to save battery and keep a laptop or phone cooler),
+  camera distance (phones have no mouse wheel), and
   **Leave game**, which saves and returns to the title screen. Online the world doesn't wait while the settings are
   open (offline it pauses); monsters leave a hero alone while the app is in the background, and the sound rests. Settings are kept in the browser
   (`emberwood-settings`), separate from the save.
@@ -280,9 +280,20 @@ Everything you hear is synthesized live with WebAudio; there are no audio files.
 ## Keeping it light
 
 The game never draws more than 60 frames a second (or 30, in Settings), however fast the screen is: a 120 Hz
-MacBook used to draw twice as many for nothing. It draws at 1.5 times the screen's pixels at most (1.25 on phones),
-with 2× smoothed edges and a half-size glow, and if frames come late for a few seconds it draws fewer pixels until
-they're on time again (then slowly more). Trees, rocks, grass and flowers are drawn in 32 m chunks of the map, so
+MacBook used to draw twice as many for nothing. Graphics quality (`QUALITY` in `game.js`):
+
+| Quality | Pixels (× the screen's, at most what it has) | Smoothed edges | Shadows (phones: half, at least 1024) | Glow |
+|---|---|---|---|---|
+| Low | 1 | none | none | none |
+| Mid | 1.25 | 2× | 1024 | small |
+| High (default) | 1.5 | 2× | 2048 | half size |
+| Ultra | 2 | 4× | 4096, soft | full size |
+
+If frames come late for a few seconds, it draws fewer pixels, but only while that helps: a phone saving power holds
+the frame rate at 30 whatever the picture, and then the game goes back to sharp and leaves it for ten minutes.
+
+No browser pop-ups (they take a phone out of full screen and turn it back upright): the game asks its own
+questions (taking back skill points, deleting a hero, trades, party invites). Trees, rocks, grass and flowers are drawn in 32 m chunks of the map, so
 only what the camera (or the sun, for shadows) can see is drawn: that halved the triangles of a frame. The game's
 own code is a fraction of a millisecond a frame; the picture is the work.
 
