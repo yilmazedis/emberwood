@@ -76,10 +76,35 @@ async function downloadFrom(url, onProgress) {
   }
 }
 
+// The mage's hat (the Scientist's looks, and the Healer's Cleric) was nearly as wide as the hero and hid its
+// weapon and clothes: its brim comes in toward the head and its bent tip comes down and in, while the part
+// around the head stays as it was (so the head doesn't show through). Done once, to the model every hero of
+// that look is cloned from (its vertices are where the hat sits on the head, in the head bone's space).
+function trimMageHat(root) {
+  const hat = root.getObjectByName('Mage_Hat'), g = hat?.geometry, pos = g?.attributes.position;
+  if (!pos) return;
+  const HEAD_R = 0.66, BRIM = 0.3, TIP_UP = 0.6, TIP_IN = 0.25;
+  g.computeBoundingBox();
+  const { min, max } = g.boundingBox, cx = (min.x + max.x) / 2, cz = (min.z + max.z) / 2;
+  const top = 2.16, tall = Math.max(0.01, max.y - top); // (the top of the head; what's above is the tip)
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i) - cx, z = pos.getZ(i) - cz, r = Math.hypot(x, z);
+    let y = pos.getY(i), k = r > HEAD_R ? (HEAD_R + (r - HEAD_R) * BRIM) / r : 1;
+    if (y > top) {
+      k *= 1 - TIP_IN * Math.min(1, (y - top) / tall);
+      y = top + (y - top) * TIP_UP;
+    }
+    pos.setXYZ(i, cx + x * k, y, cz + z * k);
+  }
+  pos.needsUpdate = true;
+  g.computeBoundingBox();
+  g.computeBoundingSphere();
+}
+
 // The characters, their animations, and every item model (packed into one file: tools/pack-items.mjs).
 export async function loadAssets(onProgress) {
   const files = [
-    ...CHARACTERS.map((c) => [`assets/characters/${c}.glb`, (g) => { Assets.chars[c] = g; }]),
+    ...CHARACTERS.map((c) => [`assets/characters/${c}.glb`, (g) => { if (c === 'Mage') trimMageHat(g.scene); Assets.chars[c] = g; }]),
     ...ANIMATIONS.map((a) => [`assets/animations/${a}.glb`, (g) => { for (const clip of g.animations) Assets.clips[clip.name] = clip; }]),
     ['assets/items/items.glb?v=3', (g) => { // (?v=: a new pack is a new address on the site too, so no stale copy is used)
       for (const root of [...g.scene.children]) {
