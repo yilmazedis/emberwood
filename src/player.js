@@ -17,8 +17,8 @@ import { hdr } from './fx.js';
 
 export const MAX_LEVEL = 60;
 // XP to the next level. Quick up to level 10; after that each level asks for more kills of your own level:
-// about 15 at level 10, 60 at 20, 120 at 30, 200 at 40, 300 at 50 and nearly 400 at 59.
-export const xpForLevel = (lvl) => Math.round(60 * Math.pow(lvl, 1.55) * (1 + 0.16 * Math.max(0, lvl - 9)));
+// about 16 at level 10, 50 at 20, 80 at 30, 130 at 40, 190 at 50 and 240 at 59.
+export const xpForLevel = (lvl) => Math.round(55 * Math.pow(lvl, 1.55) * (1 + 0.1 * Math.max(0, lvl - 9)));
 export const BAG_SIZE = 30;
 export const BAR_SIZE = 8; // skill slots on the action bar (keys 1–8)
 export const POTION_CD = 1.5;

@@ -64,8 +64,8 @@ automated tests; `&cls=scientist`, `rogue` or `healer` picks the class of a new 
   and losses are kept per hero (`arena.json` in the data folder) for the champions' board in the arena's yard.
 - **Chat:** one world channel (Enter, or the Chat button on phones); nearby heroes also show it in a bubble.
   Last 20 lines are shown to heroes who arrive.
-- **Levels:** up to 60. Quick to 10; after that each level asks for more kills of your own level (about 60 at 20,
-  200 at 40, nearly 400 at 59). Monsters' life and damage, and what armor takes, grow faster past 10 with the gear.
+- **Levels:** up to 60. Quick to 10; after that each level asks for more kills of your own level (about 50 at 20,
+  130 at 40, 240 at 59; some 5 700 such kills from 1 to 60, plus what quests give). Monsters' life and damage, and what armor takes, grow faster past 10 with the gear.
 - **Away:** a browser can't run a game in a hidden tab, so when you switch to another tab or app your hero waits
   where it stands and monsters leave it alone. Auto-hunt (below) keeps going only while
   the game is on screen.
