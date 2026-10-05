@@ -592,8 +592,8 @@ class Area {
     for (const s of this.slots) {
       if (s.monster) continue;
       s.timer -= dt;
-      // rise out of sight (or eventually anyway)
-      if (s.timer <= 0 && (s.timer < -20 || heroes.every((p) => Math.hypot(p.x - s.x, p.z - s.z) > s.r + 6))) this.spawn(s);
+      // rise out of sight (or eight seconds later anyway: a hero hunting right there doesn't wait long)
+      if (s.timer <= 0 && (s.timer < -8 || heroes.every((p) => Math.hypot(p.x - s.x, p.z - s.z) > s.r + 6))) this.spawn(s);
     }
     for (const m of this.monsters.values()) {
       const near = heroes.some((p) => Math.abs(p.x - m.x) < ACTIVE && Math.abs(p.z - m.z) < ACTIVE);
@@ -606,7 +606,7 @@ class Area {
       if (this.wb?.monster === m) { this.wb.monster = null; this.wb.timer = WORLD_BOSS_RETURN; }
       if (m.slot.monster === m) {
         m.slot.monster = null;
-        m.slot.timer = m.def.respawn || rand(18, 28);
+        m.slot.timer = m.def.respawn || rand(9, 14); // (bosses: their own time)
       }
     }
   }

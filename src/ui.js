@@ -21,6 +21,7 @@ const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
 
 // The attack button: a sword, a bolt or a bow (the skills' icons are in skills/).
+const HOLD = 300; // ms a finger rests on a bag item before it can be dragged
 const ATTACK_SVG = {
   sword: `<svg viewBox="0 0 32 32"><path d="M27.5 4.5 26 10.5 12.5 24 8 19.5 21.5 6z" fill="#e3e9f0" stroke="#5d6875" stroke-width="1.2" stroke-linejoin="round"/><path d="M21.5 6 26 10.5" stroke="#fff" stroke-width="1" opacity=".7"/><path d="M6 17.5l8.5 8.5" stroke="#d6aa4a" stroke-width="3.2" stroke-linecap="round"/><path d="M9.2 22.8 4.5 27.5" stroke="#7a4f2c" stroke-width="3.4" stroke-linecap="round"/></svg>`,
   bolt: `<svg viewBox="0 0 32 32"><path d="M4 26l9-9M6 29l8-8M2 21l8-8" stroke="#b99cff" stroke-width="1.8" stroke-linecap="round" opacity=".7"/><circle cx="20" cy="12" r="7.5" fill="#8a6dff" stroke="#3a2a7a" stroke-width="1.3"/><circle cx="18" cy="10" r="3" fill="#e6dcff"/></svg>`,
@@ -62,6 +63,7 @@ export class UI {
       click: (i, d) => this.bagClick(i, d), menu: (i, d) => this.bagMenu(i, d),
       tip: (i) => p().bag[i] && this.itemTip(p().bag[i], { compare: true, hint: this.bagHint(p().bag[i]) }),
     });
+    this.dragBag();
     this.bankSlots = this.makeSlots($('bank'), BANK_SIZE, {
       click: (i) => this.game.bank.take(i), menu: (i, d) => this.bankMenu(i, d),
       tip: (i) => this.game.bank.items[i] && this.itemTip(this.game.bank.items[i], { compare: true, hint: this.touch ? null : 'Click to take' }),
@@ -100,6 +102,11 @@ export class UI {
       });
     }
     $('sell-junk').addEventListener('click', () => this.sellJunk());
+    // selling: pick items, then confirm (a click never sells by itself: nothing goes by mistake)
+    this.selling = null; // ids of the bag items picked, while picking
+    $('sell-mode').addEventListener('click', () => (this.selling ? this.stopSelling() : this.startSelling()));
+    $('sell-go').addEventListener('click', () => this.sellPicked());
+    $('sell-cancel').addEventListener('click', () => this.stopSelling());
     // the bank's gold
     $('gold-in').addEventListener('click', () => this.game.bank.deposit(Number($('gold-amount').value) || this.game.player.gold));
     $('gold-out').addEventListener('click', () => this.game.bank.withdraw(Number($('gold-amount').value) || this.game.bank.gold));
@@ -169,7 +176,10 @@ export class UI {
       const d = document.createElement('div');
       d.dataset.cls = cls;
       d.className = `bag-slot ${cls}`;
-      d.addEventListener('click', () => { if (this.touch && menu) menu(i, d); else { click(i, d); this.hideTip(); this.maybeTip(d); } });
+      d.addEventListener('click', () => {
+        if (performance.now() - (this.dragEndedAt || 0) < 150) return; // (the click that ends a drag)
+        if (this.touch && menu) menu(i, d); else { click(i, d); this.hideTip(); this.maybeTip(d); }
+      });
       d.addEventListener('contextmenu', (e) => { e.preventDefault(); if (menu && !this.touch) menu(i, d); });
       d.addEventListener('mouseenter', () => { if (!this.touch) this.showTip(d, () => tip(i)); });
       d.addEventListener('mouseleave', () => { if (!this.touch) this.hideTip(); });
@@ -183,21 +193,21 @@ export class UI {
   }
 
   bagHint(it) {
-    const d = itemDef(it), sell = `${sellPrice(it)}g`;
-    if (this.invMode === 'bank' && this.invOpen) return 'Click to put it in the bank · right-click for more';
+    const d = itemDef(it);
+    if (this.selling) return `Click to ${this.selling.has(it.id) ? 'leave it' : `sell it (${sellPrice(it)}g)`}`;
+    if (this.invMode === 'bank' && this.invOpen) return 'Click to put it in the bank · drag to move it';
     if (this.invMode === 'anvil' && this.invOpen && !d.stack) return 'Click to pick it for the anvil · right-click for more';
-    if (this.atMerchant()) return `Click to sell for ${sell} · right-click for more`;
-    return d.stack ? `Click to use · right-click to sell for ${sell}` : `Click to equip · right-click to sell for ${sell}`;
+    return `${d.stack ? 'Click to use' : 'Click to equip'} · drag to move it · right-click for more`;
   }
 
   // the obvious action for a bag item, by the panel open next to the bag (while trading: offer it)
   bagClick(i) {
     const p = this.game.player, it = p.bag[i];
     if (!it) return;
+    if (this.selling) return this.pickToSell(i);
     if (this.game.trade?.isOpen) return this.game.trade.offerFromBag(i);
     if (this.invOpen && this.invMode === 'bank') return this.game.bank.store(i), this.game.quests.onEvent('bank');
     if (this.invOpen && this.invMode === 'anvil' && !itemDef(it).stack) { this.anvilSel = { where: 'bag', index: i }; return this.refreshAnvil(); }
-    if (this.atMerchant()) return p.sell(i);
     if (itemDef(it).stack) return p.useItem(i);
     p.equipFromBag(i);
   }
@@ -206,6 +216,7 @@ export class UI {
   bagMenu(i, d) {
     const p = this.game.player, it = p.bag[i];
     if (!it) return this.closeMenu();
+    if (this.selling) { this.closeMenu(); return this.pickToSell(i); } // (a tap picks, while selling)
     const def = itemDef(it), acts = [];
     if (this.game.trade?.isOpen) return this.openMenu(d, this.itemTip(it), [[this.game.trade.isOffered(it) ? 'Take back' : 'Offer', () => this.game.trade.offerFromBag(i)]]);
     if (def.stack) { if (def.kind !== 'recipe') acts.push(['Use', () => p.useItem(i)]); }
@@ -216,7 +227,7 @@ export class UI {
     }
     if (this.invOpen && this.invMode === 'bank') acts.unshift(['Bank it', () => { this.game.bank.store(i); this.game.quests.onEvent('bank'); }]);
     if (this.invOpen && this.invMode === 'anvil' && !def.stack) acts.unshift(['Anvil', () => { this.anvilSel = { where: 'bag', index: i }; this.refreshAnvil(); }]);
-    acts.push([`Sell · ${sellPrice(it)}g`, () => p.sell(i)]);
+    if (!acts.length) acts.push(['Close', () => {}]);
     this.openMenu(d, this.itemTip(it, { compare: true }), acts);
   }
 
@@ -248,12 +259,152 @@ export class UI {
     this.openMenu(d, this.itemTip(it), acts);
   }
 
-  // Sell every normal item in the bag that the hero can't use (at a merchant).
+  // The items in the bag the hero can't use, picked to sell (at a merchant): still to be confirmed.
   sellJunk() {
-    const p = this.game.player;
-    let n = 0;
-    p.bag.forEach((it, i) => { if (it && this.isJunk(it)) { p.sell(i); n++; } });
-    if (!n) this.centerMsg('Nothing to sell');
+    const ids = this.game.player.bag.filter((it) => it && this.isJunk(it)).map((it) => it.id);
+    if (!ids.length) { this.centerMsg('Nothing to sell'); return; }
+    this.startSelling(ids);
+  }
+
+  // ---------------------------------------------------------------- selling: pick, then confirm
+  startSelling(ids = []) {
+    this.closeMenu();
+    this.hideTip();
+    this.selling = new Set(ids);
+    this.refreshInventory();
+  }
+
+  stopSelling() {
+    if (!this.selling) return;
+    this.selling = null;
+    this.refreshInventory();
+  }
+
+  pickToSell(i) {
+    const it = this.game.player.bag[i];
+    if (!it) return;
+    if (this.selling.has(it.id)) this.selling.delete(it.id); else this.selling.add(it.id);
+    this.refreshInventory();
+  }
+
+  sellPicked() {
+    const p = this.game.player, g = this.game;
+    let n = 0, gold = 0;
+    p.bag.forEach((it, i) => { if (it && this.selling?.has(it.id)) { gold += p.sell(i, true); n++; } });
+    this.selling = null;
+    if (n) {
+      g.sfx.play('gold');
+      this.log(`Sold <b>${n} item${n > 1 ? 's' : ''}</b> for <b>${gold}g</b>${this.atMerchant() ? ' (the merchant sells them back for that, until you leave)' : ''}`, 'gold');
+      g.save();
+    }
+    this.refreshInventory();
+  }
+
+  refreshSellBar() {
+    const p = this.game.player, on = !!this.selling;
+    $('sell-bar').classList.toggle('hidden', !on);
+    $('sell-mode').textContent = on ? 'Stop selling' : 'Sell…';
+    $('sell-mode').classList.toggle('on', on);
+    if (!on) return;
+    const picked = p.bag.filter((it) => it && this.selling.has(it.id));
+    const gold = picked.reduce((sum, it) => sum + sellPrice(it), 0);
+    $('sell-sum').innerHTML = picked.length ? `<b>${picked.length}</b> picked · <b>${gold}g</b>` : `${this.touch ? 'Tap' : 'Click'} the items to sell`;
+    $('sell-go').disabled = !picked.length;
+  }
+
+  // ---------------------------------------------------------------- moving items in the bag
+  // Drag one slot onto another: with a mouse, press and move; on a touch screen, hold a moment, then move (a
+  // tap is still the item's menu, and a swipe still scrolls). The hold is timed by the touches' own times, so
+  // a busy phone can't turn a tap into a drag.
+  dragBag() {
+    const ghost = document.createElement('div');
+    ghost.id = 'drag-ghost';
+    ghost.className = 'hidden';
+    document.body.appendChild(ghost);
+    let drag = null; // { from, el, x, y, on }
+    const slotAt = (x, y) => {
+      const el = document.elementFromPoint(x, y)?.closest('.bag-slot');
+      const i = el ? this.bagSlots.indexOf(el) : -1;
+      return i >= 0 ? i : null;
+    };
+    this.el.bag.addEventListener('dragstart', (e) => e.preventDefault()); // (not the browser's own image dragging)
+    const begin = () => {
+      drag.on = true;
+      this.dragging = true;
+      drag.el.classList.remove('hold-ready');
+      this.closeMenu();
+      this.hideTip();
+      ghost.innerHTML = this.slotHtml(this.game.player.bag[drag.from]);
+      ghost.classList.remove('hidden');
+      drag.el.classList.add('dragging');
+      navigator.vibrate?.(12);
+    };
+    const move = (x, y) => {
+      ghost.style.left = `${x}px`;
+      ghost.style.top = `${y}px`;
+      const over = slotAt(x, y);
+      for (const [i, el] of this.bagSlots.entries()) el.classList.toggle('drop-here', i === over && i !== drag.from);
+    };
+    const end = (x, y) => {
+      const d = drag;
+      drag = null;
+      clearTimeout(d.timer);
+      if (!d.on) return;
+      this.dragging = false;
+      ghost.classList.add('hidden');
+      d.el.classList.remove('dragging');
+      for (const el of this.bagSlots) el.classList.remove('drop-here');
+      this.dragEndedAt = performance.now(); // (the click that follows a drop isn't a click)
+      const to = x === null ? null : slotAt(x, y);
+      if (to !== null && to !== d.from && this.game.player.moveItem(d.from, to) && this.anvilSel?.where === 'bag') {
+        const sel = this.anvilSel.index;
+        if (sel === d.from || sel === to) this.anvilSel.index = sel === d.from ? to : d.from;
+      }
+    };
+    this.bagSlots.forEach((el, i) => {
+      el.addEventListener('pointerdown', (e) => {
+        if (e.pointerType !== 'mouse' || e.button !== 0 || !this.game.player.bag[i]) return;
+        drag = { from: i, el, x: e.clientX, y: e.clientY, on: false };
+      });
+      el.addEventListener('touchstart', (e) => {
+        if (e.touches.length !== 1 || !this.game.player.bag[i]) return;
+        const t = e.touches[0];
+        drag = { from: i, el, x: t.clientX, y: t.clientY, at: e.timeStamp, on: false, touch: true };
+        drag.timer = setTimeout(() => { if (drag?.from === i && !drag.on) el.classList.add('hold-ready'); }, HOLD); // (it can go now)
+      }, { passive: true });
+    });
+    window.addEventListener('pointermove', (e) => {
+      if (!drag || drag.touch) return;
+      if (!drag.on && Math.hypot(e.clientX - drag.x, e.clientY - drag.y) > 6) begin();
+      if (drag.on) move(e.clientX, e.clientY);
+    });
+    window.addEventListener('pointerup', (e) => { if (drag && !drag.touch) end(e.clientX, e.clientY); });
+    window.addEventListener('touchmove', (e) => {
+      if (!drag?.touch) return;
+      const t = e.touches[0];
+      if (!drag.on) {
+        if (Math.hypot(t.clientX - drag.x, t.clientY - drag.y) <= 10) return;
+        if (e.timeStamp - drag.at < HOLD) { clearTimeout(drag.timer); drag.el.classList.remove('hold-ready'); drag = null; return; } // (a swipe: it scrolls)
+        begin();
+      }
+      e.preventDefault(); // (no scrolling while dragging)
+      move(t.clientX, t.clientY);
+    }, { passive: false });
+    window.addEventListener('touchend', (e) => {
+      if (!drag?.touch) return;
+      const t = e.changedTouches[0];
+      e.preventDefault(); // (no click from the browser: right after a drag it may not send one at all)
+      if (!drag.on) { // a tap (or a hold let go without moving): the item's menu, from here
+        const d = drag;
+        drag = null;
+        clearTimeout(d.timer);
+        d.el.classList.remove('hold-ready');
+        this.bagMenu(d.from, d.el);
+        return;
+      }
+      end(t ? t.clientX : null, t ? t.clientY : null);
+    }, { passive: false });
+    window.addEventListener('touchcancel', () => { if (drag?.touch) end(null, null); });
   }
 
   isJunk(it) {
@@ -742,6 +893,7 @@ export class UI {
     this.closeMenu();
     this.hideTip();
     this.skills.close();
+    if (mode !== this.invMode) this.selling = null;
     this.invMode = mode;
     this.npc = npc;
     if (mode === 'anvil') this.anvilSel = null;
@@ -758,6 +910,7 @@ export class UI {
     if (this.invMode === 'trade' && this.game.trade?.isOpen) { this.game.trade.cancel(); return; } // (closing the bag ends the trade)
     this.el.inventory.classList.add('hidden');
     this.invOpen = false;
+    this.selling = null;
     this.npc = null;
     this.game.doll.visible = false;
     this.game.npcs?.close();
@@ -789,6 +942,7 @@ export class UI {
   escape() {
     if (this.settingsOpen) return this.closeSettings();
     if (this.menuAnchor) return this.closeMenu();
+    if (this.selling) return this.stopSelling();
     if (this.game.places?.travelOpen) return this.game.places.closeTravel();
     if (this.game.trade?.isOpen) return this.game.trade.cancel();
     if (this.invOpen || this.skills.isOpen || !this.el.help.classList.contains('hidden')) {
@@ -876,7 +1030,8 @@ export class UI {
     const r = !def ? '' : def.unique ? ' r-unique' : def.stack ? '' : ` r-${def.tier}`;
     const no = def && !def.stack && cannotUse(it, p.cls, p.level) ? ' cant' : '';
     const offered = this.game.trade?.isOffered(it) ? ' offered' : '';
-    d.className = `bag-slot ${d.dataset.cls || ''}${r}${no}${offered}`;
+    const picked = it && this.selling?.has(it.id) ? ' sell-pick' : '';
+    d.className = `bag-slot ${d.dataset.cls || ''}${r}${no}${offered}${picked}`;
     d.innerHTML = this.slotHtml(it) + extra;
   }
 
@@ -889,10 +1044,13 @@ export class UI {
     this.el.gold.textContent = p.gold;
     $('btn-bag').classList.toggle('full', p.freeSlot() < 0); // (a full bag: nothing new fits)
     if (!this.invOpen) return;
+    this.refreshSellBar();
     p.bag.forEach((it, i) => this.paintSlot(this.bagSlots[i], it));
-    const tap = this.touch ? 'tap' : 'click';
-    this.el.bagHint.textContent = this.invMode === 'trade' ? `${tap} an item to offer it`
-      : this.touch ? 'tap an item for options' : this.invMode === 'bank' ? 'click to bank it' : this.atMerchant() ? 'click to sell · right-click for more' : 'click to equip or use · right-click for more';
+    const tap = this.touch ? 'tap' : 'click', drag = this.touch ? 'hold to drag' : 'drag to move';
+    this.el.bagHint.textContent = this.selling ? `${tap} the items to sell`
+      : this.invMode === 'trade' ? `${tap} an item to offer it`
+      : this.invMode === 'bank' && !this.touch ? `click to bank it · ${drag}`
+      : this.touch ? `tap for options · ${drag}` : `click to equip or use · ${drag} · right-click for more`;
     const junk = this.atMerchant() && p.bag.some((it) => it && this.isJunk(it));
     $('sell-junk').classList.toggle('hidden', !junk);
     if (junk) $('sell-junk').textContent = 'Sell what you can\'t use';
@@ -1075,7 +1233,7 @@ export class UI {
 
   // Tooltips share their box with menus: while a menu is open, hovering things doesn't touch it.
   showTip(target, htmlFn) {
-    if (this.menuAnchor) return;
+    if (this.menuAnchor || this.dragging) return;
     const html = htmlFn();
     if (!html) return;
     this.tipTarget = target;

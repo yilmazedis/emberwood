@@ -580,17 +580,40 @@ export class Player {
     this.game.ui.centerMsg('Interrupted');
   }
 
-  sell(i) {
+  // Sold (the bag's sell mode: ui.sellPicked); quiet: the caller says it and saves, for several at once.
+  sell(i, quiet = false) {
     const it = this.bag[i], g = this.game;
-    if (!it) return;
+    if (!it) return 0;
     const value = sellPrice(it);
     this.bag[i] = null;
     this.gold += value;
     g.npcs?.addBuyback(it, value);
+    if (quiet) return value;
     g.sfx.play('gold');
     g.ui.log(`Sold <b style="color:${itemColor(it)}">${itemName(it)}${it.n > 1 ? ` ×${it.n}` : ''}</b> for <b>${value}g</b>`, 'gold');
     g.ui.refreshInventory();
     g.save();
+    return value;
+  }
+
+  // Bag slot `from` to `to` (dragged): into an empty slot, onto a stack of its kind (as much as fits), or
+  // the two swap places.
+  moveItem(from, to) {
+    const a = this.bag[from], b = this.bag[to];
+    if (!a || from === to) return false;
+    const d = itemDef(a);
+    if (b && d.stack && b.k === a.k && b.n < d.stack) {
+      const take = Math.min(a.n, d.stack - b.n);
+      b.n += take;
+      a.n -= take;
+      if (a.n <= 0) this.bag[from] = null;
+    } else {
+      this.bag[from] = b;
+      this.bag[to] = a;
+    }
+    this.game.ui.refreshInventory();
+    this.game.save();
+    return true;
   }
 
   onGearChanged(save = true) {

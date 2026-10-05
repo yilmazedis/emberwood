@@ -882,7 +882,28 @@ body.touch #buffs { top: calc(86px + var(--sat)); }
 .sr-buy { display: flex; gap: 4px; }
 .sr-buy button { padding: 5px 9px; font-size: 12px; color: var(--gold); }
 .sr-buy button.short { color: #ff8a7a; }
-#sell-junk { padding: 4px 10px; font-size: 12px; }
+#sell-junk, #sell-mode { padding: 4px 10px; font-size: 12px; }
+#sell-junk { display: block; width: 100%; margin: 0 0 8px; }
+#sell-junk.hidden { display: none; }
+.bag-tools { display: flex; gap: 8px; align-items: center; }
+#sell-mode.on { color: #ffb4a6; border-color: #a8392a; }
+#sell-bar { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; padding: 8px 10px; border: 1px solid #a8392a; border-radius: 9px; background: rgba(120, 30, 20, .3); font: 600 13px Inter, sans-serif; }
+#sell-bar.hidden { display: none; }
+#sell-sum { flex: 1; }
+#sell-go { color: #fff; font-weight: 800; background: #a8392a; border-color: #d0604c; padding: 6px 16px; }
+#sell-go:disabled { opacity: .45; }
+.bag-slot.sell-pick { outline: 2px solid #ff6a4a; outline-offset: -3px; }
+.bag-slot.sell-pick::before { content: '✓'; position: absolute; left: 4px; bottom: 2px; z-index: 3; font: 800 13px Inter, sans-serif; color: #ff8a6a; text-shadow: 0 1px 2px #000; }
+.bag-slot img { -webkit-user-drag: none; }
+.bag-slot.dragging { opacity: .35; }
+.bag-slot.hold-ready { outline: 2px solid var(--gold); outline-offset: -3px; transform: scale(1.06); transition: transform .12s; }
+.bag-slot.drop-here { outline: 2px dashed var(--gold); outline-offset: -3px; }
+#drag-ghost { position: fixed; z-index: 70; width: 58px; height: 58px; transform: translate(-50%, -60%) scale(1.08); pointer-events: none; display: grid; place-items: center; border-radius: 10px; background: rgba(40, 30, 20, .85); border: 1px solid var(--edge-hi); box-shadow: 0 8px 24px rgba(0, 0, 0, .55); }
+#drag-ghost.hidden { display: none; }
+#drag-ghost img { width: 48px; height: 48px; }
+#drag-ghost .n, #drag-ghost .plus { position: absolute; }
+#drag-ghost .n { right: 5px; bottom: 2px; font: 800 12px Inter, sans-serif; color: #fff; text-shadow: 0 1px 2px #000; }
+#drag-ghost .plus { right: 4px; top: 1px; font: 800 10px Inter, sans-serif; color: #f6e2b0; text-shadow: 0 1px 2px #000; }
 #bank { display: grid; grid-template-columns: repeat(10, 1fr); gap: 4px; margin-bottom: 10px; }
 #bank .bag-slot { width: auto; height: auto; aspect-ratio: 1; border-radius: 6px; }
 .bank-gold { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }

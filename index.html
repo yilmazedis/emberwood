@@ -31,7 +31,7 @@
      connection short, and a module that failed to load stays failed in its page (a fetch doesn't). -->
 <style id="boot-style">html, body { margin: 0; background: #0e0b08; } body > * { visibility: hidden; }</style>
 <script type="module">
-  const CDN = 'https://cdn.jsdelivr.net/gh/yilmazedis/emberwood@ew-2329ab718775/';
+  const CDN = 'https://cdn.jsdelivr.net/gh/yilmazedis/emberwood@ew-18ab228d2b21/';
   const MODULES = ['account.js', 'ambience.js', 'animator.js', 'arena.js', 'assets.js', 'audio.js', 'bank.js', 'camps.js', 'character.js', 'chat.js', 'classes.js', 'combat.js', 'control.js', 'doll.js', 'dungeon-map.js', 'dungeon.js', 'enemies.js', 'fx.js', 'game.js', 'gear.js', 'input.js', 'items.js', 'lands.js', 'link.js', 'local.js', 'main.js', 'maps.js', 'maps/arena.js', 'maps/cinderfall.js', 'maps/crypt.js', 'maps/depths.js', 'maps/frostfang.js', 'maps/shadowmere.js', 'monsters.js', 'music.js', 'net.js', 'noise.js', 'npcs.js', 'others.js', 'outdoor-map.js', 'party.js', 'places.js', 'player.js', 'quest-data.js', 'quests.js', 'settings.js', 'sim/world.js', 'skills.js', 'skills/common.js', 'skills/healer.js', 'skills/rogue.js', 'skills/scientist.js', 'skills/warrior.js', 'skillui.js', 'terrain.js', 'trade.js', 'ui.js', 'update.js', 'util.js', 'version.js', 'world.js'];
   const q = new URLSearchParams(location.search); // (?nocdn: everything from here; ?cdn: from the CDN anywhere)
   const live = (location.hostname === 'emberwood.kerimcaglar.com' || q.has('cdn')) && !q.has('nocdn');
@@ -252,9 +252,12 @@
       <div class="row"><button id="trade-accept" class="claim">Accept</button><button id="trade-cancel" class="ghost">Cancel</button></div>
     </section>
     <section class="panel inv-right">
-      <header><span>Bag <small id="bag-hint"></small></span><button class="close" data-close="inventory" aria-label="Close">×</button></header>
+      <header><span>Bag <small id="bag-hint"></small></span><span class="bag-tools"><button id="sell-mode" class="ghost" title="Pick items to sell, then confirm">Sell…</button><button class="close" data-close="inventory" aria-label="Close">×</button></span></header>
+      <!-- selling: what's picked and the button that sells it, above the bag (on a phone the bottom is out of sight) -->
+      <div id="sell-bar" class="hidden"><span id="sell-sum"></span><button id="sell-go" class="go">Sell</button><button id="sell-cancel" class="ghost">Cancel</button></div>
+      <button id="sell-junk" class="ghost hidden"></button>
       <div id="bag"></div>
-      <footer><span class="gold"><i class="coin"></i><b id="gold">0</b></span><button id="sell-junk" class="ghost hidden"></button></footer>
+      <footer><span class="gold"><i class="coin"></i><b id="gold">0</b></span></footer>
     </section>
   </div>
 
@@ -294,7 +297,7 @@
       <li><kbd>1</kbd>–<kbd>8</kbd> skills: at your target, at the cursor (areas), or on a friend you clicked (heals, blessings)</li>
       <li><kbd>T</kbd> auto-hunt: your hero fights the monsters around where you switched it on, picks up loot and drinks when hurt. Any move stops it. It runs while the game is on screen: in another tab your hero just waits, and monsters leave it alone.</li>
       <li><kbd>Q</kbd> healing potion · <kbd>X</kbd> mana potion · <kbd>E</kbd> talk to people in camp, use waystones and doors</li>
-      <li><kbd>I</kbd> character &amp; bag · <kbd>K</kbd> skills: a point every level, in three trees. Spread out or go all in.</li>
+      <li><kbd>I</kbd> character &amp; bag (drag items to move them; <b>Sell…</b> under the bag to pick what to sell, then confirm) · <kbd>K</kbd> skills: a point every level, in three trees. Spread out or go all in.</li>
       <li><kbd>Right click</kbd> another hero: invite to your party, or trade with them</li>
       <li>Every camp has a <b>weaponsmith</b>, an <b>armorer</b>, a <b>provisioner</b> (potions, elixirs, camp scrolls), a <b>banker</b> (one bank for all your heroes) and a <b>notice board</b>. Brom's <b>anvil</b> in Emberwood upgrades items to +7 with recipes.</li>
       <li><b>World bosses</b> roam the lands now and then. They leave you alone unless you strike first, they are very hard, and they carry <b>unique</b> items.</li>
@@ -306,7 +309,7 @@
       <li><b>Tap the sword</b> to attack your target: tap again just as each blow lands for a combo. <b>Hold</b> it to keep swinging.</li>
       <li><b>Skill buttons</b> go at your target (or the nearest foe), heals at the friend you tapped.</li>
       <li><b>AUTO</b> hunts on its own around where you are, while the game stays open on screen. <b>Potions</b> by the sword.</li>
-      <li><b>Skills</b>: a point every level, in three trees. <b>Bag</b>: tap an item to see it.</li>
+      <li><b>Skills</b>: a point every level, in three trees. <b>Bag</b>: tap an item to see it, hold it to drag it; <b>Sell…</b> to pick what to sell.</li>
       <li>Every camp has merchants, a banker (one bank for all your heroes) and a notice board; Brom's anvil in Emberwood upgrades items.</li>
       <li>World bosses roam now and then: hard, and they carry unique items.</li>
     </ul>

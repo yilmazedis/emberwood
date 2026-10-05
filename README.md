@@ -203,6 +203,11 @@ Every land's camp has a **weaponsmith** and an **armorer** (their class's gear u
 take you back to the nearest camp), a **banker**, and a **notice board** with the land's quests. Emberwood's camp
 also has **Brom's anvil**. Merchants buy anything you sell, and sell back the last things you sold.
 
+**The bag:** drag an item onto another slot to move it (two items swap places; potions of a kind join up). On a
+phone, hold the item a moment, then drag. Nothing is sold by a click: press **Sell…** under the bag, pick the
+items (click or tap; they get a red mark and the total shows), then **Sell**. "Sell what you can't use" at a
+merchant picks those items for you to check and confirm.
+
 The **bank** is one for the whole account: 60 slots and gold, shared by all your heroes at every banker.
 
 ## Quests
@@ -257,8 +262,8 @@ corner, under the log (what you picked up, gold included).
 **Phones and tablets** (switches automatically on the first touch): a floating joystick on the left of the screen
 (push a little to walk, fully to run), the sword button (tap for each blow of a combo, hold to keep swinging), six
 skill buttons around it, the two potions and AUTO beside them. Tap a monster to target it, a hero for party or
-trade. Without a target, attacks and skills go at the nearest enemy. In the bag, tap an item to see it, then Use,
-Equip or Sell. Chat opens a line at the top of the screen (the keyboard covers the bottom). The page can't be zoomed
+trade. Without a target, attacks and skills go at the nearest enemy. In the bag, tap an item to see it, then Use
+or Equip; hold it a moment to drag it elsewhere. Chat opens a line at the top of the screen (the keyboard covers the bottom). The page can't be zoomed
 by accident (a quick double tap or two fingers on the buttons used to zoom iPhones in, leaving the game shifted). A
 web page can't lock the screen's turning on iPhones; on Android it goes full screen and stays sideways.
 
