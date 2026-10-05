@@ -47,7 +47,8 @@ automated tests; `&cls=scientist`, `rogue` or `healer` picks the class of a new 
   of the place's level; updates carry a stay number (`ep`) so nothing from the place you left leaks in.
 - **Kills are shared:** the heroes who hurt a monster form teams (a party, or a lone hero). The XP is split between
   teams by damage dealt; a party's part goes to its members within 60 m by level, plus 20% per extra member, so
-  grouping pays. The team that dealt the most gets the loot; party members take turns. Everyone credited counts the
+  grouping pays. The team that dealt the most gets the loot; party members take turns. A world boss is fairer:
+  everyone who dealt at least a tenth of its damage gets loot of their own too. Everyone credited counts the
   kill for their quests.
 - **Parties:** up to 8. Tap a hero's name (or `/invite Name`) to invite; the party frame shows each member's level,
   life and land; `/p` is the party's chat; `/kick`, `/leave`, and the leader can pass the lead. A party shares one
@@ -242,8 +243,8 @@ Frostfang (low), Ignis, the Living Pyre in Cinderfall (middle) and Umbra the Dev
 a few minutes after heroes arrive in a land, and ten minutes after it falls. It walks from zone to zone and never
 attacks first, but once struck it fights everyone who hit it and calls for help. It has ten times the Life of the
 land's boss and armor that takes a tenth off every blow (its own blows are a boss's): bring a party. Bosses walk
-through trees and rocks instead of getting stuck on them. A world boss drops gold, one item or recipe, and one
-time in five a unique. The world chat announces when one rises and falls, and a ☠ marks it on
+through trees and rocks instead of getting stuck on them. Everyone who dealt at least a tenth of a world boss's
+damage, in a party or not, gets their own drop: gold, one item or recipe, and one time in five a unique. The world chat announces when one rises and falls, and a ☠ marks it on
 the minimap.
 
 The lands' shapes are in `src/maps/*.js` (an `OutdoorMap` or `DungeonMap` each, shared with the server); `lands.js`,

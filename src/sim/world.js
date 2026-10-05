@@ -518,8 +518,9 @@ class Monster {
   // Who gets what for this kill: [[hero, XP share, loot 0/1], …]. The heroes who hurt it form teams: a
   // party (with its members nearby, hit or not) or a lone hero. The XP is split between teams by the
   // damage each dealt; a party's part goes to its members by their level, plus a bonus for each extra
-  // member (grouping pays). The team that dealt the most gets the loot; a party's members take turns.
-  // Everyone credited counts the kill for their quests.
+  // member (grouping pays). The team that dealt the most gets the loot; a party's members take turns. A
+  // world boss is fairer: everyone who dealt a tenth of its damage gets loot of their own too (each game
+  // rolls its own: the unique one time in five). Everyone credited counts the kill for their quests.
   credits() {
     const sim = this.sim, teams = new Map();
     let total = 0;
@@ -540,12 +541,12 @@ class Monster {
           && (this.hitters.has(o.pid) || (o.alive && Math.hypot(o.x - this.x, o.z - this.z) < SHARE_RANGE)));
       }
     }
-    const out = [];
+    const out = [], fair = this.def.worldBoss ? total * 0.1 : Infinity;
     for (const t of teams.values()) {
       const n = t.heroes.length, pool = (t.dmg / total) * (1 + PARTY_BONUS * (n - 1));
       const levels = t.heroes.reduce((sum, h) => sum + h.level, 0);
       const looter = t !== best ? null : t.party ? t.heroes[sim.turn(t.party) % n] : t.heroes[0];
-      for (const h of t.heroes) out.push([h.pid, r3((pool * h.level) / levels), h === looter ? 1 : 0]);
+      for (const h of t.heroes) out.push([h.pid, r3((pool * h.level) / levels), h === looter || (this.hitters.get(h.pid) || 0) >= fair ? 1 : 0]);
     }
     return out;
   }

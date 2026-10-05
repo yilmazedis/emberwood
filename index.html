@@ -31,7 +31,7 @@
      connection short, and a module that failed to load stays failed in its page (a fetch doesn't). -->
 <style id="boot-style">html, body { margin: 0; background: #0e0b08; } body > * { visibility: hidden; }</style>
 <script type="module">
-  const CDN = 'https://cdn.jsdelivr.net/gh/yilmazedis/emberwood@ew-18ab228d2b21/';
+  const CDN = 'https://cdn.jsdelivr.net/gh/yilmazedis/emberwood@ew-b32131d81ddb/';
   const MODULES = ['account.js', 'ambience.js', 'animator.js', 'arena.js', 'assets.js', 'audio.js', 'bank.js', 'camps.js', 'character.js', 'chat.js', 'classes.js', 'combat.js', 'control.js', 'doll.js', 'dungeon-map.js', 'dungeon.js', 'enemies.js', 'fx.js', 'game.js', 'gear.js', 'input.js', 'items.js', 'lands.js', 'link.js', 'local.js', 'main.js', 'maps.js', 'maps/arena.js', 'maps/cinderfall.js', 'maps/crypt.js', 'maps/depths.js', 'maps/frostfang.js', 'maps/shadowmere.js', 'monsters.js', 'music.js', 'net.js', 'noise.js', 'npcs.js', 'others.js', 'outdoor-map.js', 'party.js', 'places.js', 'player.js', 'quest-data.js', 'quests.js', 'settings.js', 'sim/world.js', 'skills.js', 'skills/common.js', 'skills/healer.js', 'skills/rogue.js', 'skills/scientist.js', 'skills/warrior.js', 'skillui.js', 'terrain.js', 'trade.js', 'ui.js', 'update.js', 'util.js', 'version.js', 'world.js'];
   const q = new URLSearchParams(location.search); // (?nocdn: everything from here; ?cdn: from the CDN anywhere)
   const live = (location.hostname === 'emberwood.kerimcaglar.com' || q.has('cdn')) && !q.has('nocdn');

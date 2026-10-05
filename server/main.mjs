@@ -60,7 +60,8 @@ world.onWorldBoss = (area, kind, boss, info) => {
   let text;
   if (kind === 'spawn') text = `⚠ ${name} roams ${land}${info?.name ? `, near ${info.name}` : ''}. It leaves heroes alone unless they strike first.`;
   else {
-    const top = Array.isArray(info) ? info.find((c) => c[2] === 1) : null, who = top ? inWorld.get(top[0])?.char?.name : null;
+    const top = Array.isArray(info) && info.length ? info.reduce((a, c) => (c[1] > a[1] ? c : a)) : null; // (the biggest share)
+    const who = top ? inWorld.get(top[0])?.char?.name : null;
     text = `☠ ${name} has fallen${who ? ` to ${who}${info.length > 1 ? ' and friends' : ''}` : ''}! It will be back in ten minutes.`;
   }
   const msg = { t: 'chat', s: 1, x: text };
