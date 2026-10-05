@@ -192,10 +192,14 @@ the Healer's Chain, Blessed and Seraph).
 - **Unique items:** only the world bosses (below) drop them, one in five kills, every unique of the boss's item
   class equally likely: weapons, shields, books and accessories, never clothes. They are a quarter stronger
   than normal items of their level.
-- **Upgrades:** Brom the blacksmith in Emberwood's camp upgrades any item up to **+7** (normal items start at +1,
-  uniques at +0). Each + adds a tenth of the item's main stats. It never fails, so it costs recipes of the item's
-  class (one up to +4, two for +5 and +6, three for +7) and a little gold. Brom sells the recipes (low 900, middle
-  6 500, high 32 000 gold); quests, bosses and world bosses give some.
+- **Upgrades:** Brom the blacksmith in Emberwood's camp upgrades items: weapons, shields and books up to **+10**,
+  clothes and accessories up to **+7** (normal items start at +1, uniques at +0). Each + adds a tenth of the item's
+  main stats. It never fails; each step costs recipes of the item's class (one up to +4, two for +5 and +6, three
+  for +7 and +8, four for +9, five for +10) and a small fee. Brom sells the recipes (for now cheaply, while
+  upgrading is tried out: low 50, middle 200, high 600 gold); quests, bosses and world bosses give some.
+- **Upgrade glow** (`src/enchant.js`), on what a hero holds, for everyone to see: nothing up to +7; at +8 a pink
+  aura with sparkles around the weapon's head (a shield's, book's or bow's middle); at +9 the weapon also shines
+  in slow pulses; at +10 it shines all the time. A unique item has its own glow at any level.
 
 ## Camps
 
@@ -369,6 +373,7 @@ Variants: `?size=192`, `?size=512&maskable` (Android adaptive icon), `?size=180&
   (these three, `classes.js`, `util.js` and `noise.js` are plain data and math, shared with the server)
 - `src/items.js`: every item (weapons, clothes, accessories, uniques, potions, recipes), tiers, upgrades, loot rolls
 - `src/gear.js`: procedural models (maces, spears, mauls, gloves, boots, accessories, potions, recipes)
+- `src/enchant.js`: the glow of a held item upgraded to +8, +9 or +10
 - `src/camps.js`: who stands in each camp (shared with the server); `src/npcs.js`: the camp's people drawn, their
   stock, buying, selling and the anvil; `src/bank.js`: the account's bank
 - `src/trade.js`, `server/trade.mjs`: trading between heroes

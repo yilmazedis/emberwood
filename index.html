@@ -31,8 +31,8 @@
      connection short, and a module that failed to load stays failed in its page (a fetch doesn't). -->
 <style id="boot-style">html, body { margin: 0; background: #0e0b08; } body > * { visibility: hidden; }</style>
 <script type="module">
-  const CDN = 'https://cdn.jsdelivr.net/gh/yilmazedis/emberwood@ew-ca83c7ad1b60/';
-  const MODULES = ['account.js', 'ambience.js', 'animator.js', 'arena.js', 'assets.js', 'audio.js', 'bank.js', 'camps.js', 'character.js', 'chat.js', 'classes.js', 'combat.js', 'control.js', 'doll.js', 'dungeon-map.js', 'dungeon.js', 'enemies.js', 'fx.js', 'game.js', 'gear.js', 'input.js', 'items.js', 'lands.js', 'link.js', 'local.js', 'main.js', 'maps.js', 'maps/arena.js', 'maps/cinderfall.js', 'maps/crypt.js', 'maps/depths.js', 'maps/frostfang.js', 'maps/shadowmere.js', 'monsters.js', 'music.js', 'net.js', 'noise.js', 'npcs.js', 'others.js', 'outdoor-map.js', 'party.js', 'places.js', 'player.js', 'quest-data.js', 'quests.js', 'settings.js', 'sim/world.js', 'skills.js', 'skills/common.js', 'skills/healer.js', 'skills/rogue.js', 'skills/scientist.js', 'skills/warrior.js', 'skillui.js', 'terrain.js', 'trade.js', 'ui.js', 'update.js', 'util.js', 'version.js', 'world.js'];
+  const CDN = 'https://cdn.jsdelivr.net/gh/yilmazedis/emberwood@ew-0eb607644ec6/';
+  const MODULES = ['account.js', 'ambience.js', 'animator.js', 'arena.js', 'assets.js', 'audio.js', 'bank.js', 'camps.js', 'character.js', 'chat.js', 'classes.js', 'combat.js', 'control.js', 'doll.js', 'dungeon-map.js', 'dungeon.js', 'enchant.js', 'enemies.js', 'fx.js', 'game.js', 'gear.js', 'input.js', 'items.js', 'lands.js', 'link.js', 'local.js', 'main.js', 'maps.js', 'maps/arena.js', 'maps/cinderfall.js', 'maps/crypt.js', 'maps/depths.js', 'maps/frostfang.js', 'maps/shadowmere.js', 'monsters.js', 'music.js', 'net.js', 'noise.js', 'npcs.js', 'others.js', 'outdoor-map.js', 'party.js', 'places.js', 'player.js', 'quest-data.js', 'quests.js', 'settings.js', 'sim/world.js', 'skills.js', 'skills/common.js', 'skills/healer.js', 'skills/rogue.js', 'skills/scientist.js', 'skills/warrior.js', 'skillui.js', 'terrain.js', 'trade.js', 'ui.js', 'update.js', 'util.js', 'version.js', 'world.js'];
   const q = new URLSearchParams(location.search); // (?nocdn: everything from here; ?cdn: from the CDN anywhere)
   const live = (location.hostname === 'emberwood.kerimcaglar.com' || q.has('cdn')) && !q.has('nocdn');
   const show = () => document.getElementById('boot-style')?.remove(); // (the page stays hidden until it's styled)
@@ -233,7 +233,7 @@
     <!-- Brom's anvil (src/npcs.js): upgrade an item with recipes -->
     <section class="panel inv-left inv-anvil">
       <header><span>Brom's Anvil <small>upgrades never fail</small></span><button class="close" data-close="inventory" aria-label="Close">×</button></header>
-      <div class="sec-note">Pick an item you wear or carry. Each step takes recipes of the item's class and a fee; +7 is the most.</div>
+      <div class="sec-note">Pick an item you wear or carry. Each step takes recipes of the item's class and a fee. Weapons, shields and books go up to +10 and glow from +8; clothes and accessories up to +7.</div>
       <div id="anvil-pick"></div>
       <div id="anvil-detail"></div>
       <div class="sec-title">Recipes <small>Brom sells them</small></div>
@@ -299,7 +299,7 @@
       <li><kbd>Q</kbd> healing potion · <kbd>X</kbd> mana potion · <kbd>E</kbd> talk to people in camp, use waystones and doors</li>
       <li><kbd>I</kbd> character &amp; bag (drag items to move them; <b>Sell…</b> under the bag to pick what to sell, then confirm) · <kbd>K</kbd> skills: a point every level, in three trees. Spread out or go all in.</li>
       <li><kbd>Right click</kbd> another hero: invite to your party, or trade with them</li>
-      <li>Every camp has a <b>weaponsmith</b>, an <b>armorer</b>, a <b>provisioner</b> (potions, elixirs, camp scrolls), a <b>banker</b> (one bank for all your heroes) and a <b>notice board</b>. Brom's <b>anvil</b> in Emberwood upgrades items to +7 with recipes.</li>
+      <li>Every camp has a <b>weaponsmith</b>, an <b>armorer</b>, a <b>provisioner</b> (potions, elixirs, camp scrolls), a <b>banker</b> (one bank for all your heroes) and a <b>notice board</b>. Brom's <b>anvil</b> in Emberwood upgrades items with recipes: weapons, shields and books to +10 (they glow from +8), clothes and accessories to +7.</li>
       <li><b>World bosses</b> roam the lands now and then. They leave you alone unless you strike first, they are very hard, and they carry <b>unique</b> items.</li>
       <li><kbd>Enter</kbd> chat · <kbd>Mouse wheel</kbd> zoom · <kbd>F</kbd> full screen · <kbd>Esc</kbd> settings · <kbd>M</kbd> mute</li>
     </ul>

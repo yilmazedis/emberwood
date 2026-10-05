@@ -166,6 +166,7 @@ header .close { padding: 0 9px; font-size: 18px; line-height: 24px; }
 .bag-slot.cant::after { content: ''; position: absolute; inset: 0; border-radius: 8px; background: rgba(170, 30, 20, .22); pointer-events: none; }
 .bag-slot.offered { outline: 2px dashed #9be06a; outline-offset: -3px; }
 .bag-slot .plus, .eq-slot .plus { position: absolute; right: 3px; top: 1px; font: 800 10px Inter, sans-serif; color: #f6e2b0; text-shadow: 0 1px 2px #000; pointer-events: none; }
+.bag-slot .plus.hi, .eq-slot .plus.hi, #drag-ghost .plus.hi { color: #ff8ae8; text-shadow: 0 0 6px rgba(255, 60, 210, .9), 0 1px 2px #000; }
 .bag-slot .n { position: absolute; right: 4px; bottom: 1px; font: 800 11px Inter, sans-serif; color: #fff; text-shadow: 0 1px 2px #000; pointer-events: none; }
 #stats { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 16px; margin: 12px 0; font: 600 12px Inter, sans-serif; color: var(--muted); }
 #stats div { display: flex; justify-content: space-between; }

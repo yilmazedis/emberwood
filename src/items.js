@@ -12,7 +12,9 @@
 // from its definition here (itemDef), so a change of balance reaches every item already found.
 import { clamp, weightedPick, pick } from './util.js';
 
-export const MAX_PLUS = 7; // upgrades: normal items start at +1, unique ones at +0
+export const MAX_PLUS = 10; // upgrades: normal items start at +1, unique ones at +0; weapons, shields and books
+// go up to +10 (and glow from +8: enchant.js), clothes and accessories to +7
+export const maxPlus = (d) => (d && (d.slot === 'weapon' || d.slot === 'offhand') ? MAX_PLUS : 7);
 export const UPGRADE_GAIN = 0.1; // each + adds a tenth of the item's main stats
 export const UNIQUE_POWER = 1.25; // a unique item is this much stronger than a normal one of its level
 
@@ -293,9 +295,9 @@ stack('elixir_might', { name: 'Elixir of Might', kind: 'elixir', buff: 'elixir_m
 stack('elixir_iron', { name: 'Elixir of Iron', kind: 'elixir', buff: 'elixir_iron', level: 5, price: 250, stack: 20, icon: 'elixir_grey', desc: '+20% armor for 10 minutes.' });
 stack('elixir_vigor', { name: 'Elixir of Vigor', kind: 'elixir', buff: 'elixir_vigor', level: 5, price: 250, stack: 20, icon: 'elixir_green', desc: '+10% maximum Life for 10 minutes.' });
 stack('camp_scroll', { name: 'Camp Scroll', kind: 'scroll', level: 1, price: 40, stack: 20, icon: 'scroll', desc: 'Read it to return to the camp of the land you are in (it takes a few seconds; being hit breaks it).' });
-stack('recipe_low', { name: 'Low Class Upgrade Recipe', kind: 'recipe', tier: 'low', level: 1, price: 900, stack: 20, icon: 'recipe_low', desc: 'The anvil in Emberwood camp upgrades a low class item one step with it. It never fails.' });
-stack('recipe_mid', { name: 'Middle Class Upgrade Recipe', kind: 'recipe', tier: 'mid', level: 1, price: 6500, stack: 20, icon: 'recipe_mid', desc: 'The anvil in Emberwood camp upgrades a middle class item one step with it. It never fails.' });
-stack('recipe_high', { name: 'High Class Upgrade Recipe', kind: 'recipe', tier: 'high', level: 1, price: 32000, stack: 20, icon: 'recipe_high', desc: 'The anvil in Emberwood camp upgrades a high class item one step with it. It never fails.' });
+stack('recipe_low', { name: 'Low Class Upgrade Recipe', kind: 'recipe', tier: 'low', level: 1, price: 50, stack: 20, icon: 'recipe_low', desc: 'The anvil in Emberwood camp upgrades a low class item one step with it. It never fails.' });
+stack('recipe_mid', { name: 'Middle Class Upgrade Recipe', kind: 'recipe', tier: 'mid', level: 1, price: 200, stack: 20, icon: 'recipe_mid', desc: 'The anvil in Emberwood camp upgrades a middle class item one step with it. It never fails.' });
+stack('recipe_high', { name: 'High Class Upgrade Recipe', kind: 'recipe', tier: 'high', level: 1, price: 600, stack: 20, icon: 'recipe_high', desc: 'The anvil in Emberwood camp upgrades a high class item one step with it. It never fails.' });
 
 // Elixirs' boosts (Player.recompute applies them; they last through travel and saves).
 export const ELIXIRS = {
@@ -324,7 +326,7 @@ export function makeItem(key, opts = {}) {
   const d = ITEMS[key];
   if (!d) throw new Error(`no such item ${key}`);
   if (d.stack) return { id: newId(), k: key, n: clamp(opts.n ?? 1, 1, d.stack) };
-  return { id: newId(), k: key, p: clamp(opts.p ?? (d.unique ? 0 : 1), d.unique ? 0 : 1, MAX_PLUS) };
+  return { id: newId(), k: key, p: clamp(opts.p ?? (d.unique ? 0 : 1), d.unique ? 0 : 1, maxPlus(d)) };
 }
 
 // How strong an item is at its plus: 1 at +1 (normal) or +0 (unique), a tenth more for each step.
@@ -374,13 +376,14 @@ export function sellPrice(it) {
   return Math.round((d.price / 4) * (1 + 0.5 * Math.max(0, (it.p ?? 0) - (d.unique ? 0 : 1))));
 }
 
-// Upgrading from +p to +(p+1): recipes of the item's class (more for the last steps) and a smith's fee.
+// Upgrading from +p to +(p+1): recipes of the item's class (more for the last steps: 1 up to +4, 2 for +5 and +6,
+// 3 for +7 and +8, 4 for +9, 5 for +10) and a smith's fee. (Cheap for now, while upgrading is being tried out.)
 export function upgradeCost(it) {
   const d = itemDef(it);
-  if (!d || d.stack || (it.p ?? 0) >= MAX_PLUS) return null;
+  if (!d || d.stack || (it.p ?? 0) >= maxPlus(d)) return null;
   const next = (it.p ?? 0) + 1;
-  const recipes = next >= 7 ? 3 : next >= 5 ? 2 : 1;
-  return { recipe: TIERS[d.tier].recipe, recipes, gold: Math.round(d.price * 0.05 * next / 5) * 5 + 10 };
+  const recipes = next >= 10 ? 5 : next >= 9 ? 4 : next >= 7 ? 3 : next >= 5 ? 2 : 1;
+  return { recipe: TIERS[d.tier].recipe, recipes, gold: Math.round(d.price * 0.02 * next / 5) * 5 + 10 };
 }
 
 // ---------------------------------------------------------------- loot

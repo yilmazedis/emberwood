@@ -6,7 +6,7 @@ import { Humanoid } from './character.js';
 import { heightAt, resolveCollision } from './world.js';
 import {
   ITEMS, WEAPON_TYPES, SLOTS, emptyEquipment, itemDef, itemStats, makeItem, slotsFor, cannotUse, sellPrice, newId,
-  itemName, itemColor, MAX_PLUS, upgradeCost,
+  itemName, itemColor, maxPlus, upgradeCost,
 } from './items.js';
 import { dampAngle, yawTo, rand, has, clamp } from './util.js';
 import { CLASSES, lookOf as classLook } from './classes.js';
@@ -38,17 +38,13 @@ export const COMBO = { open: 0.8, grace: 0.32, perfect: 0.12, mults: [1, 1.04, 1
 // Clothes and weapons on the model: weapons in the hands, a helmet shows the look's hat, armor colours the
 // body (and from middle class shows the cape), gloves and boots tint hands and feet. eq: slot -> item.
 export function applyEquipmentVisuals(h, eq, cls, look = 0) {
-  const L = classLook(cls, look), glowOf = (it) => {
-    const d = itemDef(it);
-    if (!d) return null;
-    if ((it.p ?? 0) >= 7) return d.glow ?? 0xff6a10; // +7 burns brightly
-    return d.unique || (it.p ?? 0) >= 5 ? d.glow ?? null : null;
-  };
-  const wd = itemDef(eq.weapon), od = itemDef(eq.offhand);
+  // (upgrades show from +8: enchant.js; a unique item has its own glow at any level)
+  const L = classLook(cls, look), glowOf = (it) => { const d = itemDef(it); return d?.unique ? d.glow ?? null : null; };
+  const wd = itemDef(eq.weapon), od = itemDef(eq.offhand), middle = (d) => d?.type === 'shield' || d?.type === 'book' || d?.type === 'bow';
   const leftBow = wd && WEAPON_TYPES[wd.type]?.left;
-  h.equip(leftBow ? 'l' : 'r', wd ? wd.model : null, glowOf(eq.weapon), wd?.tint ?? null);
+  h.equip(leftBow ? 'l' : 'r', wd ? wd.model : null, glowOf(eq.weapon), wd?.tint ?? null, eq.weapon?.p ?? 0, middle(wd));
   if (leftBow) h.equip('r', null);
-  else h.equip('l', od ? od.model : null, glowOf(eq.offhand), od?.tint ?? null);
+  else h.equip('l', od ? od.model : null, glowOf(eq.offhand), od?.tint ?? null, eq.offhand?.p ?? 0, middle(od));
   const head = itemDef(eq.head), body = itemDef(eq.body);
   const shown = new Set();
   if (head?.look?.helm !== 0 && head) {
@@ -79,7 +75,7 @@ export function equipmentFromLook(k) {
   const item = (v, slots) => {
     const [key, plus] = Array.isArray(v) ? v : [v, 1];
     if (typeof key !== 'string' || !has(ITEMS, key) || !slots.includes(ITEMS[key].slot) || ITEMS[key].stack) return null;
-    return { k: key, p: clamp(Number(plus) || 0, 0, MAX_PLUS) };
+    return { k: key, p: clamp(Number(plus) || 0, 0, maxPlus(ITEMS[key])) };
   };
   eq.weapon = item(k.w, ['weapon']);
   eq.offhand = item(k.o, ['offhand', 'weapon']);

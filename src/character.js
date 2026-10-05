@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { cloneCharacter, cloneItem } from './assets.js';
 import { Animator } from './animator.js';
+import { enchant } from './enchant.js';
 import { lerp, easeOutCubic, easeInOut } from './util.js';
 
 const AX = new THREE.Vector3(1, 0, 0);
@@ -141,11 +142,15 @@ export class Humanoid {
     return this.group.position;
   }
 
-  equip(hand, modelName, glow = null, tint = null) {
+  // plus: the item's upgrade (+8 and up glow: enchant.js); center: it glows around its middle (shields…)
+  equip(hand, modelName, glow = null, tint = null, plus = 0, center = false) {
     const bone = this.bones[hand === 'r' ? 'handslotr' : 'handslotl'];
-    const key = `${modelName}|${glow}|${tint}`;
+    const key = `${modelName}|${glow}|${tint}|${plus >= 8 ? plus : 0}`;
     if (this.handKeys?.[hand] === key) return; // (already holding just that)
     (this.handKeys ||= {})[hand] = key;
+    this.handFx ||= {};
+    this.handFx[hand]?.dispose();
+    this.handFx[hand] = null;
     if (this.hands[hand]) {
       bone.remove(this.hands[hand]);
       this.hands[hand] = null;
@@ -154,6 +159,7 @@ export class Humanoid {
       const m = cloneItem(modelName, glow, tint);
       bone.add(m);
       this.hands[hand] = m;
+      this.handFx[hand] = enchant(m, plus, { center });
     }
   }
 
@@ -276,6 +282,7 @@ export class Humanoid {
 
   update(dt) {
     this.anim.update(dt);
+    if (this.handFx) for (const fx of Object.values(this.handFx)) fx?.update(dt);
     if (this.swing) {
       this.swing.t += dt;
       this.applyProcedural();

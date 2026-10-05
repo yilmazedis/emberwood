@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { Assets, iconFor } from './assets.js';
 import {
   ITEMS, SLOT_LABEL, itemDef, itemStats, itemLines, itemName, itemColor, typeLine, cannotUse, sellPrice, upgradeCost,
-  MAX_PLUS, UNIQUE_COLOR, STAT_LINES,
+  maxPlus, UNIQUE_COLOR, STAT_LINES,
 } from './items.js';
 import { xpForLevel, MAX_LEVEL, BAG_SIZE, BAR_SIZE, POTION_CD } from './player.js';
 import { BANK_SIZE } from './bank.js';
@@ -1020,7 +1020,7 @@ export class UI {
   slotHtml(it) {
     if (!it) return '';
     const d = itemDef(it);
-    const tag = d?.stack ? (it.n > 1 ? `<span class="n">${it.n}</span>` : '') : `<span class="plus">+${it.p ?? 0}</span>`;
+    const tag = d?.stack ? (it.n > 1 ? `<span class="n">${it.n}</span>` : '') : `<span class="plus${(it.p ?? 0) >= 8 ? ' hi' : ''}">+${it.p ?? 0}</span>`;
     return `<img src="${iconFor(it)}" alt="">${tag}`;
   }
 
@@ -1150,13 +1150,13 @@ export class UI {
     const sel = this.anvilSel;
     $('anvil-pick').innerHTML = picks.map(({ where, index, it }) => {
       const d = itemDef(it), on = sel && sel.where === where && String(sel.index) === String(index);
-      return `<div class="bag-slot r-${d.unique ? 'unique' : d.tier}${on ? ' selected' : ''}${(it.p ?? 0) >= MAX_PLUS ? ' maxed' : ''}" data-where="${where}" data-index="${index}" title="${esc(itemName(it))}">${this.slotHtml(it)}${where === 'eq' ? '<i class="worn">worn</i>' : ''}</div>`;
+      return `<div class="bag-slot r-${d.unique ? 'unique' : d.tier}${on ? ' selected' : ''}${(it.p ?? 0) >= maxPlus(d) ? ' maxed' : ''}" data-where="${where}" data-index="${index}" title="${esc(itemName(it))}">${this.slotHtml(it)}${where === 'eq' ? '<i class="worn">worn</i>' : ''}</div>`;
     }).join('') || '<div class="sec-note">Nothing to upgrade.</div>';
     const it = sel ? (sel.where === 'eq' ? p.equipment[sel.index] : p.bag[sel.index]) : null;
     if (!it || itemDef(it).stack) { $('anvil-detail').innerHTML = '<div class="anvil-empty">Pick an item above.</div>'; }
     else {
       const d = itemDef(it), cost = upgradeCost(it);
-      if (!cost) $('anvil-detail').innerHTML = `<div class="anvil-item"><b style="color:${itemColor(it)}">${itemName(it)}</b><div class="sec-note">As good as it gets: +${MAX_PLUS}.</div></div>`;
+      if (!cost) $('anvil-detail').innerHTML = `<div class="anvil-item"><b style="color:${itemColor(it)}">${itemName(it)}</b><div class="sec-note">As good as it gets: +${maxPlus(itemDef(it))}.</div></div>`;
       else {
         const next = { ...it, p: (it.p ?? 0) + 1 }, a = itemStats(it), b = itemStats(next);
         const rows = [];
@@ -1220,7 +1220,7 @@ export class UI {
         cmp = `<div class="tt-cmp">${parts.join('<br>')}</div>`;
       }
     }
-    const upg = d.stack ? '' : `<div class="tt-plus">${(it.p ?? 0) >= MAX_PLUS ? 'Fully upgraded' : `Upgrade at the anvil: +${(it.p ?? 0) + 1} next`}</div>`;
+    const upg = d.stack ? '' : `<div class="tt-plus">${(it.p ?? 0) >= maxPlus(d) ? 'Fully upgraded' : `Upgrade at the anvil: +${(it.p ?? 0) + 1} next${(it.p ?? 0) + 1 >= 8 ? ' (it will glow)' : ''}`}</div>`;
     const color = d.unique ? UNIQUE_COLOR : itemColor(it);
     return `<div class="tt-name" style="color:${color}">${itemName(it)}${d.stack && it.n > 1 ? ` <small>×${it.n}</small>` : ''}</div>
       <div class="tt-type">${typeLine(it)}</div>${req}
