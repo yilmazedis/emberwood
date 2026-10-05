@@ -818,6 +818,9 @@ export class UI {
     for (const b of document.querySelectorAll('#set-quality button')) {
       b.addEventListener('click', () => { g.setSetting('quality', b.dataset.v); this.syncSettings(); });
     }
+    for (const b of document.querySelectorAll('#set-fps button')) {
+      b.addEventListener('click', () => { g.setSetting('fps', Number(b.dataset.v)); this.syncSettings(); });
+    }
     $('leave-game').addEventListener('click', () => g.leave());
   }
 
@@ -833,6 +836,7 @@ export class UI {
     zoom.nextElementSibling.textContent = `${zoom.value}%`;
     $('set-muted').checked = s.muted;
     for (const b of document.querySelectorAll('#set-quality button')) b.classList.toggle('on', b.dataset.v === s.quality);
+    for (const b of document.querySelectorAll('#set-fps button')) b.classList.toggle('on', Number(b.dataset.v) === (s.fps || 60));
   }
 
   openSettings() {

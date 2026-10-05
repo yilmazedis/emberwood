@@ -271,10 +271,25 @@ Everything you hear is synthesized live with WebAudio; there are no audio files.
 - **Ambience** (`ambience.js`): wind and birdsong in the woods, crows and stronger wind in the graveyard, water by the
   pond, crackling near fires; in the crypt a low rumble, a draft, dripping water and more echo.
 - **Settings** (Esc, or the Settings button): music, sound effect and ambience volume, mute, graphics quality (Low turns
-  off shadows and glow and draws fewer pixels, for older phones), camera distance (phones have no mouse wheel), and
+  off shadows and glow and draws fewer pixels, for older phones), frame rate (60, or 30 to save battery and keep a
+  laptop or phone cooler), camera distance (phones have no mouse wheel), and
   **Leave game**, which saves and returns to the title screen. Online the world doesn't wait while the settings are
   open (offline it pauses); monsters leave a hero alone while the app is in the background, and the sound rests. Settings are kept in the browser
   (`emberwood-settings`), separate from the save.
+
+## Keeping it light
+
+The game never draws more than 60 frames a second (or 30, in Settings), however fast the screen is: a 120 Hz
+MacBook used to draw twice as many for nothing. It draws at 1.5 times the screen's pixels at most (1.25 on phones),
+with 2× smoothed edges and a half-size glow, and if frames come late for a few seconds it draws fewer pixels until
+they're on time again (then slowly more). Trees, rocks, grass and flowers are drawn in 32 m chunks of the map, so
+only what the camera (or the sun, for shadows) can see is drawn: that halved the triangles of a frame. The game's
+own code is a fraction of a millisecond a frame; the picture is the work.
+
+The server's world is light too: with 60 heroes moving and fighting in four lands a tick takes about 1 ms (1% of one
+CPU core at ten ticks a second), with 150 about 4 ms. Node.js is plenty for this: the world's code is the same
+JavaScript the game runs, so the rules live in one place. What limits it first is the host (shared and slow) and the
+data sent (about 13 KB a second per hero); a small VPS is the next step up, long before another language would be.
 
 ## Install as an app (PWA)
 

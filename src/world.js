@@ -239,25 +239,36 @@ export function swayMaterial(base) {
   return base;
 }
 
+// Many copies of one shape (trees, rocks, grass…) as instances, one mesh per CHUNK-metre square of the map:
+// a chunk is drawn only when the camera (or the sun, for shadows) can see it. (One mesh for the whole map
+// had all of it drawn every frame, twice with its shadows: most of the picture's triangles.)
+const CHUNK = 32;
 export function scatterInstanced(scene, geo, material, items, { castShadow = true, receiveShadow = true } = {}) {
-  const mesh = new THREE.InstancedMesh(geo, material, items.length);
+  const chunks = new Map();
+  for (const it of items) {
+    const k = `${Math.floor(it.x / CHUNK)},${Math.floor(it.z / CHUNK)}`;
+    if (!chunks.has(k)) chunks.set(k, []);
+    chunks.get(k).push(it);
+  }
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3(), e = new THREE.Euler();
   const col = new THREE.Color();
-  items.forEach((it, i) => {
-    e.set(it.tiltX || 0, it.rotY || 0, it.tiltZ || 0);
-    q.setFromEuler(e);
-    s.set(it.sx ?? it.s, it.sy ?? it.s, it.sz ?? it.s);
-    p.set(it.x, it.y, it.z);
-    m.compose(p, q, s);
-    mesh.setMatrixAt(i, m);
-    if (it.color !== undefined) mesh.setColorAt(i, col.set(it.color));
-    else if (it.tint !== undefined) mesh.setColorAt(i, col.setRGB(it.tint, it.tint, it.tint));
-  });
-  mesh.castShadow = castShadow;
-  mesh.receiveShadow = receiveShadow;
-  mesh.computeBoundingSphere();
-  scene.add(mesh);
-  return mesh;
+  for (const list of chunks.values()) {
+    const mesh = new THREE.InstancedMesh(geo, material, list.length);
+    list.forEach((it, i) => {
+      e.set(it.tiltX || 0, it.rotY || 0, it.tiltZ || 0);
+      q.setFromEuler(e);
+      s.set(it.sx ?? it.s, it.sy ?? it.s, it.sz ?? it.s);
+      p.set(it.x, it.y, it.z);
+      m.compose(p, q, s);
+      mesh.setMatrixAt(i, m);
+      if (it.color !== undefined) mesh.setColorAt(i, col.set(it.color));
+      else if (it.tint !== undefined) mesh.setColorAt(i, col.setRGB(it.tint, it.tint, it.tint));
+    });
+    mesh.castShadow = castShadow;
+    mesh.receiveShadow = receiveShadow;
+    mesh.computeBoundingSphere();
+    scene.add(mesh);
+  }
 }
 
 // Trees and rocks stand where terrain.js planned them; bushes, grass and flowers block nothing, so

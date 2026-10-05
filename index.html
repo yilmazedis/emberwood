@@ -31,7 +31,7 @@
      connection short, and a module that failed to load stays failed in its page (a fetch doesn't). -->
 <style id="boot-style">html, body { margin: 0; background: #0e0b08; } body > * { visibility: hidden; }</style>
 <script type="module">
-  const CDN = 'https://cdn.jsdelivr.net/gh/yilmazedis/emberwood@ew-7834f79acbbe/';
+  const CDN = 'https://cdn.jsdelivr.net/gh/yilmazedis/emberwood@ew-46ebe1c0194c/';
   const MODULES = ['account.js', 'ambience.js', 'animator.js', 'arena.js', 'assets.js', 'audio.js', 'bank.js', 'camps.js', 'character.js', 'chat.js', 'classes.js', 'combat.js', 'control.js', 'doll.js', 'dungeon-map.js', 'dungeon.js', 'enemies.js', 'fx.js', 'game.js', 'gear.js', 'input.js', 'items.js', 'lands.js', 'link.js', 'local.js', 'main.js', 'maps.js', 'maps/arena.js', 'maps/cinderfall.js', 'maps/crypt.js', 'maps/depths.js', 'maps/frostfang.js', 'maps/shadowmere.js', 'monsters.js', 'music.js', 'net.js', 'noise.js', 'npcs.js', 'others.js', 'outdoor-map.js', 'party.js', 'places.js', 'player.js', 'quest-data.js', 'quests.js', 'settings.js', 'sim/world.js', 'skills.js', 'skills/common.js', 'skills/healer.js', 'skills/rogue.js', 'skills/scientist.js', 'skills/warrior.js', 'skillui.js', 'terrain.js', 'trade.js', 'ui.js', 'update.js', 'util.js', 'version.js', 'world.js'];
   const q = new URLSearchParams(location.search); // (?nocdn: everything from here; ?cdn: from the CDN anywhere)
   const live = (location.hostname === 'emberwood.kerimcaglar.com' || q.has('cdn')) && !q.has('nocdn');
@@ -325,6 +325,8 @@
     <div class="set-sec">Graphics</div>
     <div class="set-row"><span>Quality</span><div class="seg" id="set-quality"><button data-v="high">High</button><button data-v="low">Low</button></div></div>
     <p class="set-note">Low turns off shadows and glow and draws fewer pixels: smoother on older phones.</p>
+    <div class="set-row"><span>Frame rate</span><div class="seg" id="set-fps"><button data-v="60">60</button><button data-v="30">30</button></div></div>
+    <p class="set-note">30 saves battery and keeps a laptop or phone cooler. If your device falls behind, the game draws fewer pixels for a while by itself.</p>
     <label class="set-row"><span>Camera distance</span><input type="range" id="set-zoom" min="60" max="150" step="5"><output></output></label>
     <div class="set-sec">Game</div>
     <button id="leave-game" class="wide">Leave game</button>

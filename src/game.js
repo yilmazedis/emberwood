@@ -45,10 +45,10 @@ export class Game {
     // phones and tablets: fewer pixels, smaller shadow map, less grass
     this.lowSpec = window.matchMedia('(pointer: coarse)').matches;
     this.renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, this.lowSpec ? 1.5 : 1.75));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, this.lowSpec ? 1.25 : 1.5));
     this.renderer.setSize(w, h);
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -70,7 +70,7 @@ export class Game {
     this.sun.shadow.normalBias = 0.04;
     this.scene.add(this.sun, this.sun.target);
 
-    const rt = new THREE.WebGLRenderTarget(w, h, { type: THREE.HalfFloatType, samples: this.lowSpec ? 2 : 4 });
+    const rt = new THREE.WebGLRenderTarget(w, h, { type: THREE.HalfFloatType, samples: 2 });
     this.composer = new EffectComposer(this.renderer, rt);
     this.composer.setPixelRatio(this.renderer.getPixelRatio());
     this.composer.setSize(w, h);
@@ -79,6 +79,10 @@ export class Game {
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
     this.settings = loadSettings();
+    // smooth play without burning the battery: at most the chosen frame rate (a 120 Hz screen would draw
+    // twice as many frames for nothing), and fewer pixels for a while when frames come late (keepSmooth)
+    this.frameGap = 1000 / (this.settings.fps || 60);
+    this.smooth = { scale: 1, at: 0, frames: 0, calm: 0 };
 
     this.input = new Input();
     this.raycaster = new THREE.Raycaster();
@@ -106,6 +110,7 @@ export class Game {
     if (window.ResizeObserver) new ResizeObserver(() => this.onResize()).observe(container);
     // app in the background: save, and let the music and ambience rest
     document.addEventListener('visibilitychange', () => {
+      this.smooth.frames = 0; // (frames stop while away: no judging the picture by that)
       if (!this.started) return;
       if (document.hidden) { this.save(true); this.sfx.sleep(); } else if (!this.onTitle) this.sfx.wake();
       this.link.sendNow(); // away (monsters leave an absent hero alone) or back
@@ -119,19 +124,47 @@ export class Game {
     saveSettings(this.settings);
     if (key === 'music' || key === 'sfx' || key === 'ambience') this.sfx.setVolume(key, value);
     else if (key === 'muted') this.sfx.setMuted(value);
-    else if (key === 'quality') this.applyQuality(value);
+    else if (key === 'quality') { this.smooth.scale = 1; this.applyQuality(value); }
+    else if (key === 'fps') { this.frameGap = 1000 / value; this.smooth.frames = 0; }
     else if (key === 'zoom') this.zoomTarget = value;
   }
 
-  // High: sharp, shadows and glow. Low: fewer pixels, no shadows, no bloom (older phones).
-  applyQuality(q) {
+  // High: sharp, with shadows, glow and smoothed edges. Low: fewer pixels, no shadows, no glow (older
+  // phones). Either way the picture has fewer pixels while frames come late (smooth.scale, keepSmooth).
+  applyQuality(q = this.settings.quality) {
     const low = q === 'low';
-    const ratio = Math.min(window.devicePixelRatio, low ? 1 : this.lowSpec ? 1.5 : 1.75);
+    const best = Math.min(window.devicePixelRatio, low ? 1 : this.lowSpec ? 1.25 : 1.5);
+    const ratio = Math.min(best, Math.max(0.75, Math.round(best * this.smooth.scale * 100) / 100));
     this.renderer.setPixelRatio(ratio);
     this.composer.setPixelRatio(ratio);
+    const samples = low ? 0 : 2;
+    for (const rt of [this.composer.renderTarget1, this.composer.renderTarget2]) {
+      if (rt.samples !== samples) { rt.samples = samples; rt.dispose(); }
+    }
     this.bloom.enabled = !low;
     this.sun.castShadow = !low;
     this.onResize(true);
+  }
+
+  // Frames coming late for a few seconds (a phone, an old laptop, a busy moment): draw fewer pixels. On
+  // time for half a minute: try a little more again, up to what the quality setting allows.
+  keepSmooth(now) {
+    const sm = this.smooth;
+    if (!sm.frames++) { sm.at = now; return; }
+    const secs = (now - sm.at) / 1000;
+    if (secs < 3) return;
+    const fps = (sm.frames - 1) / secs, want = this.settings.fps || 60;
+    sm.frames = 0;
+    if (secs > 6) return; // (the app was away: that says nothing about the picture)
+    if (fps < want * 0.8 && sm.scale > 0.5) {
+      sm.scale = Math.max(0.5, sm.scale - 0.15);
+      sm.calm = 0;
+      this.applyQuality();
+    } else if (fps > want * 0.95 && sm.scale < 1 && (sm.calm += secs) >= 30) {
+      sm.scale = Math.min(1, sm.scale + 0.1);
+      sm.calm = 0;
+      this.applyQuality();
+    }
   }
 
   // The hero to play: { id, name, cls, look, save, bank, rev } from the server (or the local one when offline).
@@ -273,12 +306,20 @@ export class Game {
     this.ui.zoneToast({ name: 'Emberwood', sub: 'A tiny action RPG' });
     this.ui.refreshTracker();
     setInterval(() => this.save(), 10000);
+    let tick = this.last, owed = 0;
     const loop = () => {
       requestAnimationFrame(loop);
       const now = performance.now();
-      let dt = Math.min(0.05, (now - this.last) / 1000);
+      // at most the chosen frame rate, whatever the screen's: time is counted up and a frame drawn per
+      // frameGap of it (so a 144 Hz screen still gets 60, not every third frame)
+      owed += now - tick;
+      tick = now;
+      if (owed < this.frameGap - 1) return;
+      owed = Math.min(owed - this.frameGap, this.frameGap);
+      const dt = Math.min(0.05, (now - this.last) / 1000);
       this.last = now;
       this.frame(dt);
+      if (!this.onTitle) this.keepSmooth(now);
     };
     loop();
   }
@@ -1013,7 +1054,7 @@ export class Game {
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(w, h);
     this.composer.setSize(w, h);
-    this.bloom.setSize(w, h);
+    this.bloom.setSize(Math.round(w / 2), Math.round(h / 2)); // (a soft glow needs few pixels)
     if (this.fx) this.fx.setViewport(h * this.renderer.getPixelRatio(), this.camera.fov);
   }
 }
