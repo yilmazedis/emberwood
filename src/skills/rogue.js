@@ -6,7 +6,11 @@ import { angleDiff, yawTo, rand, TAU } from '../util.js';
 import { UP, ahead, play, puff, aimedAt, handPos, pointOf, behind, blessFx } from './common.js';
 
 const pct = (v) => `${Math.round(v * 100)}%`;
-const arrow = (g, a, real, to, o) => g.projectiles.spawn({ from: handPos(a, true), to, owner: real ? 'player' : 'remote', speed: 34, color: 0xfff0d0, trail: 0xc8a070, radius: 0.32, range: 22, size: 0.14, small: true, noLight: true, glide: 1.0, arrow: true, ...o });
+const arrow = (g, a, real, to, o) => {
+  const v = a.vol();
+  if (v > 0.01) g.sfx.play('bow', v); // (several at once still twang once)
+  return g.projectiles.spawn({ from: handPos(a, true), to, owner: real ? 'player' : 'remote', speed: 34, color: 0xfff0d0, trail: 0xc8a070, feather: 0xd84a3a, radius: 0.32, range: 22, size: 0.14, small: true, noLight: true, glide: 1.0, arrow: true, ...o });
+};
 
 export const ROGUE = {
   // ---------------------------------------------------------------- Assassination
@@ -106,7 +110,7 @@ export const ROGUE = {
     cast(a, ctx, real) {
       const g = a.game, p = pointOf(a, ctx, 12);
       a.faceToward(p);
-      a.h.anim.play('Throw', { timeScale: 1.4, startAt: 0.1 });
+      a.h.startSwing(0.76, 'bow'); // (drawn, loosed at 0.38 s)
       play(a, 'swing', 0.4);
       return {
         t: 0, dur: 0.6, canMove: false, fired: false,
@@ -116,7 +120,6 @@ export const ROGUE = {
           arrow(g, a, real, aimedAt(a, handPos(a, true), p), { homing: ctx.target, mult: 1.8 * ctx.pw, size: 0.2, radius: 0.4, color: 0xffe08a, trail: 0xffa040, knock: 1.4, noLight: false });
           play(a, 'bolt', 0.7);
         },
-        end: () => a.h.anim.stopOne(),
       };
     },
   },
@@ -128,7 +131,7 @@ export const ROGUE = {
     cast(a, ctx, real) {
       const g = a.game, p = pointOf(a, ctx, 10);
       a.faceToward(p);
-      a.h.anim.play('Throw', { timeScale: 2, startAt: 0.15 });
+      a.h.startSwing(0.44, 'bow');
       return {
         t: 0, dur: 0.5, canMove: false, fired: false,
         tick: (dt, s) => {
@@ -140,7 +143,6 @@ export const ROGUE = {
           }
           play(a, 'knives', 0.8);
         },
-        end: () => a.h.anim.stopOne(),
       };
     },
   },
@@ -152,7 +154,7 @@ export const ROGUE = {
     cast(a, ctx, real) {
       const g = a.game, p = pointOf(a, ctx, 12);
       a.faceToward(p);
-      a.h.anim.play('Throw', { timeScale: 1.7, startAt: 0.12 });
+      a.h.startSwing(0.6, 'bow');
       return {
         t: 0, dur: 0.5, canMove: false, fired: false,
         tick: (dt, s) => {
@@ -161,7 +163,6 @@ export const ROGUE = {
           arrow(g, a, real, aimedAt(a, handPos(a, true), p), { mult: 1.3 * ctx.pw, pierce: true, range: 20, color: 0xbfeaff, trail: 0x3a8aff, size: 0.18, eff: { slow: [0.5, 4] } });
           play(a, 'frost', 0.4);
         },
-        end: () => a.h.anim.stopOne(),
       };
     },
   },
@@ -174,7 +175,7 @@ export const ROGUE = {
       const g = a.game, p = pointOf(a, ctx, 10);
       p.y = heightAt(p.x, p.z);
       a.faceToward(p);
-      a.h.anim.play('Throw', { timeScale: 1.4 });
+      a.h.startSwing(0.5, 'bow'); // (loosed at 0.25 s, with a twang)
       play(a, 'knives');
       g.fx.telegraph(p, 5, 0.5, null, 0xffd08a);
       let waves = 0, acc = 0.3;
@@ -192,7 +193,14 @@ export const ROGUE = {
         if (real) g.areaHit({ at: p, radius: 5, mult: 0.55 * ctx.pw, knock: 0.1, quiet: true });
         return waves < 5;
       });
-      return { t: 0, dur: 0.5, canMove: false, end: () => a.h.anim.stopOne() };
+      return {
+        t: 0, dur: 0.5, canMove: false, fired: false,
+        tick: (dt, s) => {
+          if (s.fired || s.t < 0.25) return;
+          s.fired = true;
+          play(a, 'bow');
+        },
+      };
     },
   },
 

@@ -148,6 +148,15 @@ export class Sfx {
     switch (name) {
       case 'swing': this._noise(now, 0.16, 'bandpass', 700, 2600, 0.5 * v, 2); break;
       case 'whiff': this._noise(now, 0.1, 'highpass', 2000, 4000, 0.15 * v); break;
+      case 'bow': // the string lets go: a low twang, a hiss of air
+        this._tone(now, 0.22, 'triangle', 330, 110, 0.32 * v, 0.002);
+        this._tone(now, 0.12, 'sawtooth', 165, 70, 0.08 * v, 0.002);
+        this._noise(now, 0.09, 'bandpass', 3000, 1200, 0.18 * v, 3);
+        break;
+      case 'arrowhit': // the head bites in
+        this._noise(now, 0.07, 'lowpass', 1400, 300, 0.42 * v, 1);
+        this._tone(now, 0.05, 'square', 220, 90, 0.08 * v, 0.001);
+        break;
       case 'cleave': this._noise(now, 0.3, 'bandpass', 400, 1800, 0.8 * v, 1.5); this._tone(now, 0.25, 'sine', 110, 50, 0.5 * v); break;
       case 'whirl': this._noise(now, 1.3, 'bandpass', 500, 1500, 0.35 * v, 3); break;
       case 'hit': this._tone(now, 0.12, 'sine', 170, 60, 0.6 * v); this._noise(now, 0.07, 'lowpass', 3000, 800, 0.5 * v); break;

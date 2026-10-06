@@ -104,20 +104,20 @@ export function boltAction(a, point, real, target = null) {
   };
 }
 
-// An arrow from a bow (the basic attack of archers), for our hero or for show.
-export function arrowAction(a, point, real, target = null) {
-  const g = a.game;
-  a.h.anim.play('Throw', { timeScale: 2.2, startAt: 0.15 });
+// An arrow from a bow (the basic attack of archers), for our hero or for show: the bow comes up and the string
+// is drawn (character.js SWINGS.bow), loosed a moment later (at most a third of a second), with a twang.
+export function arrowAction(a, point, real, target = null, dur = 0.6) {
+  const g = a.game, release = Math.min(0.32, dur * 0.5);
+  a.h.startSwing(release * 2, 'bow');
   return {
     fired: false,
     tick: (dt, s) => {
-      if (s.fired || s.t < 0.18) return;
+      if (s.fired || s.t < release) return;
       s.fired = true;
       const from = handPos(a, true);
-      g.projectiles.spawn({ from, to: aimedAt(a, from, point), homing: target, owner: real ? 'player' : 'remote', mult: s.mult ?? 1, spell: false, speed: 34, color: 0xfff0d0, trail: 0xc8a070, radius: 0.32, range: 18, size: 0.14, small: true, noLight: true, glide: 1.0, arrow: true, combo: s.combo });
-      if (a.vol() > 0.01) g.sfx.play('swing', 0.3 * a.vol());
+      g.projectiles.spawn({ from, to: aimedAt(a, from, point), homing: target, owner: real ? 'player' : 'remote', mult: s.mult ?? 1, spell: false, speed: 34, color: 0xfff0d0, trail: 0xc8a070, feather: 0xd84a3a, radius: 0.32, range: 18, size: 0.14, small: true, noLight: true, glide: 1.0, arrow: true, combo: s.combo });
+      if (a.vol() > 0.01) g.sfx.play('bow', a.vol());
     },
-    end: () => a.h.anim.stopOne(),
   };
 }
 
@@ -797,7 +797,7 @@ export class Player {
     if (manual && step > 0) g.ui.combo(step, perfect ? 'perfect' : 'good');
     this.cd.attack = dur;
     if (s.ranged) {
-      const act = s.ranged === 'arrow' ? arrowAction(this, point, true, target) : boltAction(this, point, true, target);
+      const act = s.ranged === 'arrow' ? arrowAction(this, point, true, target, dur) : boltAction(this, point, true, target);
       this.action = { t: 0, dur, canMove: false, swing: true, mult, combo: step, ...act };
       g.link.act({ k: s.ranged === 'arrow' ? 'ar' : 'bo', x: r2(point.x), z: r2(point.z) });
       return true;

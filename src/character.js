@@ -14,7 +14,30 @@ const _qa = new THREE.Quaternion();
 const _qb = new THREE.Quaternion();
 const _qc = new THREE.Quaternion();
 const _axis = new THREE.Vector3();
+// (for aiming a bow: aimBow)
+const _f = new THREE.Vector3(), _v = Array.from({ length: 8 }, () => new THREE.Vector3());
+const _q1 = new THREE.Quaternion(), _q2 = new THREE.Quaternion();
+const UP = new THREE.Vector3(0, 1, 0);
 const _flash = new THREE.Color();
+
+// Which way a bow's string lies from its grip (the bow's own origin), in the bow's own space: toward the middle
+// of the whole bow, since the string is across from the grip.
+function stringSideOf(bow) {
+  const parent = bow.parent, keep = { p: bow.position.clone(), q: bow.quaternion.clone(), s: bow.scale.clone() };
+  parent?.remove(bow);
+  bow.position.set(0, 0, 0);
+  bow.quaternion.identity();
+  bow.scale.set(1, 1, 1);
+  bow.updateMatrixWorld(true);
+  const c = new THREE.Box3().setFromObject(bow).getCenter(new THREE.Vector3());
+  bow.position.copy(keep.p);
+  bow.quaternion.copy(keep.q);
+  bow.scale.copy(keep.s);
+  parent?.add(bow);
+  bow.updateMatrixWorld(true);
+  c.y = 0; // (along the bow doesn't count)
+  return c.lengthSq() > 1e-8 ? c.normalize() : new THREE.Vector3(0, 0, -1);
+}
 
 // piecewise keyframes: [[t, value], ...] with smooth interpolation
 function keyed(keys, t) {
@@ -31,7 +54,16 @@ function keyed(keys, t) {
 //   fwd:   right arm raise forward (negative = up)     lean: spine pitch
 //   wrist: blade pitch                                 roll: blade roll (lays the blade flat)
 //   lfwd:  left (shield) arm raise forward
-const SWINGS = {
+export const SWINGS = {
+  bow: { // draw and loose: a little side on (twist), the arms aimed by aimBow while `aim` is up: the bow arm out
+    // level at the target with the bow upright, the string hand drawn to the cheek; at the middle (0.5) the arrow
+    // goes and the hand flicks back (`loose`)
+    twist: [[0, 0], [0.32, -0.25], [0.62, -0.25], [1, 0]],
+    lean: [[0, 0], [0.32, -0.03], [0.5, -0.03], [0.56, -0.07], [1, 0]],
+    elbow: [[0, 0], [0.32, -0.6], [0.5, -0.6], [0.56, -0.15], [1, 0]],
+    aim: [[0, 0], [0.3, 1], [0.62, 1], [1, 0]],
+    loose: [[0, 0], [0.5, 0], [0.56, 1], [0.8, 0.5], [1, 0]],
+  },
   slash: { // forehand: wind up on the right, sweep across to the left
     twist: [[0, 0], [0.3, -0.85], [0.5, 0.8], [1, 0]],
     side: [[0, 0], [0.3, 1.25], [0.5, 0.35], [1, 0]],
@@ -157,6 +189,7 @@ export class Humanoid {
     }
     if (modelName) {
       const m = cloneItem(modelName, glow, tint);
+      if (modelName.startsWith('bow')) m.rotateY(Math.PI); // (the pack's bow sits in the hand string-out: turned, its string faces the archer)
       bone.add(m);
       this.hands[hand] = m;
       this.handFx[hand] = enchant(m, plus, { center });
@@ -254,6 +287,59 @@ export class Humanoid {
     bone.updateMatrixWorld(true);
   }
 
+  // Rotate a bone by a rotation given in world space.
+  rotateBoneQ(bone, q) {
+    if (!bone) return;
+    bone.parent.getWorldQuaternion(_qc);
+    bone.quaternion.premultiply(_qa.copy(_qc).invert().multiply(q).multiply(_qc));
+    bone.updateMatrixWorld(true);
+  }
+
+  // A bow at full draw, worked out from where the bones are (so any model and base animation fits), blended in
+  // by w: the bow arm swung onto the line straight ahead at shoulder height, the bow rolled upright about it,
+  // the string hand brought to the cheek (and, as loose goes to 1, flicked back from it).
+  aimBow(w, loose = 0) {
+    const b = this.bones;
+    if (!b.upperarml || !b.handl || !b.upperarmr || !b.handr || !b.head) return;
+    this.model.updateMatrixWorld(true);
+    const fwd = _f.set(0, 0, 1).applyQuaternion(this.model.getWorldQuaternion(_qb));
+    fwd.y = 0;
+    fwd.normalize();
+    const [ls, lh, d1, d2, d3, rs, rh, head] = _v;
+    // the bow arm, at the target
+    b.upperarml.getWorldPosition(ls);
+    b.handl.getWorldPosition(lh);
+    _q1.setFromUnitVectors(d1.copy(lh).sub(ls).normalize(), fwd);
+    this.rotateBoneQ(b.upperarml, _q2.identity().slerp(_q1, w));
+    // the bow upright: its long side turned straight up at the wrist (the least turn, so it keeps its string side)
+    const bow = this.hands.l;
+    if (bow) {
+      bow.updateMatrixWorld(true);
+      _q1.setFromUnitVectors(d1.set(0, 1, 0).transformDirection(bow.matrixWorld), UP);
+      this.rotateBoneQ(b.wristl, _q2.identity().slerp(_q1, w));
+      // …and turned about the upright so its string is behind the grip, toward the archer
+      const side = bow.userData.stringSide ||= stringSideOf(bow);
+      d1.copy(side).transformDirection(bow.matrixWorld);
+      d1.y = 0;
+      if (d1.lengthSq() > 1e-6) {
+        d1.normalize();
+        d2.copy(fwd).negate();
+        let ang = Math.acos(Math.max(-1, Math.min(1, d1.dot(d2))));
+        if (d3.crossVectors(d1, d2).y < 0) ang = -ang;
+        this.rotateBoneQ(b.wristl, _q1.setFromAxisAngle(UP, ang * w));
+      }
+    }
+    // the string hand, at the cheek (a little out and back once loosed)
+    b.upperarmr.getWorldPosition(rs);
+    b.handr.getWorldPosition(rh);
+    b.head.getWorldPosition(head);
+    const right = d3.copy(rs).sub(ls).normalize();
+    head.addScaledVector(fwd, 0.25 - 0.3 * loose).addScaledVector(right, 0.28 + 0.12 * loose);
+    head.y -= 0.12;
+    _q1.setFromUnitVectors(d1.copy(rh).sub(rs).normalize(), d2.copy(head).sub(rs).normalize());
+    this.rotateBoneQ(b.upperarmr, _q2.identity().slerp(_q1, w));
+  }
+
   applyProcedural() {
     const b = this.bones;
     if (this.swing) {
@@ -261,6 +347,7 @@ export class Humanoid {
       const p = Math.min(1, this.swing.t / this.swing.dur);
       const twist = keyed(s.twist, p), fwd = keyed(s.fwd || NO_KEYS, p), side = keyed(s.side || NO_KEYS, p), lean = keyed(s.lean, p);
       const wrist = keyed(s.wrist || NO_KEYS, p), roll = keyed(s.roll || NO_KEYS, p), lfwd = keyed(s.lfwd || NO_KEYS, p);
+      const lside = keyed(s.lside || NO_KEYS, p), lroll = keyed(s.lroll || NO_KEYS, p), elbow = keyed(s.elbow || NO_KEYS, p);
       this.model.updateMatrixWorld(true);
       this.rotateBone(b.spine, AX, lean);
       this.rotateBone(b.spine, AY, twist * 0.45);
@@ -271,6 +358,10 @@ export class Humanoid {
       this.rotateBone(b.wristr, AX, wrist);
       this.rotateBone(b.wristr, AZ, roll);
       this.rotateBone(b.upperarml, AX, lfwd);
+      this.rotateBone(b.upperarml, AZ, lside * this.sideSign);
+      this.rotateBone(b.wristl, AZ, lroll);
+      this.rotateBone(b.lowerarmr, AX, -elbow);
+      if (s.aim) { const w = keyed(s.aim, p); if (w > 0.001) this.aimBow(w, keyed(s.loose || NO_KEYS, p)); }
     }
     if (this.armsOut > 0.01) {
       this.model.updateMatrixWorld(true);

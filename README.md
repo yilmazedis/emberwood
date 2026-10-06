@@ -122,7 +122,9 @@ skill trees.
 | **Healer** | Mace and shield · a warrior's two-handed sword, spear or maul (not Raptor and the other warrior-only weapons) | Heals, blessings that last 10 minutes, resurrection; fights alone with holy fire but kills slower than the rest |
 
 Basic attacks: melee weapons swing, bows shoot arrows, staves and short staves fire bolts. Spell power raises the
-damage of spells (a Scientist's and a Healer's), weapon damage the rest.
+damage of spells (a Scientist's and a Healer's), weapon damage the rest. An archer (hero or monster) raises the bow
+upright with the string toward them, draws to the cheek and looses with a twang; the arrow flies head first and
+sticks a moment in whatever it hits.
 
 ## Skills
 
@@ -349,7 +351,8 @@ Variants: `?size=192`, `?size=512&maskable` (Android adaptive icon), `?size=180&
 | Helmets and cape | Parts of the Knight model, shown or hidden when equipped |
 | Gloves and boots on the knight | The Knight's hands/feet are recolored by a shader that follows the skinning weights of the hand/forearm and foot/toe/shin bones (`character.js`) |
 | Gloves, boots, rings, earrings, necklaces, belts, recipes, potions (icons, loot on the ground) | Small procedural models (`gear.js`); the packs have none |
-| Sword swings | Generated in code (`character.js`); the free pack has no attack clips |
+| Sword swings, the bow draw | Generated in code (`character.js`): keyframed swings; the bow arm, the bow and the string hand are aimed from where the bones are, so the draw fits any model; the free pack has no attack clips |
+| Arrows | Built in code (`combat.js`): a wooden shaft, a steel head and feathers in the archer's color |
 | Terrain, trees, rocks, grass, water, camps, graveyard | Generated in code (`terrain.js` places them, `world.js` draws them), flat-shaded to match KayKit |
 | Market stall, bank, anvil, notice board | Generated in code (`npcs.js`), with the pack's items as wares on the counter |
 | The crypt: walls, floors, pillars, stairs, torches, banners, chests, props | KayKit Dungeon models, packed into one file (`assets/dungeon/crypt.glb`), placed on a 4 m grid and merged into two meshes (`dungeon.js`); walls on the camera side are clipped low |
@@ -389,7 +392,7 @@ Variants: `?size=192`, `?size=512&maskable` (Android adaptive icon), `?size=180&
 - `src/net.js`, `src/account.js`: the connection to the game server, and the sign-in / hero screens
 - `server/`: the game server (`main.mjs` messages, `store.mjs` accounts on disk, `auth.mjs` passwords and tokens, `ws.mjs` WebSocket)
 - `src/quest-data.js`: every quest; `src/quests.js`: the notice boards, progress and rewards
-- `src/combat.js`: projectiles and ground loot
+- `src/combat.js`: projectiles (arrows too) and ground loot
 - `src/ui.js`, `style.css`: HUD, action bar, minimap, inventory, tooltips
 - `src/character.js`, `src/animator.js`: model setup, animation blending, procedural swings
 

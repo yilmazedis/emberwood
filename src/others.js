@@ -227,7 +227,7 @@ export class RemotePlayer {
         const at = new THREE.Vector3(x, heightAt(x, z), z);
         this.endAction();
         this.faceToward(at);
-        this.action = { t: 0, dur: 0.4, ...(a.k === 'ar' ? arrowAction(this, at, false) : boltAction(this, at, false)) };
+        this.action = { t: 0, dur: 0.4, ...(a.k === 'ar' ? arrowAction(this, at, false, null, 0.4) : boltAction(this, at, false)) };
         break;
       }
       case 'dr': g.fx.heal(this.pos); if (vol) g.sfx.play('drink', 0.6 * vol); break;

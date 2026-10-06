@@ -250,9 +250,10 @@ export class Enemy {
         this.h?.startSwing(ev[4], 'chop');
         break;
       }
-      case 'c': // a spell at hero ev[2], ev[3] bolts
+      case 'c': // a spell at hero ev[2], ev[3] bolts (an archer: an arrow, the bow drawn and loosed at hitAt)
         this.attack = { kind: 'cast', t: 0, dur: 1, hitAt: 0.5, hit: false, target: ev[2], n: ev[3] };
-        this.h?.anim.play('Throw', { timeScale: 1.4 });
+        if (this.def.archer) this.h?.startSwing(1, 'bow');
+        else this.h?.anim.play('Throw', { timeScale: 1.4 });
         break;
       case 'u': // a boss calls for help: the Lich raises the dead, a jarl calls his raiders (the world spawns them)
         this.attack = { kind: 'summon', t: 0, dur: 1.5, hitAt: 0.8, hit: false };
@@ -323,15 +324,17 @@ export class Enemy {
   castBolts(a) {
     const g = this.game, d = this.def;
     const hand = new THREE.Vector3();
-    this.h.bones.handslotr.getWorldPosition(hand);
+    this.h.bones[d.archer ? 'handslotl' : 'handslotr'].getWorldPosition(hand); // (an archer's arrow leaves the bow)
     const who = a.target === g.link.pid ? g.player : g.others.byId.get(a.target);
     const tp = who ? who.pos : new THREE.Vector3(this.pos.x + Math.sin(this.yaw) * 6, this.pos.y, this.pos.z + Math.cos(this.yaw) * 6);
     const aim = new THREE.Vector3(tp.x, tp.y + 1.1, tp.z).sub(hand);
     const n = Math.max(1, Math.min(7, a.n | 0));
     for (let i = 0; i < n; i++) {
       const dir = aim.clone().applyAxisAngle(UP, (i - (n - 1) / 2) * 0.2); // the Lich fans out a volley
-      g.projectiles.spawn({ from: hand.clone(), dir, owner: 'enemy', dmg: this.dmg, speed: d.lich ? 12 : d.archer ? 17 : 11, color: d.bolt || 0xb070ff, radius: 0.35, range: d.lich ? 20 : 16, size: d.archer ? 0.18 : 0.3, small: d.archer });
+      if (d.archer) g.projectiles.spawn({ from: hand.clone(), dir, owner: 'enemy', dmg: this.dmg, speed: 20, color: d.bolt || 0xfff0d0, feather: d.bolt, radius: 0.35, range: 16, small: true, noLight: true, arrow: true });
+      else g.projectiles.spawn({ from: hand.clone(), dir, owner: 'enemy', dmg: this.dmg, speed: d.lich ? 12 : 11, color: d.bolt || 0xb070ff, radius: 0.35, range: d.lich ? 20 : 16, size: 0.3 });
     }
+    if (d.archer && this.vol() > 0.01) g.sfx.play('bow', this.vol());
   }
 
   // A grave circle bursts: bones and violet fire, and it hurts if our hero is still standing in it.
