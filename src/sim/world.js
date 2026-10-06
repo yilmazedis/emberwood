@@ -264,8 +264,12 @@ class Monster {
         // (calling for help)
       } else if (d.kind === 'caster') {
         const sees = this.sees(p);
-        if (dist < d.keep * 0.55 && sees) {
-          speed = this.moveToward(this.x - dx, this.z - dz, d.speed * 0.8, dt);
+        this.standT = (this.standT || 0) - dt;
+        // too close: it steps back, but a second or so at a time, then stands and fights a while (backing off
+        // for as long as a hero stayed close, it never let one who fights up close reach it)
+        if (dist < d.keep * 0.55 && sees && this.standT <= 0) {
+          speed = this.moveToward(this.x - dx, this.z - dz, d.speed * 0.75, dt);
+          if ((this.backT = (this.backT || 0) + dt) > 1.2) { this.backT = 0; this.standT = 3; }
         } else if (dist <= d.range && this.atkCd <= 0 && sees) {
           this.startCast(p);
         } else if (dist > d.range * 0.85 || !sees) {

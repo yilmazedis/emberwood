@@ -349,6 +349,34 @@ export class Game {
       if (!this.onTitle) this.keepSmooth(now);
     };
     loop();
+    this.tickInBackground();
+  }
+
+  // Hunting on its own (auto) while the game is in another tab or hidden, if Settings say so: the browser
+  // stops a hidden page's frames and slows its timers, so a little worker ticks ten times a second instead
+  // and the game moves on without drawing. Not hunting, the hero waits, and monsters leave it alone (link.js).
+  huntsInBackground() {
+    return this.settings.background !== 'pause' && !!this.player?.control?.auto && this.player.alive;
+  }
+
+  tickInBackground() {
+    let worker;
+    try {
+      worker = new Worker(URL.createObjectURL(new Blob(['setInterval(() => postMessage(0), 100);'], { type: 'text/javascript' })));
+    } catch { return; } // (no workers: it waits, as it did)
+    let last = performance.now();
+    worker.onmessage = () => {
+      const now = performance.now();
+      let left = Math.min(2, (now - last) / 1000); // (ticks that came late are caught up, within reason)
+      last = now;
+      if (!document.hidden || !this.started || this.onTitle || !this.huntsInBackground()) return;
+      while (left > 0.001) {
+        const dt = Math.min(0.1, left);
+        this.frame(dt, false);
+        left -= dt;
+      }
+      this.last = now; // (the drawn frames go on from here when it's back on screen)
+    };
   }
 
   // ---------------------------------------------------------------- input
@@ -629,7 +657,7 @@ export class Game {
     for (const e of this.foes) {
       if (!e.alive || e.state === 'spawn') continue;
       const dx = e.pos.x - p.pos.x, dz = e.pos.z - p.pos.z, d = Math.hypot(dx, dz);
-      if (d > range + e.radius) continue;
+      if (d > range + e.radius + (e === target ? 0.35 : 0)) continue; // (the foe aimed at: a little leeway)
       if (e !== target && arc < 6.2 && Math.abs(angleDiff(p.yaw, yawTo(dx, dz))) > arc / 2 && d > e.radius + 0.5) continue;
       this.damageEnemy(e, p.rollDamage(mult, spell, critBonus), p.pos, knock, eff);
       n++;
@@ -1004,7 +1032,8 @@ export class Game {
     this.sun.target.position.copy(this.camFocus);
   }
 
-  frame(rawDt) {
+  // A frame of the game: dt seconds on. draw: false while the game is in the background (hunting on).
+  frame(rawDt, draw = true) {
     if (this.onTitle) return; // the title screen covers everything
     if (this.paused && this.offline) { // settings open: hold still, but keep the camera (zoom slider) and picture alive
       this.updateCamera(rawDt);
@@ -1049,6 +1078,7 @@ export class Game {
     this.updateCamera(rawDt);
     this.ui.update(rawDt);
     this.party.update();
+    if (!draw) return;
     this.doll.update(rawDt);
     this.composer.render();
   }

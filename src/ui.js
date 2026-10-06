@@ -975,6 +975,9 @@ export class UI {
     for (const b of document.querySelectorAll('#set-fps button')) {
       b.addEventListener('click', () => { g.setSetting('fps', Number(b.dataset.v)); this.syncSettings(); });
     }
+    for (const b of document.querySelectorAll('#set-background button')) {
+      b.addEventListener('click', () => { g.setSetting('background', b.dataset.v); this.syncSettings(); g.link.sendNow(); });
+    }
     $('leave-game').addEventListener('click', () => g.leave());
   }
 
@@ -991,6 +994,7 @@ export class UI {
     $('set-muted').checked = s.muted;
     for (const b of document.querySelectorAll('#set-quality button')) b.classList.toggle('on', b.dataset.v === s.quality);
     for (const b of document.querySelectorAll('#set-fps button')) b.classList.toggle('on', Number(b.dataset.v) === (s.fps || 60));
+    for (const b of document.querySelectorAll('#set-background button')) b.classList.toggle('on', b.dataset.v === (s.background || 'hunt'));
   }
 
   openSettings() {

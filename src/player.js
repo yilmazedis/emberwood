@@ -22,6 +22,7 @@ export const xpForLevel = (lvl) => Math.round(55 * Math.pow(lvl, 1.55) * (1 + 0.
 export const BAG_SIZE = 30;
 export const BAR_SIZE = 8; // skill slots on the action bar (keys 1–8)
 export const POTION_CD = 1.5;
+const LUNGE = 1.4, LUNGE_SPEED = 5.5; // m a melee blow may carry the hero toward its foe, and how fast
 const _axis = new THREE.Vector2();
 const r2 = (v) => Math.round(v * 100) / 100;
 const _ember = new THREE.Vector3();
@@ -809,6 +810,20 @@ export class Player {
     this.action = {
       t: 0, dur, canMove: false, hit: false, swing: true,
       tick: (dt, a) => {
+        // the foe steps back as the blow comes: the hero steps in with it (a long stride at most), so one that
+        // backs away (a caster keeping its distance) is still hit, not chased for ever
+        if (!a.hit && target?.alive && target.pos) {
+          const dx = target.pos.x - this.pos.x, dz = target.pos.z - this.pos.z, d = Math.hypot(dx, dz);
+          const reach = range + (target.radius || 0) - 0.25;
+          if (d > reach && (a.lunge || 0) < LUNGE) {
+            const step = Math.min(d - reach, LUNGE_SPEED * dt, LUNGE - (a.lunge || 0));
+            this.pos.x += (dx / d) * step;
+            this.pos.z += (dz / d) * step;
+            a.lunge = (a.lunge || 0) + step;
+            this.yaw = this.targetYaw = yawTo(dx, dz);
+            resolveCollision(this.pos, this.radius);
+          }
+        }
         if (!a.hit && a.t >= dur * 0.45) {
           a.hit = true;
           a.canMove = true;

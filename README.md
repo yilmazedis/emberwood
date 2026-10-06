@@ -66,9 +66,10 @@ automated tests; `&cls=scientist`, `rogue` or `healer` picks the class of a new 
   Last 20 lines are shown to heroes who arrive.
 - **Levels:** up to 60. Quick to 10; after that each level asks for more kills of your own level (about 50 at 20,
   130 at 40, 240 at 59; some 5 700 such kills from 1 to 60, plus what quests give). Monsters' life and damage, and what armor takes, grow faster past 10 with the gear.
-- **Away:** a browser can't run a game in a hidden tab, so when you switch to another tab or app your hero waits
-  where it stands and monsters leave it alone. Auto-hunt (below) keeps going only while
-  the game is on screen.
+- **Away:** a browser stops a hidden tab's frames. With auto-hunt on, the hero keeps hunting there anyway
+  (Settings, In the background: Keep hunting, the default; a small worker ticks the game ten times a second,
+  without drawing); set to Pause, or without auto-hunt, the hero waits where it stands and monsters leave it
+  alone. Phones stop the game in the background whatever the setting.
 
 The server (`server/`, Node built-ins only) speaks JSON over one WebSocket at `/ws` and shows `{"ok":true,…}` at
 `/status`. Ten times a second it moves the world on and sends each hero's game what's around it: monsters and heroes
@@ -162,6 +163,9 @@ much slower when built for healing). In the Arena the skills hit heroes at 45%.
   flashes) and the next blow comes faster and harder: four in a chain (×1, ×1.04, ×1.08, ×1.2), +5% for a perfect
   press, and the chain starts over after the fourth. Too early breaks it. A skill cast in that moment is stronger
   too. Holding R (or the button) keeps swinging without the bonus.
+- **Monsters that keep their distance** (casters, archers) step back when a hero comes close, but only a moment at
+  a time, then stand and fight a few seconds; and a melee blow carries the hero a stride toward a foe backing
+  away, so it lands.
 - **Auto-hunt:** T (or AUTO) fights the monsters around where you switched it on, picks up gold and items between
   fights and drinks a potion when hurt. Moving stops it. With a full bag (a red "!" on the bag button) it leaves
   items where they lie and keeps hunting.

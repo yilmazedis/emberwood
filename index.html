@@ -31,7 +31,7 @@
      connection short, and a module that failed to load stays failed in its page (a fetch doesn't). -->
 <style id="boot-style">html, body { margin: 0; background: #0e0b08; } body > * { visibility: hidden; }</style>
 <script type="module">
-  const CDN = 'https://cdn.jsdelivr.net/gh/yilmazedis/emberwood@ew-c786fa001026/';
+  const CDN = 'https://cdn.jsdelivr.net/gh/yilmazedis/emberwood@ew-4947792a82f2/';
   const MODULES = ['account.js', 'ambience.js', 'animator.js', 'arena.js', 'assets.js', 'audio.js', 'bank.js', 'camps.js', 'character.js', 'chat.js', 'classes.js', 'combat.js', 'control.js', 'doll.js', 'dungeon-map.js', 'dungeon.js', 'enchant.js', 'enemies.js', 'fx.js', 'game.js', 'gear.js', 'input.js', 'items.js', 'lands.js', 'link.js', 'local.js', 'main.js', 'maps.js', 'maps/arena.js', 'maps/cinderfall.js', 'maps/crypt.js', 'maps/depths.js', 'maps/frostfang.js', 'maps/shadowmere.js', 'monsters.js', 'music.js', 'net.js', 'noise.js', 'npcs.js', 'others.js', 'outdoor-map.js', 'party.js', 'places.js', 'player.js', 'quest-data.js', 'quests.js', 'settings.js', 'sim/world.js', 'skills.js', 'skills/common.js', 'skills/healer.js', 'skills/rogue.js', 'skills/scientist.js', 'skills/warrior.js', 'skillui.js', 'terrain.js', 'trade.js', 'ui.js', 'update.js', 'util.js', 'version.js', 'world.js'];
   const q = new URLSearchParams(location.search); // (?nocdn: everything from here; ?cdn: from the CDN anywhere)
   const live = (location.hostname === 'emberwood.kerimcaglar.com' || q.has('cdn')) && !q.has('nocdn');
@@ -295,7 +295,7 @@
       <li><kbd>Left click</kbd> a monster: target it and attack · <kbd>Z</kbd> targets the nearest (again: the next) · <kbd>Esc</kbd> lets go</li>
       <li><kbd>R</kbd> attack your target. <b>Combos:</b> press again just as a blow lands (the attack slot flashes) for a faster, stronger chain of up to four; too early breaks it. A skill in that moment is stronger too.</li>
       <li><kbd>1</kbd>–<kbd>8</kbd> skills: at your target, at the cursor (areas), or on a friend you clicked (heals, blessings)</li>
-      <li><kbd>T</kbd> auto-hunt: your hero fights the monsters around where you switched it on, picks up loot and drinks when hurt. Any move stops it. It runs while the game is on screen: in another tab your hero just waits, and monsters leave it alone.</li>
+      <li><kbd>T</kbd> auto-hunt: your hero fights the monsters around where you switched it on, picks up loot and drinks when hurt. Any move stops it. In another tab it keeps hunting (or waits: Settings, In the background).</li>
       <li><kbd>Q</kbd> healing potion · <kbd>X</kbd> mana potion · <kbd>E</kbd> talk to people in camp, use waystones and doors</li>
       <li><kbd>I</kbd> character &amp; bag (drag items to move them; <b>Sell…</b> under the bag to pick what to sell, then confirm) · <kbd>K</kbd> skills: a point every level, in three trees. Spread out or go all in.</li>
       <li><kbd>Right click</kbd> another hero: invite to your party, or trade with them</li>
@@ -330,6 +330,8 @@
     <p class="set-note">High is the default. Low has no shadows or glow and the fewest pixels, for older phones; Ultra is the sharpest, for strong computers and new phones.</p>
     <div class="set-row"><span>Frame rate</span><div class="seg" id="set-fps"><button data-v="60">60</button><button data-v="30">30</button></div></div>
     <p class="set-note">30 saves battery and keeps a laptop or phone cooler. If your device falls behind, the game draws fewer pixels for a while by itself.</p>
+    <div class="set-row"><span>In the background</span><div class="seg" id="set-background"><button data-v="hunt">Keep hunting</button><button data-v="pause">Pause</button></div></div>
+    <p class="set-note">When you switch to another tab or window: with auto-hunt on, your hero keeps hunting (Keep hunting), or waits (Pause). Without auto-hunt it always waits, and monsters leave it alone. Phones stop the game in the background anyway.</p>
     <label class="set-row"><span>Camera distance</span><input type="range" id="set-zoom" min="60" max="150" step="5"><output></output></label>
     <div class="set-sec">Game</div>
     <button id="leave-game" class="wide">Leave game</button>

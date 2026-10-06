@@ -160,7 +160,7 @@ export class WorldLink {
   state() {
     const p = this.game.player;
     return [r2(p.pos.x), r2(p.pos.z), r2(p.yaw), p.moveMode || 0, r2(p.moveSpeed || 0), p.alive ? 1 : 0,
-      r2(Math.min(1, Math.max(0, p.hp / p.stats.maxHp))), document.hidden ? 1 : 0, r2(1 - (1 - p.stats.dr) * p.stats.taken), r2(p.stats.evade || 0)];
+      r2(Math.min(1, Math.max(0, p.hp / p.stats.maxHp))), document.hidden && !this.game.huntsInBackground() ? 1 : 0, r2(1 - (1 - p.stats.dr) * p.stats.taken), r2(p.stats.evade || 0)];
   }
 
   // Our hero hit monster e (the world applies it). eff: { stun, slow: [factor, s], taunt } from skills
