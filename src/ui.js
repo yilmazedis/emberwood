@@ -15,6 +15,7 @@ import { MAPS } from './maps.js';
 import { SKILLS, BUFFS, manaCost } from './skills.js';
 import { questReward } from './quests.js';
 import { SkillWindow } from './skillui.js';
+import { ATTRS, ATTR_NAME, ATTR_ABOUT, attrEffects } from './attributes.js';
 import { rand } from './util.js';
 
 const $ = (id) => document.getElementById(id);
@@ -137,6 +138,7 @@ export class UI {
     $('btn-settings').addEventListener('click', () => this.toggleSettings());
     $('btn-skills').addEventListener('click', () => this.skills.toggle());
     $('btn-full').addEventListener('click', () => this.toggleFullscreen());
+    this.bindAttrs();
     this.bindSettings();
     $('respawn').addEventListener('click', () => this.game.player.respawn());
     this.skills = new SkillWindow(game, this);
@@ -157,6 +159,17 @@ export class UI {
 
   refreshSkills() {
     this.skills.refresh();
+  }
+
+  // A hidden cave's chambers under the minimap (view: the cave we're in, or null).
+  caveHud(view) {
+    const el = $('cave-hud');
+    el.classList.toggle('hidden', !view);
+    if (!view) return;
+    const st = view.state, n = 10, fighting = st.cleared + 1;
+    $('cave-pips').innerHTML = Array.from({ length: n }, (_, i) => `<i class="${i < st.cleared ? 'done' : !st.done && i + 1 === fighting && st.known ? 'now' : ''}${i === n - 1 ? ' boss' : ''}"></i>`).join('');
+    $('cave-note').textContent = !st.known ? view.c.name : st.done ? 'Cleared! The daylight is in the hall'
+      : st.left ? `Chamber ${fighting} of ${n} · ${st.left} left` : `Chamber ${fighting} of ${n} · the way opens…`;
   }
 
   // Lost (or got back) the game server mid-game.
@@ -194,7 +207,7 @@ export class UI {
 
   bagHint(it) {
     const d = itemDef(it);
-    if (this.selling) return `Click to ${this.selling.has(it.id) ? 'leave it' : `sell it (${sellPrice(it)}g)`}`;
+    if (this.selling) return d.bound ? 'It stays with you' : `Click to ${this.selling.has(it.id) ? 'leave it' : `sell it (${sellPrice(it)}g)`}`;
     if (this.invMode === 'bank' && this.invOpen) return 'Click to put it in the bank · drag to move it';
     if (this.invMode === 'anvil' && this.invOpen && !d.stack) return 'Click to pick it for the anvil · right-click for more';
     return `${d.stack ? 'Click to use' : 'Click to equip'} · drag to move it · right-click for more`;
@@ -219,7 +232,7 @@ export class UI {
     if (this.selling) { this.closeMenu(); return this.pickToSell(i); } // (a tap picks, while selling)
     const def = itemDef(it), acts = [];
     if (this.game.trade?.isOpen) return this.openMenu(d, this.itemTip(it), [[this.game.trade.isOffered(it) ? 'Take back' : 'Offer', () => this.game.trade.offerFromBag(i)]]);
-    if (def.stack) { if (def.kind !== 'recipe') acts.push(['Use', () => p.useItem(i)]); }
+    if (def.stack) { if (def.kind !== 'recipe') acts.push([def.kind === 'key' ? 'Where?' : 'Use', () => p.useItem(i)]); }
     else {
       const slots = (def.slot === 'ring' ? ['ring1', 'ring2'] : def.slot === 'ear' ? ['ear1', 'ear2'] : null);
       if (slots && p.equipment[slots[0]] && p.equipment[slots[1]]) acts.push(['Left', () => p.equipFromBag(i, slots[0])], ['Right', () => p.equipFromBag(i, slots[1])]);
@@ -283,6 +296,7 @@ export class UI {
   pickToSell(i) {
     const it = this.game.player.bag[i];
     if (!it) return;
+    if (itemDef(it)?.bound) { this.centerMsg('A cave key can\'t be sold'); return; }
     if (this.selling.has(it.id)) this.selling.delete(it.id); else this.selling.add(it.id);
     this.refreshInventory();
   }
@@ -665,8 +679,8 @@ export class UI {
   // ---------------------------------------------------------------- plates & labels
   createPlate(enemy) {
     const el = document.createElement('div');
-    el.className = `plate${enemy.def.boss ? ' boss' : ''}${enemy.def.worldBoss ? ' world' : ''}`;
-    el.innerHTML = `<div class="nm">${enemy.def.name}<i>Lv ${enemy.level}</i></div><div class="hpb"><b></b></div>`;
+    el.className = `plate${enemy.def.boss ? ' boss' : ''}${enemy.def.worldBoss ? ' world' : ''}${enemy.elite ? ' elite' : ''}`;
+    el.innerHTML = `<div class="nm">${enemy.elite ? '<em>Elite</em> ' : ''}${enemy.def.name}<i>Lv ${enemy.level}</i></div><div class="hpb"><b></b></div>`;
     this.el.plates.appendChild(el);
     const p = { el, ent: enemy, bar: el.querySelector('b'), kind: 'enemy', max: enemy.def.worldBoss ? 60 : 30 };
     this.plates.push(p);
@@ -1177,8 +1191,52 @@ export class UI {
     $('recipes').innerHTML = this.shopRows(this.game.npcs.stock(this.npc || { n: { role: 'anvil' }, land: 'emberwood' }));
   }
 
+  // ---------------------------------------------------------------- attributes (the character panel)
+  bindAttrs() {
+    const el = $('attrs'), p = () => this.game.player;
+    el.addEventListener('click', (e) => {
+      const b = e.target.closest('button[data-k]');
+      if (b && p().addAttr(b.dataset.k, Number(b.dataset.n) || 1)) this.game.sfx.play('equip', 0.5);
+    });
+    el.addEventListener('mouseover', (e) => {
+      const row = e.target.closest('.attr');
+      if (!row || this.touch || row === this.tipTarget) return;
+      const k = row.dataset.k;
+      this.showTip(row, () => `<div class="tt-name">${ATTR_NAME[k]}</div><div>${ATTR_ABOUT[k]}</div><div class="tt-hint">Each level brings 5 points to spend anywhere.</div>`);
+    });
+    el.addEventListener('mouseleave', () => this.hideTip());
+    $('attr-suggest').addEventListener('click', () => {
+      if (p().suggestAttrs()) this.game.sfx.play('equip');
+      else this.centerMsg('No points to spend');
+    });
+    $('attr-reset').addEventListener('click', () => {
+      const h = p(), n = h.spentAttr(), fee = h.respecFee();
+      if (!n) { this.centerMsg('No points spent yet'); return; }
+      this.prompt(`Take back all <b>${n}</b> attribute points ${fee ? `for <b>${fee} gold</b>` : '(free below level 10)'}?`, [
+        ['Take back', () => { if (h.resetAttrs()) this.centerMsg('Your attribute points are free to spend again'); }, 'go'],
+        ['Keep them', () => {}],
+      ]);
+    });
+  }
+
+  refreshAttrs() {
+    const p = this.game.player, s = p.stats, c = CLASSES[p.cls], free = p.freeAttr;
+    const t = $('attr-free');
+    t.textContent = free ? `${free} point${free > 1 ? 's' : ''} to spend` : '';
+    t.classList.toggle('free', free > 0);
+    $('attrs').innerHTML = ATTRS.map((k) => {
+      const spent = p.attr[k] || 0, total = s.attrs[k], gear = total - (c.attrs[k] || 0) - spent;
+      return `<div class="attr" data-k="${k}"><span class="an">${ATTR_NAME[k]}${gear ? `<i>+${gear} from gear</i>` : ''}</span>
+        <span class="av">${total}</span><button data-k="${k}" data-n="1"${free ? '' : ' disabled'} aria-label="One point into ${ATTR_NAME[k]}">+</button><button data-k="${k}" data-n="5"${free ? '' : ' disabled'} aria-label="Five points into ${ATTR_NAME[k]}">+5</button>
+        <div class="ae">${attrEffects(k, total, c, s.weapon).join(' · ')}</div></div>`;
+    }).join('');
+    $('attr-suggest').disabled = !free;
+    $('attr-reset').textContent = p.spentAttr() ? `Take back all${p.respecFee() ? ` (${p.respecFee()}g)` : ''}` : 'Take back all';
+  }
+
   refreshCharacter() {
     const p = this.game.player;
+    this.refreshAttrs();
     for (const d of document.querySelectorAll('.eq-slot')) {
       const it = p.equipment[d.dataset.slot], def = itemDef(it);
       d.className = `eq-slot${d.classList.contains('acc') ? ' acc' : ''}${it ? def.unique ? ' r-unique' : ` r-${def.tier}` : ''}`;
@@ -1187,13 +1245,13 @@ export class UI {
     $('char-style').textContent = `${CLASSES[p.cls].name} · ${p.stats.style}`;
     const s = p.stats;
     const rows = [
-      ['Level', p.level], ['Damage', `${s.dmgLo}–${s.dmgHi}`],
-      ['Life', Math.round(s.maxHp)], ['Attack speed', s.atkSpeed.toFixed(2)],
-      ['Mana', Math.round(s.maxMp)], ['Critical', `${Math.round(s.crit * 100)}%`],
-      ['Armor', `${s.armor} (${Math.round(s.dr * 100)}%)`], ['Spell power', `${Math.round(s.spell * 100)}%`],
-      ['Life regen', `${s.regen.toFixed(1)}/s`], ['Move speed', `${Math.round((s.moveSpeed / 5.6) * 100)}%`],
+      ['Weapon damage', `${s.dmgLo}–${s.dmgHi}`], ['Spell damage', `${s.spellLo}–${s.spellHi}`],
+      ['Life', Math.round(s.maxHp)], ['Mana', Math.round(s.maxMp)],
+      ['Armor', `${s.armor} (${Math.round(s.dr * 100)}%)`], ['Attack speed', s.atkSpeed.toFixed(2)],
+      ['Critical', `${Math.round(s.crit * 100)}%`], ['Dodge', `${Math.round(s.evade * 100)}%`],
+      ['Life regen', `${s.regen.toFixed(1)}/s`], ['Healing', `${Math.round(s.heal * 100)}%`],
+      ['Move speed', `${Math.round((s.moveSpeed / 5.6) * 100)}%`], ['Level', p.level],
     ];
-    if (s.evade) rows.push(['Dodge', `${Math.round(s.evade * 100)}%`]);
     this.el.stats.innerHTML = rows.map(([k, v]) => `<div><span>${k}</span><b>${v}</b></div>`).join('');
   }
 
@@ -1342,6 +1400,8 @@ export class UI {
       ctx.fill();
       if (e.def.boss) { ctx.strokeStyle = '#000'; ctx.lineWidth = 1.2; ctx.stroke(); }
     }
+    places.view.minimapOverlay?.(ctx, m); // (a cave's closed gates and its way out)
+    if (!inside) places.mouth?.minimapMark(ctx, m, g.time); // (a hidden cave, found)
     // a world boss roaming this land (the world tells everyone here where it is)
     const wb = g.worldBoss;
     if (wb && wb.map === map.id) {
@@ -1398,6 +1458,7 @@ export class UI {
     }
     this.el.lvl.textContent = p.level;
     $('skill-dot').classList.toggle('hidden', !p.freePoints);
+    $('attr-dot').classList.toggle('hidden', !p.freeAttr);
     this.updateActionBar();
     this.updatePlates();
     this.updateFloaters(dt);

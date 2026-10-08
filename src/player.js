@@ -11,13 +11,15 @@ import {
 import { dampAngle, yawTo, rand, has, clamp } from './util.js';
 import { CLASSES, lookOf as classLook } from './classes.js';
 import { SKILLS, TREES, BUFFS, power, manaCost, auraTick } from './skills.js';
+import { ATTRS, K as AK, FINESSE, ATTR_PER_LEVEL, attrPoints } from './attributes.js';
 import { aimedAt, handPos } from './skills/common.js';
 import { Control } from './control.js';
 import { hdr } from './fx.js';
 
-export const MAX_LEVEL = 60;
+export const MAX_LEVEL = 80;
 // XP to the next level. Quick up to level 10; after that each level asks for more kills of your own level:
-// about 16 at level 10, 50 at 20, 80 at 30, 130 at 40, 190 at 50 and 240 at 59.
+// about 16 at level 10, 50 at 20, 80 at 30, 130 at 40, 190 at 50 and 240 at 59. Past 58 there are no
+// monsters of your level outside the caves (sim/caves.js): a cave a day is the way up.
 export const xpForLevel = (lvl) => Math.round(55 * Math.pow(lvl, 1.55) * (1 + 0.1 * Math.max(0, lvl - 9)));
 export const BAG_SIZE = 30;
 export const BAR_SIZE = 8; // skill slots on the action bar (keys 1–8)
@@ -29,6 +31,7 @@ const _ember = new THREE.Vector3();
 
 const freshQuests = () => ({ done: [], active: [] }); // see quests.js
 const freshSkills = () => ({ pts: {}, bar: new Array(BAR_SIZE).fill(null) });
+const freshAttrs = () => Object.fromEntries(ATTRS.map((k) => [k, 0])); // points spent on each
 
 // The basic attack's combo: a press that lands in the window after a blow (from COMBO_OPEN of the swing to a
 // moment after it ends) chains into the next, stronger blow and cuts the rest of the swing short. Too early
@@ -161,6 +164,8 @@ export class Player {
     this.equipment = emptyEquipment();
     this.quests = freshQuests();
     this.sk = freshSkills();
+    this.attr = freshAttrs();
+    this.cave = { day: 0 }; // the day (caves.js dayNumber) of the last cave run
     this.cd = { attack: 0, potion: 0 };
     this.buffs = {}; // id -> { t: seconds left, v: strength } (skills.js BUFFS)
     this.stunT = 0; // another hero's skill in the arena, or a monster's: stunned (can't act) / slowed
@@ -203,7 +208,7 @@ export class Player {
     for (const [id, b] of Object.entries(this.buffs)) if (BUFFS[id]?.long && b.t > 5) buffs[id] = [Math.round(b.t), r2(b.v)];
     return {
       v: 2, level: this.level, xp: this.xp, gold: this.gold, bag: this.bag, equipment: this.equipment,
-      quests: this.quests, sk: this.sk, buffs,
+      quests: this.quests, sk: this.sk, attr: this.attr, cave: this.cave, buffs,
     };
   }
 
@@ -223,6 +228,11 @@ export class Player {
     for (const t of trees) this.sk.pts[t.id] = clamp(Math.round(s.sk?.pts?.[t.id] || 0), 0, MAX_LEVEL);
     if (this.spentPoints() > this.level) this.sk.pts = {}; // (shouldn't happen: start over)
     for (let i = 0; i < BAR_SIZE; i++) { const id = s.sk?.bar?.[i]; this.sk.bar[i] = has(SKILLS, id) && SKILLS[id].cls === this.cls ? id : null; }
+    this.attr = freshAttrs();
+    for (const k of ATTRS) this.attr[k] = clamp(Math.round(Number(s.attr?.[k]) || 0), 0, attrPoints(MAX_LEVEL));
+    if (this.spentAttr() > attrPoints(this.level)) this.attr = freshAttrs(); // (shouldn't happen: start over)
+    if (!s.attr && this.level > 1) this.newAttrs = true; // (a hero from before attributes: game.js explains)
+    this.cave = { day: Math.max(0, Math.round(Number(s.cave?.day) || 0)) };
     this.buffs = {};
     for (const [id, b] of Object.entries(s.buffs || {})) if (BUFFS[id]?.long && Array.isArray(b)) this.buffs[id] = { t: clamp(Number(b[0]) || 0, 0, BUFFS[id].dur), v: Number(b[1]) || 0 };
     this.onGearChanged(false);
@@ -242,6 +252,7 @@ export class Player {
     this.equipment = emptyEquipment();
     this.quests = freshQuests();
     this.sk = freshSkills();
+    this.attr = freshAttrs();
     this.buffs = {};
     this.kitForLevel();
     this.addItem(makeItem(this.level >= 35 ? 'hp_potion_3' : this.level >= 15 ? 'hp_potion_2' : 'hp_potion_1', { n: Math.max(5, Math.min(30, (s.potions || 0) + 5)) }), true);
@@ -265,14 +276,18 @@ export class Player {
   }
 
   // ---------------------------------------------------------------- stats
+  // The class's attributes, the points spent and what the gear gives (attributes.js says what they do), plus
+  // the weapon's damage and speed, the clothes' armor, the trees' bonuses and timed boosts.
   recompute() {
     const L = this.level, c = CLASSES[this.cls], eq = this.equipment;
     const s = {
-      maxHp: 90 + L * 14, maxMp: 40 + L * 6, armor: L * 1.5, levelDmg: L * 0.9, dmgMin: 2, dmgMax: 4, speed: 1.3,
-      dmgPct: 0.05 * (L - 1), dmgMult: c.dmg, atkSpd: c.atkSpd, moveSpd: c.moveSpd, crit: 0.05 + c.crit, spell: 1 + c.spell,
-      regen: 1 + L * 0.25, mpRegen: 0.75 * (1 + L * 0.12) * Math.sqrt(c.mp), evade: 0, reach: 0, ranged: null, weapon: null,
+      armor: L * 1.5, levelDmg: L * 0.9, dmgMin: 2, dmgMax: 4, speed: 1.3,
+      dmgPct: 0, dmgMult: c.dmg, atkSpd: c.atkSpd, moveSpd: c.moveSpd, crit: 0.05 + c.crit,
+      regen: 1 + L * 0.15, mpRegen: 0.75 * (1 + L * 0.12) * Math.sqrt(c.mp), evade: 0, reach: 0, ranged: null, weapon: null,
       hpPct: 0, armorPct: 0, mpRegenPct: 0, spellPct: 0, dotPct: 0, healPct: 0, typePct: 0, taken: 1,
     };
+    const A = {};
+    for (const k of ATTRS) A[k] = (c.attrs?.[k] || 0) + (this.attr?.[k] || 0);
     // weapons: the main hand's damage and speed; a second one-handed weapon adds an eighth of its damage
     const w = itemDef(eq.weapon);
     if (w) {
@@ -287,20 +302,13 @@ export class Player {
       s.dmgMin += Math.round(os.dmgMin * 0.12);
       s.dmgMax += Math.round(os.dmgMax * 0.12);
     }
-    // everything worn: its stats (the weapons' damage is counted above)
+    // everything worn: armor and attributes (the weapons' damage is counted above)
     for (const slot of SLOTS) {
       const it = eq[slot];
       if (!it) continue;
       const st = itemStats(it);
       s.armor += st.armor || 0;
-      s.maxHp += st.hp || 0;
-      s.maxMp += st.mp || 0;
-      s.dmgPct += st.dmgPct || 0;
-      s.atkSpd += st.atkSpd || 0;
-      s.moveSpd += st.moveSpd || 0;
-      s.crit += st.crit || 0;
-      s.spell += st.spell || 0;
-      s.regen += st.regen || 0;
+      for (const k of ATTRS) A[k] += st[k] || 0;
     }
     // what the points in each tree add
     for (const tree of TREES[this.cls]) {
@@ -321,16 +329,29 @@ export class Player {
       if (def.evade) s.evade = Math.max(s.evade, def.evade(b.v));
       if (def.taken) s.taken *= def.taken(b.v);
     }
-    s.maxHp = Math.round(s.maxHp * c.hp * (1 + s.hpPct));
-    s.maxMp = Math.round(s.maxMp * c.mp);
-    s.armor = Math.round(s.armor * c.armor * (1 + s.armorPct));
+    // the attributes
+    s.attrs = A;
+    const auto = AK.auto * (L - 1), phys = FINESSE.includes(s.weapon) ? (A.str + A.dex) / 2 : A.str;
+    s.maxHp = Math.round((10 + 11 * L + A.vit * AK.vitHp) * c.hp * (1 + s.hpPct));
+    s.maxMp = Math.round((40 + 6 * L + A.int * AK.intMp) * c.mp);
+    s.armor = Math.round((s.armor + A.str * AK.strArmor) * c.armor * (1 + s.armorPct));
+    s.regen += A.vit * AK.vitRegen;
     s.mpRegen *= 1 + s.mpRegenPct;
-    s.spell *= 1 + s.spellPct;
-    s.evade = Math.min(0.6, s.evade);
+    s.atkSpd += A.dex * AK.dexSpd;
+    s.crit += A.dex * AK.dexCrit;
+    s.evade = Math.min(0.6, s.evade + Math.min(AK.dodgeCap, A.dex * AK.dexDodge));
     s.atkSpeed = s.speed * (1 + s.atkSpd);
     s.moveSpeed = 5.6 * (1 + Math.min(0.6, s.moveSpd));
-    s.dmgLo = Math.max(1, Math.round((s.dmgMin + s.levelDmg) * (1 + s.dmgPct + s.typePct) * s.dmgMult));
-    s.dmgHi = Math.max(s.dmgLo + 1, Math.round((s.dmgMax + s.levelDmg) * (1 + s.dmgPct + s.typePct) * s.dmgMult));
+    // a blow: the weapon's damage and the level's share, times weapon damage (Strength) or spell damage (Intelligence)
+    s.baseLo = s.dmgMin + s.levelDmg;
+    s.baseHi = s.dmgMax + s.levelDmg;
+    s.physMul = (1 + auto + phys * AK.str + s.dmgPct + s.typePct) * s.dmgMult;
+    s.spellMul = (1 + auto + A.int * AK.int + s.dmgPct) * s.dmgMult * (1 + s.spellPct);
+    s.dmgLo = Math.max(1, Math.round(s.baseLo * s.physMul));
+    s.dmgHi = Math.max(s.dmgLo + 1, Math.round(s.baseHi * s.physMul));
+    s.spellLo = Math.max(1, Math.round(s.baseLo * s.spellMul));
+    s.spellHi = Math.max(s.spellLo + 1, Math.round(s.baseHi * s.spellMul));
+    s.heal = (1 + s.healPct) * (1 + A.int * AK.intHeal); // heals and blessings
     s.dr = Math.min(0.85, s.armor / (s.armor + 60 + 8 * Math.max(0, L - 10))); // (armor grows with level: so does what it takes)
     s.style = this.styleName();
     this.stats = s;
@@ -353,11 +374,11 @@ export class Player {
     }
   }
 
-  // One blow (or spell): weapon damage plus the hero's level's share, its bonuses, times mult; spells use
-  // spell power. Critical hits do 80% more.
+  // One blow (or spell): weapon damage plus the hero's level's share, times weapon damage (Strength) or, for
+  // spells, spell damage (Intelligence), times mult. Critical hits do 80% more.
   rollDamage(mult, spell = false, critBonus = 0) {
     const s = this.stats;
-    let amount = rand(s.dmgLo, s.dmgHi) * mult * (spell ? s.spell : 1);
+    let amount = rand(s.baseLo, s.baseHi) * mult * (spell ? s.spellMul : s.physMul);
     const crit = this.sureCrit || Math.random() < s.crit + critBonus;
     this.sureCrit = false;
     if (crit) amount *= 1.8;
@@ -367,7 +388,7 @@ export class Player {
   // Damage a second for poisons and burns: mult of an average blow (no crits).
   dotDps(mult, spell = true) {
     const s = this.stats;
-    return Math.max(1, Math.round(((s.dmgLo + s.dmgHi) / 2) * mult * (spell ? s.spell : 1) * (1 + s.dotPct)));
+    return Math.max(1, Math.round(((s.baseLo + s.baseHi) / 2) * mult * (spell ? s.spellMul : s.physMul) * (1 + s.dotPct)));
   }
 
   // ---------------------------------------------------------------- the bag
@@ -529,6 +550,7 @@ export class Player {
       g.save();
     } else if (d.kind === 'scroll') this.readCampScroll();
     else if (d.kind === 'recipe') g.ui.centerMsg('Take it to the anvil in Emberwood camp');
+    else if (d.kind === 'key') g.keyHint(d);
   }
 
   // Drink a potion: the given one, or the strongest of its kind (hp | mp) the hero can use.
@@ -648,7 +670,7 @@ export class Player {
       this.level++;
       leveled = true;
       if (this.level >= MAX_LEVEL) this.xp = 0;
-      this.game.ui.log(`<b>Level ${this.level}!</b> A new skill point: <b>K</b> opens your skills.`, 'lvl');
+      this.game.ui.log(`<b>Level ${this.level}!</b> ${ATTR_PER_LEVEL} attribute points (<b>I</b>: character) and a skill point (<b>K</b>: skills).`, 'lvl');
     }
     if (leveled) {
       this.recompute();
@@ -659,6 +681,7 @@ export class Player {
       this.game.ui.floater(this.headPos(), `Level ${this.level}`, 'info');
       this.game.ui.refreshSkills?.();
       this.game.quests?.onLevel();
+      this.game.checkKeys?.(); // (a cave key for a land outgrown crumbles)
       this.game.link?.act({ k: 'lv' });
       this.game.link?.lookChanged();
       this.game.save();
@@ -732,6 +755,58 @@ export class Player {
 
   respecFee() {
     return this.level < 10 ? 0 : Math.round(this.level * this.level * 4 / 10) * 10;
+  }
+
+  // ---------------------------------------------------------------- attribute points (attributes.js)
+  spentAttr() {
+    return ATTRS.reduce((n, k) => n + (this.attr[k] || 0), 0);
+  }
+
+  get freeAttr() {
+    return Math.max(0, attrPoints(this.level) - this.spentAttr());
+  }
+
+  // n points into attribute k (as many as are free).
+  addAttr(k, n = 1) {
+    n = Math.min(n, this.freeAttr);
+    if (!ATTRS.includes(k) || n <= 0) return false;
+    this.attr[k] += n;
+    this.onAttrsChanged();
+    return true;
+  }
+
+  // The free points the way the class usually spends them (CLASSES[cls].suggest), whole levels at a time.
+  suggestAttrs() {
+    const mix = CLASSES[this.cls].suggest, total = Object.values(mix).reduce((a, b) => a + b, 0);
+    let free = this.freeAttr;
+    if (!free) return false;
+    const keys = Object.keys(mix);
+    for (let i = 0; free > 0; i = (i + 1) % keys.length) { // round and round, by the mix's shares
+      const k = keys[i], take = Math.min(free, Math.max(1, Math.round((mix[k] * ATTR_PER_LEVEL) / total)));
+      this.attr[k] += take;
+      free -= take;
+    }
+    this.onAttrsChanged();
+    return true;
+  }
+
+  // Every attribute point back (for the same fee as skill points).
+  resetAttrs() {
+    const g = this.game, fee = this.respecFee();
+    if (this.gold < fee) { g.ui.centerMsg('Not enough gold'); return false; }
+    this.gold -= fee;
+    this.attr = freshAttrs();
+    this.onAttrsChanged();
+    return true;
+  }
+
+  onAttrsChanged() {
+    const hpFrac = this.hp / this.stats.maxHp, mpFrac = this.mp / this.stats.maxMp;
+    this.recompute();
+    this.hp = Math.min(this.stats.maxHp, Math.max(1, hpFrac * this.stats.maxHp));
+    this.mp = Math.min(this.stats.maxMp, mpFrac * this.stats.maxMp);
+    this.game.ui?.refreshInventory();
+    this.game.save();
   }
 
   setBar(i, id) {
@@ -1041,6 +1116,7 @@ export class Player {
       if (!this.action?.lockFacing) this.targetYaw = yawTo(mx, mz);
     }
     resolveCollision(this.pos, this.radius);
+    g.places.view.blockGates?.(this.pos, this.radius); // (a cave's closed gates)
     this.pos.y = heightAt(this.pos.x, this.pos.z);
     this.yaw = dampAngle(this.yaw, this.targetYaw, 16, dt);
     this.group.rotation.y = this.yaw;

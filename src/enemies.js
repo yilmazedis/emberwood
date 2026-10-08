@@ -45,7 +45,8 @@ function buildSlime(def) {
 }
 
 export class Enemy {
-  // r: the world's full record { i, t, l, x, z, y, h, mh, s, st, sp, e } (see WorldSim.snapshot)
+  // r: the world's full record { i, t, l, x, z, y, h, mh, s, st, sp, e, k } (see WorldSim.snapshot; k: a cave
+  // elite's harder blows)
   constructor(game, r, ts) {
     const d = ENEMY_TYPES[r.t];
     this.game = game;
@@ -55,7 +56,8 @@ export class Enemy {
     this.level = r.l;
     this.maxHp = r.mh;
     this.hp = r.h;
-    this.dmg = monsterDmg(d, this.level);
+    this.elite = (r.k || 1) > 1 && !d.boss;
+    this.dmg = monsterDmg(d, this.level) * Math.min(3, Math.max(1, Number(r.k) || 1));
     this.radius = d.radius * (d.scale || 1);
     this.height = d.kind === 'slime' ? 1.05 * d.size : 2.45 * (d.scale || 1);
     this.pos = new THREE.Vector3(r.x, heightAt(r.x, r.z), r.z);

@@ -1,6 +1,6 @@
 // Projectiles (fireballs, bolts, arrows, flasks, meteors, cultist orbs) and ground loot. owner: 'player'
 // (ours: they deal damage), 'remote' (another hero's: for show, their game deals the damage) or 'enemy'
-// (they hurt our hero). Options: mult (× weapon damage; spell: false = not scaled by Spell Power), aoe
+// (they hurt our hero). Options: mult (× weapon damage; spell: false = weapon damage, else spell damage), aoe
 // (blast radius), small (a light touch: no smoke or ring), noLight, meteor (a bigger crash), glide
 // (fly level at this height over the ground, following it: heroes' shots, so they never sail over a
 // slime or dive into a bump; they end on a monster, a wall or at their range), homing (a foe it steers
@@ -247,7 +247,7 @@ export class LootManager {
     const a = rand(0, Math.PI * 2), s = rand(1.2, 2.6);
     const l = { kind, group, obj, data, vel: new THREE.Vector3(Math.cos(a) * s, rand(4.5, 6), Math.sin(a) * s), landed: false, t: 0, bounces: 0 };
     if (kind === 'item') {
-      const d = itemDef(data), beam = d.unique ? 0xff7a1a : d.stack ? null : { mid: 0x4d8dff, high: 0xffd23f }[d.tier];
+      const d = itemDef(data), beam = d.unique ? 0xff7a1a : d.kind === 'key' ? 0xffd23f : d.stack ? null : { mid: 0x4d8dff, high: 0xffd23f }[d.tier];
       if (beam) {
         l.beam = new THREE.Mesh(beamGeo, beamMaterial(beam));
         l.beam.visible = false;
@@ -324,7 +324,9 @@ export class LootManager {
         }
       } else if (l.kind === 'item' && l.landed && d < 1.3) {
         const n = l.data.n;
-        if (p.addItem(l.data)) {
+        if (itemDef(l.data)?.kind === 'key' && g.hasCaveKey()) { // (one cave key at a time)
+          if (this.fullMsgT <= 0) { g.ui.centerMsg('You can carry only one cave key'); this.fullMsgT = 3; }
+        } else if (p.addItem(l.data)) {
           g.ui.log(`Picked up <b style="color:${itemColor(l.data)}">${itemName(l.data)}${n > 1 ? ` ×${n}` : ''}</b>`);
           g.sfx.play('pickup');
           this.remove(l);

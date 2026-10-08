@@ -38,7 +38,7 @@ async function loadModels() {
 }
 
 // ---------------------------------------------------------------- minimap
-function buildMinimap(d) {
+export function buildMinimap(d) {
   const SIZE = 360, R = Math.max(d.COLS, d.ROWS) * CELL * 0.55;
   const mid = { x: d.OX + (d.COLS * CELL) / 2, z: d.OZ + (d.ROWS * CELL) / 2 };
   const cv = document.createElement('canvas');

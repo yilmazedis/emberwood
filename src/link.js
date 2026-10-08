@@ -69,6 +69,17 @@ export class WorldLink {
     return r;
   }
 
+  // Into a hidden cave (caves.js): the server checks the key (in save) or our party's open copy.
+  async cave(land, { join = false, save = null } = {}) {
+    const r = await this.net.request('cave', { land, join, save });
+    this.ep = r.ep;
+    this.queue = [];
+    this.hits = [];
+    this.game.enemies.clear();
+    this.game.others.clear();
+    return r;
+  }
+
   exit() {
     if (this.inWorld) this.net.request('exit').catch(() => { /* gone anyway */ });
     this.reset();
@@ -101,6 +112,7 @@ export class WorldLink {
     for (const id of m.pg || []) g.others.remove(id);
     for (const ev of m.e || []) this.queue.push({ ts: m.ts, ev });
     if (m.wb !== undefined) g.worldBoss = m.wb ? { type: m.wb[0], x: m.wb[1], z: m.wb[2], hp: m.wb[3], map: g.places.id } : null;
+    if (m.cv) g.places.view.setState?.(m.cv); // (in a cave: its chambers)
   }
 
   update(dt) {

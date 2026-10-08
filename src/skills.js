@@ -1,8 +1,8 @@
 // Skills. Each class has three trees of four skills (skills/warrior.js, scientist.js, rogue.js, healer.js).
 // A hero gets a skill point every level and puts it in a tree: a tree's skills open as it fills (at 1, 6, 15
 // and 30 points), every point makes them stronger (power: +1.2% each) and adds the tree's own small bonus.
-// Sixty points can't fill everything: a hero goes all in on one tree, or spreads out and is good at more
-// but best at nothing.
+// Eighty points (at the top level) open two trees' skills and part of the third: a hero goes all in on one
+// tree, or spreads out and is good at more but best at nothing.
 //
 // One definition serves our own hero and the heroes we see: cast(actor, ctx, real) plays the show (animation,
 // effects, sound) for any hero, and only when `real` (our hero) does it move the hero, deal damage and tell

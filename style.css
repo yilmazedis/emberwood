@@ -77,6 +77,16 @@ button:hover { border-color: var(--edge-hi); color: #fff; }
 /* Minimap */
 #minimap-wrap { position: absolute; right: 16px; top: 16px; padding: 6px; border-radius: 12px; }
 #minimap { display: block; border-radius: 8px; width: 180px; height: 180px; }
+/* in a hidden cave: its ten chambers (cleared, being fought, still ahead) */
+#cave-hud { padding: 4px 2px 2px; text-align: center; }
+.plate.elite .nm em { font-style: normal; color: #ffb84a; }
+#cave-pips { display: flex; justify-content: center; gap: 4px; }
+#cave-pips i { width: 12px; height: 12px; border-radius: 3px; background: #2a2218; border: 1px solid #5a4a30; transform: rotate(45deg) scale(.8); }
+#cave-pips i.done { background: var(--gold); border-color: #fff0b0; box-shadow: 0 0 6px rgba(255, 210, 90, .7); }
+#cave-pips i.now { background: #c8421d; border-color: #ff9a6a; animation: pip 1s ease-in-out infinite alternate; }
+#cave-pips i.boss { border-radius: 50%; transform: none; width: 13px; height: 13px; }
+@keyframes pip { to { box-shadow: 0 0 9px #ff6a2a; } }
+#cave-note { font: 700 11px Inter, sans-serif; color: var(--text); margin-top: 4px; text-shadow: 0 1px 2px #000; }
 #zone-name { text-align: center; font: 700 12px Cinzel, serif; color: var(--gold); padding: 5px 0 1px; }
 
 /* Log (what happens to you; bottom right, the chat has the bottom left) */
@@ -169,6 +179,22 @@ header .close { padding: 0 9px; font-size: 18px; line-height: 24px; }
 .bag-slot .plus.hi, .eq-slot .plus.hi, #drag-ghost .plus.hi { color: #ff8ae8; text-shadow: 0 0 6px rgba(255, 60, 210, .9), 0 1px 2px #000; }
 .bag-slot .n { position: absolute; right: 4px; bottom: 1px; font: 800 11px Inter, sans-serif; color: #fff; text-shadow: 0 1px 2px #000; pointer-events: none; }
 #stats { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 16px; margin: 12px 0; font: 600 12px Inter, sans-serif; color: var(--muted); }
+/* attributes: a row each, the points and what they give, + buttons while points are free */
+.attr-title { margin: 12px 0 6px; display: flex; align-items: baseline; gap: 8px; }
+.attr-title small { font: 700 11px Inter, sans-serif; color: var(--muted); }
+.attr-title small.free { color: #ffd24a; }
+#attrs { display: grid; gap: 5px; }
+.attr { display: grid; grid-template-columns: 1fr auto auto auto; align-items: center; gap: 2px 6px; padding: 4px 6px; border-radius: 7px; background: rgba(255, 240, 210, .04); border: 1px solid rgba(201, 162, 90, .12); }
+.attr .an { font: 700 12.5px Inter, sans-serif; color: var(--text); cursor: help; }
+.attr .an i { font-style: normal; font: 800 10px Inter, sans-serif; color: var(--muted); margin-left: 5px; }
+.attr .av { font: 800 14px Inter, sans-serif; color: var(--gold); min-width: 34px; text-align: right; }
+.attr .av small { font: 600 10px Inter, sans-serif; color: var(--muted); margin-left: 3px; }
+.attr button { padding: 0 8px; font: 800 13px/22px Inter, sans-serif; min-width: 30px; }
+.attr button[disabled] { opacity: .25; }
+.attr .ae { grid-column: 1 / -1; font: 600 10.5px Inter, sans-serif; color: var(--muted); }
+.attr-tools { display: flex; gap: 8px; margin-top: 6px; }
+.attr-tools button { flex: 1; font: 700 12px Inter, sans-serif; padding: 5px 8px; }
+#attr-dot { position: absolute; top: -4px; left: -4px; width: 12px; height: 12px; border-radius: 50%; background: #ffd24a; box-shadow: 0 0 8px #ffb020; }
 #stats div { display: flex; justify-content: space-between; }
 #stats b { color: var(--text); }
 #bag { display: grid; grid-template-columns: repeat(5, 62px); gap: 6px; justify-content: space-between; }

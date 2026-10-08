@@ -4,6 +4,8 @@
 // weapon) and by where it spends its skill points (skills.js). Shared by the game and the game server, so
 // plain data only.
 //   hp, mp, armor, dmg: multipliers; crit, atkSpd, moveSpd, spell: added
+//   attrs: Strength, Dexterity, Intelligence and Vitality at level 1 (attributes.js); suggest: how the
+//   "Suggested" button spends a level's five points
 //   looks: the models a hero of the class can wear (chosen when it's made): a KayKit character and a
 //   palette (assets.js repaints its colours), which parts show a helmet (hats) and the cape
 export const CLASSES = {
@@ -11,6 +13,7 @@ export const CLASSES = {
     name: 'Warrior', role: 'Blades, axes and shields',
     desc: 'The front line. Sword and shield to hold it, two weapons for speed, or one great weapon to break it. Most Life and armor of all.',
     hp: 1.22, mp: 0.8, armor: 1.3, dmg: 1.0, crit: 0, atkSpd: 0, moveSpd: 0, spell: 0,
+    attrs: { str: 18, dex: 10, int: 6, vit: 16 }, suggest: { str: 3, dex: 1, vit: 1 },
     styles: { guard: 'Sword and shield', dual: 'Two weapons', heavy: 'Great weapon' },
     looks: [
       { model: 'Knight', name: 'Knight', hats: ['Knight_Helmet', 'Knight_HelmetVisor'], capes: ['Knight_Cape'], portrait: ['Knight_Head', 'Knight_Helmet'] },
@@ -22,6 +25,7 @@ export const CLASSES = {
     name: 'Scientist', role: 'Fire, frost and alchemy',
     desc: 'Studies the elements and what is poison. A long staff casts fast fire and frost; a short staff and a book brew poisons, curses and doors through space. Fragile.',
     hp: 0.85, mp: 1.6, armor: 0.75, dmg: 1.0, crit: 0.03, atkSpd: 0, moveSpd: 0, spell: 0,
+    attrs: { str: 6, dex: 10, int: 22, vit: 12 }, suggest: { int: 3, dex: 1, vit: 1 },
     styles: { elements: 'Long staff', alchemy: 'Short staff and book' },
     looks: [
       { model: 'Mage', name: 'Arcanist', hats: ['Mage_Hat'], capes: ['Mage_Cape'], portrait: ['Mage_Head', 'Mage_Hat'] },
@@ -33,6 +37,7 @@ export const CLASSES = {
     name: 'Rogue', role: 'Daggers or a bow',
     desc: 'Quick and hard to pin down: twin daggers and killing blows up close, or arrows from afar. More critical hits, the fastest feet.',
     hp: 0.95, mp: 1.0, armor: 0.9, dmg: 1.0, crit: 0.05, atkSpd: 0.05, moveSpd: 0.06, spell: 0,
+    attrs: { str: 12, dex: 20, int: 6, vit: 12 }, suggest: { dex: 3, str: 1, vit: 1 },
     styles: { assassin: 'Daggers', archer: 'Bow' },
     looks: [
       { model: 'Rogue', name: 'Rogue', hats: [], capes: ['Rogue_Cape'], portrait: ['Rogue_Head'] },
@@ -43,7 +48,8 @@ export const CLASSES = {
   healer: {
     name: 'Healer', role: 'Heals, blessings and holy wrath',
     desc: 'Keeps a party standing: heals, blessings that last, and raises the fallen. Fights alone with mace and holy fire, slower than the others.',
-    hp: 1.05, mp: 1.4, armor: 1.1, dmg: 0.8, crit: 0, atkSpd: 0, moveSpd: 0, spell: 0,
+    hp: 1.05, mp: 1.4, armor: 1.1, dmg: 0.92, crit: 0, atkSpd: 0, moveSpd: 0, spell: 0, // (dmg: its blows and spells share its points)
+    attrs: { str: 12, dex: 8, int: 16, vit: 14 }, suggest: { int: 2, str: 2, vit: 1 },
     styles: { guard: 'Mace and shield', heavy: 'Great weapon' },
     looks: [
       { model: 'Mage', name: 'Cleric', palette: 'cleric', hats: ['Mage_Hat'], capes: ['Mage_Cape'], portrait: ['Mage_Head', 'Mage_Hat'] },

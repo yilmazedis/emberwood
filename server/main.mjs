@@ -11,6 +11,7 @@ import { CLASSES, MAX_CHARACTERS, NAME_RULE, USER_RULE } from '../src/classes.js
 import { WorldSim, TICK, PROTOCOL } from '../src/sim/world.js';
 import { ITEMS } from '../src/items.js';
 import { ENEMY_TYPES } from '../src/monsters.js';
+import { CAVES, dayNumber } from '../src/caves.js';
 import * as trades from './trade.mjs';
 
 const PORT = Number(process.env.PORT) || 8787;
@@ -303,7 +304,7 @@ const handlers = {
       mem.gone = 0;
       mem.level = ch.level;
     }
-    return { t: 'char', char: { id: ch.id, name: ch.name, cls: ch.cls, look: ch.look || 0, save: ch.save, bank: acc.bank, rev: ch.rev || 0 } };
+    return { t: 'char', char: { id: ch.id, name: ch.name, cls: ch.cls, look: ch.look || 0, save: ch.save, bank: acc.bank, rev: ch.rev || 0, caveDay: ch.caveDay || 0 } };
   },
 
   // The hero (and the account's bank). A save from before the hero's last trade is refused: it was on its
@@ -424,6 +425,43 @@ const handlers = {
     } else r = world.travel(c.pid, String(m.to || ''), { respawn: !!m.respawn, camp: !!m.camp });
     if (r.error) throw new Oops(r.error);
     return { t: 'traveled', ...r };
+  },
+
+  // A hidden cave (src/caves.js): in through its mouth with its key (save: the hero as its game has it now; the
+  // key comes out of it here, and older saves are refused after), or into the copy the hero's party opened
+  // (join: answering a party member's call, from anywhere). One cave a day: the server keeps the day.
+  cave(c, m) {
+    if (!c.pid) throw new Oops('Step into the world first.');
+    const ch = c.char, land = String(m.land || ''), cave = CAVES[land], today = dayNumber();
+    const save = m.join ? null : checkSave(m.save);
+    const bag = Array.isArray(save?.bag) ? save.bag : [];
+    const keyAt = cave ? bag.findIndex((it) => it && it.k === cave.key) : -1;
+    const e = world.caveEntry(c.pid, land, { join: !!m.join, today, lastDay: ch.caveDay || 0, hasKey: keyAt >= 0 });
+    if (e.error) throw new Oops(e.error);
+    trades.cancelFor(ch.id, 'They went away.');
+    const p = world.players.get(c.pid), first = !e.area?.cave.entered.has(p.key);
+    let area = e.area, key = null;
+    if (e.open) { // the key opens a new copy for the party: out of the hero's save it goes
+      bag[keyAt] = null;
+      save.cave = { day: today };
+      ch.rev = (ch.rev || 0) + 1;
+      store.saveCharacter(c.acc, ch.id, save);
+      area = world.openCave(p, land);
+      key = cave.key;
+    }
+    const r = world.enterCave(c.pid, area);
+    if (r.error) throw new Oops(r.error);
+    if (first) { ch.caveDay = today; store.markDirty(c.acc); }
+    if (e.open) { // the rest of the party may follow
+      const party = partyOf(ch.id);
+      for (const id of party ? party.members.keys() : []) {
+        const mc = heroes.get(id);
+        if (id === ch.id || !mc?.pid) continue;
+        mc.send({ t: 'caveOpen', land, from: ch.name, done: (mc.char.caveDay || 0) === today });
+      }
+      console.log(`${ch.name} opened ${cave.name}${party ? ` for party ${party.id}` : ''}`);
+    }
+    return { t: 'caved', ...r, day: today, rev: ch.rev || 0, key };
   },
 
   // Teleport Party: ask every member of our party in the world to step through to us.

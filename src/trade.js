@@ -58,6 +58,7 @@ export class Trade {
   offerFromBag(i) {
     const it = this.game.player.bag[i];
     if (!it) return;
+    if (itemDef(it)?.bound) { this.game.ui.centerMsg('A cave key stays with the hero who found it'); return; }
     if (this.mine.items.some((x) => x.id === it.id)) return this.remove(it.id);
     if (this.mine.items.length >= MAX_ITEMS) { this.game.ui.centerMsg(`At most ${MAX_ITEMS} items at once`); return; }
     this.send([...this.mine.items, { ...it }], this.mine.gold);

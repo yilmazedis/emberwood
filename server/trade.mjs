@@ -91,6 +91,7 @@ export function offer(c, m, { Oops }) {
   const me = sideOf(t, c.char.id);
   const items = Array.isArray(m.items) ? m.items.slice(0, MAX_ITEMS) : [];
   if (items.some((it) => !it || typeof it !== 'object' || typeof it.id !== 'string' || typeof it.k !== 'string' || !Object.hasOwn(ITEMS, it.k))) throw new Oops('Unknown item.');
+  if (items.some((it) => ITEMS[it.k].bound)) throw new Oops('A cave key stays with the hero who found it.');
   if (new Set(items.map((it) => it.id)).size !== items.length) throw new Oops('An item can only go in once.');
   me.items = items;
   me.gold = Math.max(0, Math.floor(Number(m.gold) || 0));

@@ -13,6 +13,9 @@ import { shadowmere, SHADOWMERE_SPAWNS, abyss, ABYSS_SPAWNS } from './maps/shado
 import { arena, ARENA } from './maps/arena.js';
 import { crypt2, CRYPT2_SPAWNS, rimeheart2, RIMEHEART2_SPAWNS, forge2, FORGE2_SPAWNS, abyss2, ABYSS2_SPAWNS } from './maps/depths.js';
 import { CAMPS } from './camps.js'; // (the people in each camp, and what blocks the way there)
+import { CAVES } from './caves.js';
+import { CAVE_MAPS } from './maps/caves.js';
+import { addCollider } from './terrain.js';
 
 export const START = 'emberwood';
 export const WAYSTONE = { x: 5.5, z: 5.5 }; // Emberwood's, in camp
@@ -134,7 +137,7 @@ for (const [above, deep] of [['crypt', 'crypt2'], ['rimeheart', 'rimeheart2'], [
 for (const [id, list] of Object.entries(CAMPS)) MAPS[id].npcs = list;
 
 MAPS.arena = {
-  id: 'arena', name: 'The Arena', sub: 'Hero against hero · from level 5', kind: 'arena', pvp: true, levels: [5, 60], minLevel: 5, music: 'world',
+  id: 'arena', name: 'The Arena', sub: 'Hero against hero · from level 5', kind: 'arena', pvp: true, levels: [5, 80], minLevel: 5, music: 'world',
   spawns: [], contains: arena.contains,
   camp: { x: ARENA.cx, z: ARENA.cz + 35, r: 8 }, waystone: arena.waystone, board: arena.board,
   arrive: arena.arrive, respawn: { map: 'arena', ...arena.arrive },
@@ -156,6 +159,29 @@ for (const m of Object.values(MAPS)) {
     p.at = d.arrive;
   }
   for (const p of m.portals) if (p.id === 'crypt') p.at = MAPS.crypt.arrive;
+}
+
+// The hidden caves (caves.js): their mouths in the lands (none is a portal: a key, or a party's open cave,
+// is the way in, see the game server's 'cave'), and the caves themselves, left by the way in or, once the
+// keeper has fallen, by the daylight in its hall.
+for (const [land, d] of Object.entries(CAVE_MAPS)) {
+  const c = CAVES[land], L = MAPS[land], om = L.outdoor;
+  const mouth = { x: c.mouth.x + (om ? om.cx : 0), z: c.mouth.z + (om ? om.cz : 0), yaw: c.mouth.yaw };
+  const outside = { x: mouth.x + Math.sin(mouth.yaw) * 3, z: mouth.z + Math.cos(mouth.yaw) * 3, yaw: mouth.yaw };
+  L.hiddenCave = { ...c, mouth, outside }; // (a cave map's own `cave` is its definition)
+  // the rocks around the mouth (cave-view.js CaveMouth draws them): solid behind and beside the way in
+  const cs = Math.cos(mouth.yaw), sn = Math.sin(mouth.yaw);
+  for (const [lx, lz, r] of [[0, -2.1, 2.0], [-1.75, -0.75, 0.9], [1.75, -0.75, 0.9], [-2.9, -1.7, 0.9], [2.8, -1.8, 0.85]]) addCollider(mouth.x + lx * cs + lz * sn, mouth.z - lx * sn + lz * cs, r);
+  const B = d.rooms.B, fromWest = d.gates[d.gates.length - 1].x < B.cx; // (the daylight: across the hall from the way in)
+  MAPS[c.id] = {
+    id: c.id, name: c.name, sub: `Hidden cave · ${L.name}`, kind: 'dungeon', cave: c, land, levels: c.levels, minLevel: 1, music: 'crypt', spawns: [],
+    dungeon: d, instanced: true, contains: (x, z) => d.contains(x, z), arrive: d.arrive, respawn: L.respawn,
+    look: { ...DUNGEON_LOOK, fog: c.look.fog, near: 24, far: 62, hemiSky: c.look.hemiSky, hemiGround: c.look.hemiGround, hemi: 1.45, sun: c.look.sun, sunI: 1.25, flame: c.look.crystal, circle: c.look.crystal },
+    portals: [
+      { id: 'mouth', x: d.exit.x, z: d.exit.z, to: land, at: outside, name: 'The way out', title: `Back to ${L.name}`, action: 'Leave' },
+      { id: 'out', x: fromWest ? B.x1 - 3 : B.x0 + 3, z: B.z0 + 2.2, to: land, at: outside, name: 'Daylight', title: `Back to ${L.name}`, action: 'Leave', needs: 'cleared' },
+    ],
+  };
 }
 
 export const MAP_IDS = Object.keys(MAPS);

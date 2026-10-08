@@ -9,6 +9,7 @@ import { LandView } from './lands.js';
 import { DungeonView, fetchPack } from './dungeon.js';
 import { ArenaView } from './arena.js';
 import { FLOOR_Y } from './dungeon-map.js';
+import { CaveView, CaveMouth } from './cave-view.js';
 
 const REACH = 2.4; // how close the hero must stand to use something
 const EMBER_LOOK = { fog: 0xcfe2ea, near: 60, far: 150, hemiSky: 0xcfe6ff, hemiGround: 0x5d7a3a, hemi: 1.25, sun: 0xfff0d6, sunI: 2.6, sky: [0x3f8fe0, 0xa6d2f2, 0xd4e6ec] };
@@ -84,6 +85,8 @@ export class Places {
         this.portals.push(spot);
       }
     }
+    this.mouths = {}; // each land's hidden cave mouth (cave-view.js), drawn with the land
+    this.addMouth(START, this.views[START]);
     this.travelEl = $('travel');
     $('travel-list').addEventListener('click', (e) => {
       const b = e.target.closest('button[data-to]');
@@ -97,9 +100,25 @@ export class Places {
   viewOf(id) {
     if (!this.views[id]) {
       const m = MAPS[id];
-      this.views[id] = m.kind === 'dungeon' ? new DungeonView(this.game, m) : m.kind === 'arena' ? new ArenaView(this.game, m) : new LandView(this.game, m);
+      this.views[id] = m.cave ? new CaveView(this.game, m) : m.kind === 'dungeon' ? new DungeonView(this.game, m) : m.kind === 'arena' ? new ArenaView(this.game, m) : new LandView(this.game, m);
+      if (m.kind === 'outdoor') this.addMouth(id, this.views[id]);
     }
     return this.views[id];
+  }
+
+  // A land's hidden cave mouth, drawn with it, used like its chests.
+  addMouth(id, view) {
+    const cave = MAPS[id].hiddenCave;
+    if (!cave || this.mouths[id]) return;
+    const mouth = new CaveMouth(this.game, id, cave);
+    mouth.shown = view.group.visible;
+    view.group.add(mouth.group);
+    view.spots.push(mouth.spot);
+    this.mouths[id] = mouth;
+  }
+
+  get mouth() {
+    return this.mouths[this.id] || null;
   }
 
   // Draw it (the first time; a dungeon downloads its pieces) before going there.
@@ -111,9 +130,11 @@ export class Places {
   enter(id) {
     if (id === this.id && this.view.group.visible) return;
     this.view.show(false);
+    this.mouth?.show(false);
     this.id = id;
     const v = this.viewOf(id);
     v.show(true);
+    this.mouth?.show(true);
     this.applyLook(v.look);
     for (const sl of this.slots) { sl.src = null; sl.fade = 0; if (!v.ownLights) sl.light.intensity = 0; }
     this.near = null;
@@ -189,12 +210,13 @@ export class Places {
   update(dt) {
     const g = this.game, p = g.player, v = this.view;
     v.update(dt);
+    this.mouth?.update(dt);
     g.world.sky.position.copy(g.camera.position);
     // what's in reach: this place's ways out and its chests
     let best = null, bd = REACH;
     if (p.alive && !g.traveling) {
       for (const s of this.portals) {
-        if (s.map !== this.id) continue;
+        if (s.map !== this.id || (s.needs === 'cleared' && !v.cleared)) continue;
         const d = Math.hypot(p.pos.x - s.x, p.pos.z - s.z);
         if (d < bd + (s.id === 'waystone' ? 0.6 : 0)) { bd = d; best = s; }
       }
@@ -205,7 +227,10 @@ export class Places {
       }
     }
     this.near = best;
-    for (const s of this.portals) s.label.el.classList.toggle('near', s === best);
+    for (const s of this.portals) {
+      s.label.el.classList.toggle('near', s === best);
+      if (s.needs === 'cleared' && s.map === this.id) s.label.el.classList.toggle('hidden', !v.cleared);
+    }
     for (const s of v.spots) s.label.el.classList.toggle('near', s === best);
     if (this.travelOpen && best?.id !== 'waystone') this.closeTravel(); // walked away
 

@@ -40,6 +40,7 @@ export class Bank {
   store(bagIndex) {
     const g = this.game, p = g.player, it = p.bag[bagIndex], d = itemDef(it);
     if (!it) return;
+    if (d.bound) { g.ui.centerMsg('A cave key stays with the hero who found it'); return; }
     let left = it.n || 1;
     if (d.stack) {
       for (const b of this.items) {

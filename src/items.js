@@ -2,11 +2,15 @@
 // Giant Sword is a Giant Sword, three times upgraded at the anvil. Plain data and numbers (the game server
 // shares it), no three.js.
 //
-// Items come in three classes, low (levels 1–19), middle (20–39) and high (40–60), and each hero class has
+// Items come in three classes, low (levels 1–19), middle (20–39) and high (40–80), and each hero class has
 // its own weapons and clothes in each: a hero can't wear another class's (healers may also wield warriors'
 // two-handed swords, spears and maces, and their shields). Accessories (rings, earrings, necklaces, belts)
 // are for everyone and only drop from monsters. Unique items only drop from the roaming world bosses: weapons,
 // shields, books and accessories, never clothes.
+//
+// What an item is stays its own: a weapon's damage and speed, the armor of clothes and shields. Everything
+// else it gives is attributes (Strength, Dexterity, Intelligence, Vitality: Player.recompute says what they
+// do), so the same points a hero spends at each level come from gear too.
 //
 // An item a hero carries is { id, k: key, p: plus } (stackables { id, k, n: count }); everything else comes
 // from its definition here (itemDef), so a change of balance reaches every item already found.
@@ -21,7 +25,7 @@ export const UNIQUE_POWER = 1.25; // a unique item is this much stronger than a 
 export const TIERS = {
   low: { id: 'low', name: 'Low class', short: 'Low', from: 1, to: 19, color: '#e8e4da', recipe: 'recipe_low' },
   mid: { id: 'mid', name: 'Middle class', short: 'Middle', from: 20, to: 39, color: '#6aa9ff', recipe: 'recipe_mid' },
-  high: { id: 'high', name: 'High class', short: 'High', from: 40, to: 60, color: '#ffd84a', recipe: 'recipe_high' },
+  high: { id: 'high', name: 'High class', short: 'High', from: 40, to: 80, color: '#ffd84a', recipe: 'recipe_high' },
 };
 export const UNIQUE_COLOR = '#ff8a2b';
 export const tierAt = (level) => (level >= 40 ? 'high' : level >= 20 ? 'mid' : 'low');
@@ -31,21 +35,37 @@ export const SLOTS = ['weapon', 'offhand', 'head', 'body', 'hands', 'feet', 'nec
 export const SLOT_LABEL = { weapon: 'Weapon', offhand: 'Off-hand', head: 'Helmet', body: 'Armor', hands: 'Gloves', feet: 'Boots', neck: 'Necklace', belt: 'Belt', ear1: 'Earring', ear2: 'Earring', ring1: 'Ring', ring2: 'Ring' };
 export const emptyEquipment = () => Object.fromEntries(SLOTS.map((s) => [s, null]));
 
+// ---------------------------------------------------------------- attributes
+export const ATTRS = ['str', 'dex', 'int', 'vit'];
+export const ATTR_NAME = { str: 'Strength', dex: 'Dexterity', int: 'Intelligence', vit: 'Vitality' };
+export const ATTR_SHORT = { str: 'STR', dex: 'DEX', int: 'INT', vit: 'VIT' };
+// The attribute points an item gives at +1: a budget by its level, times its slot's weight (a two-handed
+// weapon or a book more than gloves), shared out by its mix ({ str: 3, vit: 1 }: three quarters Strength).
+const budget = (level) => 3 + 0.3 * level;
+export const WEIGHT = { head: 0.7, body: 1.1, hands: 0.5, feet: 0.6, shield: 1.0, book: 1.5, ring: 0.8, ear: 0.8, neck: 0.9, belt: 0.8 };
+function attrs(level, weight, mix, power = 1) {
+  const total = budget(level) * weight * power, sum = Object.values(mix).reduce((a, b) => a + b, 0), out = {};
+  for (const [k, share] of Object.entries(mix)) if (share > 0) out[k] = Math.max(1, Math.round((total * share) / sum));
+  return out;
+}
+// a unique's mix: its kind's, with a fair share more of its own flavour
+const flavour = (mix, extra) => (extra ? { ...mix, [extra]: (mix[extra] || 0) + Object.values(mix).reduce((a, b) => a + b, 0) * 0.4 } : mix);
+
 // ---------------------------------------------------------------- weapons
 // speed: attacks a second; dps: damage per second next to a one-handed sword of the same level; reach: extra
-// melee reach (m); ranged: shoots instead of swinging. Stats it always gives (spell power, attack speed…).
+// melee reach (m); ranged: shoots instead of swinging. weight and mix: the attributes it gives (see attrs).
 export const WEAPON_TYPES = {
-  sword1h: { label: 'One-handed sword', hands: 1, speed: 1.25, dps: 1.0, swing: 'slash', model: 'sword_1handed' },
-  axe1h: { label: 'One-handed axe', hands: 1, speed: 1.1, dps: 1.04, swing: 'slash', model: 'axe_1handed' },
-  mace1h: { label: 'Mace', hands: 1, speed: 1.15, dps: 0.95, swing: 'chop', model: 'proc_mace', spell: 0.05 },
-  sword2h: { label: 'Two-handed sword', hands: 2, speed: 0.95, dps: 1.26, swing: 'chop', model: 'sword_2handed' },
-  axe2h: { label: 'Two-handed axe', hands: 2, speed: 0.85, dps: 1.3, swing: 'chop', model: 'axe_2handed' },
-  spear: { label: 'Spear', hands: 2, speed: 1.0, dps: 1.22, reach: 0.8, swing: 'stab', model: 'proc_glaive' },
-  maul: { label: 'Two-handed mace', hands: 2, speed: 0.9, dps: 1.24, swing: 'chop', model: 'proc_maul' },
-  dagger: { label: 'Dagger', hands: 1, speed: 1.55, dps: 0.85, swing: 'stab', model: 'dagger', crit: 0.03 },
-  bow: { label: 'Bow', hands: 2, speed: 1.05, dps: 1.0, ranged: 'arrow', model: 'bow_withString', left: true },
-  staff: { label: 'Long staff', hands: 2, speed: 1.0, dps: 0.9, ranged: 'bolt', model: 'staff', spell: 0.12, atkSpd: 0.15 },
-  rod: { label: 'Short staff', hands: 1, speed: 1.15, dps: 0.78, ranged: 'bolt', model: 'wand', spell: 0.06 },
+  sword1h: { label: 'One-handed sword', hands: 1, speed: 1.25, dps: 1.0, swing: 'slash', model: 'sword_1handed', weight: 1.2, mix: { str: 7, vit: 3 } },
+  axe1h: { label: 'One-handed axe', hands: 1, speed: 1.1, dps: 1.04, swing: 'slash', model: 'axe_1handed', weight: 1.2, mix: { str: 8, dex: 2 } },
+  mace1h: { label: 'Mace', hands: 1, speed: 1.15, dps: 0.95, swing: 'chop', model: 'proc_mace', weight: 1.2, mix: { str: 5, int: 5 } },
+  sword2h: { label: 'Two-handed sword', hands: 2, speed: 0.95, dps: 1.26, swing: 'chop', model: 'sword_2handed', weight: 1.7, mix: { str: 3, vit: 1 } },
+  axe2h: { label: 'Two-handed axe', hands: 2, speed: 0.85, dps: 1.3, swing: 'chop', model: 'axe_2handed', weight: 1.7, mix: { str: 4, dex: 1 } },
+  spear: { label: 'Spear', hands: 2, speed: 1.0, dps: 1.22, reach: 0.8, swing: 'stab', model: 'proc_glaive', weight: 1.7, mix: { str: 3, dex: 2 } },
+  maul: { label: 'Two-handed mace', hands: 2, speed: 0.9, dps: 1.24, swing: 'chop', model: 'proc_maul', weight: 1.7, mix: { str: 3, vit: 2 } },
+  dagger: { label: 'Dagger', hands: 1, speed: 1.55, dps: 0.85, swing: 'stab', model: 'dagger', weight: 1.0, mix: { dex: 3, str: 2 } },
+  bow: { label: 'Bow', hands: 2, speed: 1.05, dps: 1.0, ranged: 'arrow', model: 'bow_withString', left: true, weight: 1.7, mix: { dex: 3, str: 2 } },
+  staff: { label: 'Long staff', hands: 2, speed: 1.15, dps: 1.035, ranged: 'bolt', model: 'staff', weight: 1.8, mix: { int: 4, dex: 1 } },
+  rod: { label: 'Short staff', hands: 1, speed: 1.15, dps: 0.78, ranged: 'bolt', model: 'wand', weight: 1.0, mix: { int: 3, dex: 1 } },
 };
 // who may wield each kind (warriors' two-handed swords, spears and maces suit healers too)
 const WIELD = {
@@ -73,36 +93,33 @@ const PIECE = { head: 0.22, body: 0.4, hands: 0.18, feet: 0.2 };
 export const ITEMS = {};
 const add = (key, def) => { ITEMS[key] = { key, ...def }; };
 
-// weapon(key, name, type, level, extra): its damage from the table, its kind's speed and stats
+// weapon(key, name, type, level, extra): its damage from the table, its kind's speed and attributes (a
+// unique: more of everything, and more of its own attribute, extra.flavour)
 function weapon(key, name, type, level, extra = {}) {
-  const t = WEAPON_TYPES[type], unique = !!extra.unique;
-  const avg = (lerpTable(SWORD, level) * 1.25 * t.dps) / t.speed * (unique ? UNIQUE_POWER : 1);
+  const t = WEAPON_TYPES[type], unique = !!extra.unique, power = unique ? UNIQUE_POWER : 1;
+  const avg = (lerpTable(SWORD, level) * 1.25 * t.dps) / t.speed * power;
   const spread = type === 'axe2h' || type === 'maul' ? 0.25 : type === 'dagger' ? 0.15 : 0.2;
-  const stats = { dmgMin: Math.max(1, Math.round(avg * (1 - spread))), dmgMax: Math.round(avg * (1 + spread)), speed: t.speed };
-  for (const s of ['spell', 'atkSpd', 'crit']) if (t[s]) stats[s] = t[s] * (unique ? 1.2 : 1);
-  Object.assign(stats, extra.stats);
+  const stats = { dmgMin: Math.max(1, Math.round(avg * (1 - spread))), dmgMax: Math.round(avg * (1 + spread)), speed: t.speed, ...attrs(level, t.weight, flavour(t.mix, extra.flavour), power) };
   add(key, { name, kind: 'weapon', type, slot: 'weapon', classes: WIELD[type], level, tier: tierAt(level), hands: t.hands, model: t.model, ...extra, stats });
 }
 
 function shield(key, name, level, extra = {}) {
-  const unique = !!extra.unique;
-  const armor = Math.round(lerpTable(SET_ARMOR, level) * 0.45 * (unique ? UNIQUE_POWER : 1));
-  add(key, { name, kind: 'offhand', type: 'shield', slot: 'offhand', classes: WIELD.shield, level, tier: tierAt(level), model: 'shield_round', ...extra, stats: { armor, hp: Math.round(level * 1.2 + 4), ...extra.stats } });
+  const power = extra.unique ? UNIQUE_POWER : 1;
+  const armor = Math.round(lerpTable(SET_ARMOR, level) * 0.45 * power);
+  add(key, { name, kind: 'offhand', type: 'shield', slot: 'offhand', classes: WIELD.shield, level, tier: tierAt(level), model: 'shield_round', ...extra, stats: { armor, ...attrs(level, WEIGHT.shield, flavour({ vit: 3, str: 2 }, extra.flavour), power) } });
 }
 
 function book(key, name, level, extra = {}) {
-  const unique = !!extra.unique;
-  add(key, { name, kind: 'offhand', type: 'book', slot: 'offhand', classes: WIELD.book, level, tier: tierAt(level), model: 'spellbook_open', ...extra, stats: { spell: (0.1 + level * 0.0025) * (unique ? 1.25 : 1), mp: Math.round(10 + level * 2.2), ...extra.stats } });
+  const power = extra.unique ? UNIQUE_POWER : 1;
+  add(key, { name, kind: 'offhand', type: 'book', slot: 'offhand', classes: WIELD.book, level, tier: tierAt(level), model: 'spellbook_open', ...extra, stats: attrs(level, WEIGHT.book, flavour({ int: 3, vit: 1 }, extra.flavour), power) });
 }
 
 // A set of clothes: four pieces for one class. look: what it does to the hero's model (helmet shown, the
-// body's colour, gloves and boots); share: how much of a warrior's armor it gives, and what else it adds.
-function set(prefix, name, cls, level, { share, extra, look, pieces }) {
+// body's colour, gloves and boots); share: how much of a warrior's armor it gives; mix: its attributes.
+function set(prefix, name, cls, level, { share, mix, look, pieces }) {
   const total = lerpTable(SET_ARMOR, level) * share;
   for (const [slot, piece] of Object.entries(pieces)) {
-    const stats = { armor: Math.max(1, Math.round(total * PIECE[slot])) };
-    for (const [k, v] of Object.entries(extra)) stats[k] = (typeof v === 'function' ? v(level) : v) * PIECE[slot] * 4; // (per piece, on average)
-    for (const k of ['hp', 'mp']) if (stats[k]) stats[k] = Math.round(stats[k]);
+    const stats = { armor: Math.max(1, Math.round(total * PIECE[slot])), ...attrs(level, WEIGHT[slot], mix) };
     add(`${prefix}_${slot}`, { name: `${name} ${piece}`, kind: 'armor', type: slot, slot, classes: [cls], level, tier: tierAt(level), set: prefix, look, stats });
   }
 }
@@ -116,7 +133,7 @@ weapon('mirage_sword', 'Mirage Sword', 'sword1h', 20, { tint: 0xbfe4ff, glow: 0x
 weapon('glaive', 'Glaive', 'spear', 20);
 weapon('sword_of_the_dead', 'Sword of the Dead', 'sword1h', 30, { model: 'Skeleton_Blade', tint: 0xd8d0e8, glow: 0x4a2a7a });
 weapon('gigantic_axe', 'Gigantic Axe', 'axe2h', 30, { tint: 0xb8b0a8 });
-weapon('raptor', 'Raptor', 'sword1h', 40, { tint: 0xffe6a0, glow: 0x8a5a10, stats: { crit: 0.03 } });
+weapon('raptor', 'Raptor', 'sword1h', 40, { tint: 0xffe6a0, glow: 0x8a5a10 });
 weapon('iron_impact', 'Iron Impact', 'maul', 40, { tint: 0x9aa4b0 });
 weapon('wyrmfang', 'Wyrmfang', 'axe1h', 50, { tint: 0xff9a6a, glow: 0x8a2a10 });
 weapon('titan_greatsword', 'Titan Greatsword', 'sword2h', 50, { model: 'sword_2handed_color', tint: 0xfff0d0, glow: 0x6a4a10 });
@@ -125,7 +142,7 @@ shield('kite_shield', 'Kite Shield', 20, { model: 'shield_square' });
 shield('tower_shield', 'Tower Shield', 40, { model: 'shield_badge', tint: 0xe8e4ff });
 for (const [p, n, lv] of [['plate', 'Plate', 1], ['chitin', 'Chitin', 20], ['shell', 'Shell', 40]]) {
   set(p, n, 'warrior', lv, {
-    share: 1, extra: { hp: (l) => 6 + l * 0.9 },
+    share: 1, mix: { vit: 11, str: 9 },
     look: { body: { plate: 0xd9dee6, chitin: 0x7a8a5a, shell: 0xc8a050 }[p], helm: 1, metal: 0.35 },
     pieces: { head: 'Helmet', body: 'Armor', hands: 'Gauntlets', feet: 'Boots' },
   });
@@ -140,7 +157,7 @@ weapon('lightbringer', 'Lightbringer', 'mace1h', 40, { tint: 0xfff6d0, glow: 0xa
 weapon('seraph_scepter', "Seraph's Scepter", 'mace1h', 50, { model: 'proc_scepter', tint: 0xffffff, glow: 0xa8a0ff });
 for (const [p, n, lv] of [['chain', 'Chain', 1], ['blessed', 'Blessed', 20], ['seraph', 'Seraph', 40]]) {
   set(p, n, 'healer', lv, {
-    share: 0.85, extra: { hp: (l) => 4 + l * 0.6, mp: (l) => 4 + l * 0.6 },
+    share: 0.85, mix: { int: 2, vit: 2, str: 1 },
     look: { body: { chain: 0xb8c0cc, blessed: 0xfff4d8, seraph: 0xf0e0ff }[p], helm: 1, metal: 0.25 },
     pieces: { head: 'Coif', body: 'Vestment', hands: 'Gloves', feet: 'Sandals' },
   });
@@ -161,7 +178,7 @@ weapon('soul_reaper', 'Soul Reaper', 'dagger', 50, { tint: 0xff8aa0, glow: 0x7a1
 weapon('dragonbone_bow', 'Dragonbone Bow', 'bow', 50, { tint: 0xfff0d8, glow: 0x7a4a1a });
 for (const [p, n, lv] of [['leather', 'Leather', 1], ['stalker', 'Stalker', 20], ['nightshade', 'Nightshade', 40]]) {
   set(p, n, 'rogue', lv, {
-    share: 0.7, extra: { crit: 0.006, moveSpd: 0.006 },
+    share: 0.7, mix: { dex: 3, str: 1 },
     look: { body: { leather: 0x9a7048, stalker: 0x4a5a48, nightshade: 0x4a3a6a }[p], helm: 0, metal: 0.05 },
     pieces: { head: 'Hood', body: 'Jerkin', hands: 'Gloves', feet: 'Boots' },
   });
@@ -185,99 +202,92 @@ book('codex_elements', 'Codex of Elements', 20, { tint: 0xc0e0ff });
 book('tome_ascension', 'Tome of Ascension', 40, { tint: 0xffe8b0, glow: 0x6a4a10 });
 for (const [p, n, lv] of [['linen', 'Linen', 1], ['alchemist', 'Alchemist', 20], ['aether', 'Aether', 40]]) {
   set(p, n, 'scientist', lv, {
-    share: 0.55, extra: { mp: (l) => 6 + l * 1.1, spell: 0.006 },
+    share: 0.55, mix: { int: 11, vit: 9 },
     look: { body: { linen: 0xd8c8a8, alchemist: 0x6a8a5a, aether: 0x7ad0e0 }[p], helm: 1, metal: 0 },
     pieces: { head: 'Cap', body: 'Coat', hands: 'Gloves', feet: 'Shoes' },
   });
 }
 
 // ---------------------------------------------------------------- accessories (everyone; dropped only)
-// Two of each kind per class of items; their stats by item level.
+// Two of each kind per class of items; their attributes by item level.
 const ACC_LEVEL = { low: 6, mid: 22, high: 42 };
 const ACC_METAL = { low: 'Copper', mid: 'Silver', high: 'Gold' };
 const ACC_COLOR = { low: 0xd08a50, mid: 0xd8dde4, high: 0xf0c040 };
 const ACCESSORIES = [
-  ['ring', 'Ring of Strength', { dmgPct: (l) => 0.03 + l * 0.0009 }, 0xe0304a],
-  ['ring', 'Ring of Vitality', { hp: (l) => 12 + l * 3 }, 0x2fd07a],
-  ['ear', 'Earring of Precision', { crit: (l) => 0.02 + l * 0.0006 }, 0xffd84a],
-  ['ear', 'Earring of Wisdom', { mp: (l) => 10 + l * 2.4, spell: (l) => 0.02 + l * 0.0004 }, 0x5a9bff],
-  ['neck', 'Amulet of Fury', { atkSpd: (l) => 0.03 + l * 0.0008 }, 0xff6a2a],
-  ['neck', 'Amulet of Warding', { armor: (l) => 4 + l * 1.4 }, 0x9ad0ff],
-  ['belt', 'Belt of the Ox', { hp: (l) => 8 + l * 2, armor: (l) => 2 + l * 0.6 }, 0x8a5a34],
-  ['belt', 'Belt of Swiftness', { moveSpd: (l) => 0.03 + l * 0.0005, regen: (l) => 0.6 + l * 0.08 }, 0x4a7a4a],
+  ['ring', 'Ring of Strength', { str: 1 }, 0xe0304a],
+  ['ring', 'Ring of Vitality', { vit: 1 }, 0x2fd07a],
+  ['ear', 'Earring of Precision', { dex: 1 }, 0xffd84a],
+  ['ear', 'Earring of Wisdom', { int: 1 }, 0x5a9bff],
+  ['neck', 'Amulet of Fury', { str: 1, dex: 1 }, 0xff6a2a],
+  ['neck', 'Amulet of Warding', { vit: 1, int: 1 }, 0x9ad0ff],
+  ['belt', 'Belt of the Ox', { str: 1, vit: 1 }, 0x8a5a34],
+  ['belt', 'Belt of Swiftness', { dex: 1, vit: 1 }, 0x4a7a4a],
 ];
 const ACC_SLOT = { ring: 'ring', ear: 'ear', neck: 'neck', belt: 'belt' };
 const ACC_LABEL = { ring: 'Ring', ear: 'Earring', neck: 'Necklace', belt: 'Belt' };
-function accStats(spec, level, power = 1) {
-  const s = {};
-  for (const [k, f] of Object.entries(spec)) {
-    const v = f(level) * power;
-    s[k] = k === 'hp' || k === 'mp' || k === 'armor' ? Math.round(v) : Math.round(v * 1000) / 1000;
-  }
-  return s;
-}
 for (const [tier, level] of Object.entries(ACC_LEVEL)) {
-  ACCESSORIES.forEach(([kind, name, spec, gem], i) => {
+  ACCESSORIES.forEach(([kind, name, mix, gem], i) => {
     const key = `${tier}_${kind}_${i % 2}`;
     add(key, {
       name: `${ACC_METAL[tier]} ${name}`, kind: 'acc', type: kind, slot: ACC_SLOT[kind], classes: null, level, tier,
-      gear: { kind, color: ACC_COLOR[tier], gem }, stats: accStats(spec, level), drop: true,
+      gear: { kind, color: ACC_COLOR[tier], gem }, stats: attrs(level, WEIGHT[kind], mix), drop: true,
     });
   });
 }
 
 // ---------------------------------------------------------------- unique items (world bosses only)
 const UNIQUE_LEVEL = { low: 12, mid: 28, high: 46 };
-function uniqueAcc(key, name, tier, kind, spec, gem, extra = {}) {
+function uniqueAcc(key, name, tier, kind, mix, gem, extra = {}) {
   const level = UNIQUE_LEVEL[tier];
-  add(key, { name, kind: 'acc', type: kind, slot: ACC_SLOT[kind], classes: null, level, tier, unique: true, gear: { kind, color: 0xff9a3a, gem, glow: 1 }, stats: accStats(spec, level, UNIQUE_POWER), ...extra });
+  add(key, { name, kind: 'acc', type: kind, slot: ACC_SLOT[kind], classes: null, level, tier, unique: true, gear: { kind, color: 0xff9a3a, gem, glow: 1 }, stats: attrs(level, WEIGHT[kind], mix, UNIQUE_POWER), ...extra });
 }
 {
   const U = { unique: true };
   // low: Gorehorn and the Frost Giant (Emberwood, Frostfang)
-  weapon('wanderers_edge', "Wanderer's Edge", 'sword1h', 12, { ...U, tint: 0xffd8a0, glow: 0xff6a10, stats: { atkSpd: 0.06 } });
-  weapon('ogre_splitter', 'Ogre Splitter', 'axe2h', 12, { ...U, tint: 0xd8c0a0, glow: 0xff6a10, stats: { crit: 0.04 } });
-  weapon('mace_of_dawn', 'Mace of Dawn', 'mace1h', 12, { ...U, tint: 0xffe8b0, glow: 0xffb030, stats: { regen: 3 } });
-  weapon('whisper', 'Whisper', 'dagger', 12, { ...U, tint: 0xd0f0ff, glow: 0x4ab0ff, stats: { moveSpd: 0.05 } });
-  weapon('windstring', 'Windstring', 'bow', 12, { ...U, tint: 0xe8ffe0, glow: 0x6aff8a, stats: { atkSpd: 0.08 } });
-  weapon('cinderwood_staff', 'Cinderwood Staff', 'staff', 12, { ...U, tint: 0xffa070, glow: 0xff4a10, stats: { mp: 40 } });
-  weapon('spark_coil', 'Spark Coil', 'rod', 12, { ...U, tint: 0xa0e8ff, glow: 0x30a0ff, stats: { crit: 0.05 } });
-  shield('meadow_aegis', 'Aegis of the Meadow', 12, { ...U, model: 'shield_round_color', glow: 0xff8a2a, stats: { regen: 2 } });
+  weapon('wanderers_edge', "Wanderer's Edge", 'sword1h', 12, { ...U, tint: 0xffd8a0, glow: 0xff6a10, flavour: 'dex' });
+  weapon('ogre_splitter', 'Ogre Splitter', 'axe2h', 12, { ...U, tint: 0xd8c0a0, glow: 0xff6a10, flavour: 'dex' });
+  weapon('mace_of_dawn', 'Mace of Dawn', 'mace1h', 12, { ...U, tint: 0xffe8b0, glow: 0xffb030, flavour: 'vit' });
+  weapon('whisper', 'Whisper', 'dagger', 12, { ...U, tint: 0xd0f0ff, glow: 0x4ab0ff, flavour: 'dex' });
+  weapon('windstring', 'Windstring', 'bow', 12, { ...U, tint: 0xe8ffe0, glow: 0x6aff8a, flavour: 'dex' });
+  weapon('cinderwood_staff', 'Cinderwood Staff', 'staff', 12, { ...U, tint: 0xffa070, glow: 0xff4a10, flavour: 'int' });
+  weapon('spark_coil', 'Spark Coil', 'rod', 12, { ...U, tint: 0xa0e8ff, glow: 0x30a0ff, flavour: 'dex' });
+  shield('meadow_aegis', 'Aegis of the Meadow', 12, { ...U, model: 'shield_round_color', glow: 0xff8a2a, flavour: 'vit' });
   book('grimoire_sparks', 'Grimoire of Sparks', 12, { ...U, model: 'spellbook_open', tint: 0xffd0a0, glow: 0xff6a10 });
-  uniqueAcc('band_wanderer', 'Band of the Wanderer', 'low', 'ring', { hp: (l) => 12 + l * 3, dmgPct: (l) => 0.02 + l * 0.0006 }, 0xff8a2a);
-  uniqueAcc('moonstone_earring', 'Moonstone Earring', 'low', 'ear', { crit: (l) => 0.02 + l * 0.0006, mp: (l) => 8 + l * 2 }, 0xd0e8ff);
-  uniqueAcc('pendant_wild', 'Pendant of the Wild', 'low', 'neck', { atkSpd: (l) => 0.03 + l * 0.0008, moveSpd: () => 0.03 }, 0x6aff6a);
-  uniqueAcc('girdle_giants', 'Girdle of Giants', 'low', 'belt', { hp: (l) => 14 + l * 2.6, armor: (l) => 3 + l * 0.8 }, 0xc8a050);
+  uniqueAcc('band_wanderer', 'Band of the Wanderer', 'low', 'ring', { vit: 1, str: 1 }, 0xff8a2a);
+  uniqueAcc('moonstone_earring', 'Moonstone Earring', 'low', 'ear', { dex: 1, int: 1 }, 0xd0e8ff);
+  uniqueAcc('pendant_wild', 'Pendant of the Wild', 'low', 'neck', { dex: 2, vit: 1 }, 0x6aff6a);
+  uniqueAcc('girdle_giants', 'Girdle of Giants', 'low', 'belt', { vit: 2, str: 1 }, 0xc8a050);
   // middle: Ignis the Living Pyre (Cinderfall)
-  weapon('emberbrand', 'Emberbrand', 'sword1h', 28, { ...U, tint: 0xffb070, glow: 0xff3a00, stats: { crit: 0.04 } });
-  weapon('ashbringer', 'Ashbringer', 'sword2h', 28, { ...U, model: 'sword_2handed_color', tint: 0xffc890, glow: 0xff4a10, stats: { atkSpd: 0.06 } });
-  weapon('pyre_mace', 'Pyre Mace', 'mace1h', 28, { ...U, tint: 0xffa060, glow: 0xff4a00, stats: { spell: 0.08 } });
-  weapon('cinderkiss', 'Cinderkiss', 'dagger', 28, { ...U, tint: 0xffc0a0, glow: 0xff5a20, stats: { crit: 0.05 } });
-  weapon('phoenix_bow', 'Phoenix Bow', 'bow', 28, { ...U, tint: 0xffd090, glow: 0xff6a10, stats: { dmgPct: 0.06 } });
-  weapon('burning_sun', 'Staff of the Burning Sun', 'staff', 28, { ...U, model: 'Skeleton_Staff', tint: 0xffd0a0, glow: 0xff5a10, stats: { spell: 0.1 } });
-  weapon('volatile_rod', 'Volatile Rod', 'rod', 28, { ...U, tint: 0xffe070, glow: 0xff8a10, stats: { atkSpd: 0.08 } });
+  weapon('emberbrand', 'Emberbrand', 'sword1h', 28, { ...U, tint: 0xffb070, glow: 0xff3a00, flavour: 'dex' });
+  weapon('ashbringer', 'Ashbringer', 'sword2h', 28, { ...U, model: 'sword_2handed_color', tint: 0xffc890, glow: 0xff4a10, flavour: 'dex' });
+  weapon('pyre_mace', 'Pyre Mace', 'mace1h', 28, { ...U, tint: 0xffa060, glow: 0xff4a00, flavour: 'int' });
+  weapon('cinderkiss', 'Cinderkiss', 'dagger', 28, { ...U, tint: 0xffc0a0, glow: 0xff5a20, flavour: 'dex' });
+  weapon('phoenix_bow', 'Phoenix Bow', 'bow', 28, { ...U, tint: 0xffd090, glow: 0xff6a10, flavour: 'str' });
+  weapon('burning_sun', 'Staff of the Burning Sun', 'staff', 28, { ...U, model: 'Skeleton_Staff', tint: 0xffd0a0, glow: 0xff5a10, flavour: 'int' });
+  weapon('volatile_rod', 'Volatile Rod', 'rod', 28, { ...U, tint: 0xffe070, glow: 0xff8a10, flavour: 'dex' });
   shield('obsidian_bulwark', 'Obsidian Bulwark', 28, { ...U, model: 'shield_spikes_color', tint: 0x8a8090, glow: 0xff4a10 });
   book('codex_ignis', 'Codex Ignis', 28, { ...U, tint: 0xffb080, glow: 0xff4a10 });
-  uniqueAcc('salamander_ring', 'Ring of the Salamander', 'mid', 'ring', { dmgPct: (l) => 0.03 + l * 0.0009, crit: () => 0.02 }, 0xff4a10);
-  uniqueAcc('ember_earring', 'Earring of Embers', 'mid', 'ear', { crit: (l) => 0.02 + l * 0.0006, spell: (l) => 0.02 + l * 0.0008 }, 0xff8a2a);
-  uniqueAcc('heart_forge', 'Heart of the Forge', 'mid', 'neck', { armor: (l) => 4 + l * 1.4, hp: (l) => 10 + l * 2 }, 0xff6a10);
-  uniqueAcc('belt_ashen', 'Belt of the Ashen King', 'mid', 'belt', { hp: (l) => 10 + l * 2, regen: (l) => 0.6 + l * 0.08, moveSpd: () => 0.03 }, 0x8a2a10);
+  uniqueAcc('salamander_ring', 'Ring of the Salamander', 'mid', 'ring', { str: 1, dex: 1 }, 0xff4a10);
+  uniqueAcc('ember_earring', 'Earring of Embers', 'mid', 'ear', { dex: 1, int: 1 }, 0xff8a2a);
+  uniqueAcc('heart_forge', 'Heart of the Forge', 'mid', 'neck', { vit: 2, str: 1 }, 0xff6a10);
+  uniqueAcc('belt_ashen', 'Belt of the Ashen King', 'mid', 'belt', { vit: 2, dex: 1 }, 0x8a2a10);
   // high: Umbra the Devourer (Shadowmere)
-  weapon('nightbane', 'Nightbane', 'sword1h', 46, { ...U, tint: 0xc0a8ff, glow: 0x6a2aff, stats: { crit: 0.05 } });
-  weapon('abyssal_reaver', 'Abyssal Reaver', 'axe2h', 46, { ...U, tint: 0xa898d0, glow: 0x8a2aff, stats: { atkSpd: 0.06 } });
-  weapon('halo_mercy', 'Halo of Mercy', 'mace1h', 46, { ...U, model: 'proc_scepter', tint: 0xffffff, glow: 0xd0b0ff, stats: { spell: 0.1, regen: 6 } });
-  weapon('voidstep', 'Voidstep', 'dagger', 46, { ...U, tint: 0xd0b8ff, glow: 0x7a3aff, stats: { moveSpd: 0.06 } });
-  weapon('starfall_bow', 'Starfall Bow', 'bow', 46, { ...U, tint: 0xe8e0ff, glow: 0x9a6aff, stats: { crit: 0.05 } });
-  weapon('staff_eternity', 'Staff of Eternity', 'staff', 46, { ...U, tint: 0xf0e0ff, glow: 0xb06aff, stats: { mp: 90 } });
-  weapon('singularity_rod', 'Singularity Rod', 'rod', 46, { ...U, tint: 0xd8c8ff, glow: 0x8a4aff, stats: { spell: 0.08 } });
+  weapon('nightbane', 'Nightbane', 'sword1h', 46, { ...U, tint: 0xc0a8ff, glow: 0x6a2aff, flavour: 'dex' });
+  weapon('abyssal_reaver', 'Abyssal Reaver', 'axe2h', 46, { ...U, tint: 0xa898d0, glow: 0x8a2aff, flavour: 'dex' });
+  weapon('halo_mercy', 'Halo of Mercy', 'mace1h', 46, { ...U, model: 'proc_scepter', tint: 0xffffff, glow: 0xd0b0ff, flavour: 'int' });
+  weapon('voidstep', 'Voidstep', 'dagger', 46, { ...U, tint: 0xd0b8ff, glow: 0x7a3aff, flavour: 'dex' });
+  weapon('starfall_bow', 'Starfall Bow', 'bow', 46, { ...U, tint: 0xe8e0ff, glow: 0x9a6aff, flavour: 'dex' });
+  weapon('staff_eternity', 'Staff of Eternity', 'staff', 46, { ...U, tint: 0xf0e0ff, glow: 0xb06aff, flavour: 'int' });
+  weapon('singularity_rod', 'Singularity Rod', 'rod', 46, { ...U, tint: 0xd8c8ff, glow: 0x8a4aff, flavour: 'int' });
   shield('wall_shadows', 'Wall of Shadows', 46, { ...U, model: 'shield_badge_color', tint: 0xb0a0d0, glow: 0x6a2aff });
   book('tome_void', 'Tome of the Void', 46, { ...U, tint: 0xd0c0ff, glow: 0x7a3aff });
-  uniqueAcc('ring_nyxara', 'Ring of Nyxara', 'high', 'ring', { dmgPct: (l) => 0.03 + l * 0.0009, hp: (l) => 10 + l * 2 }, 0xff4ad8);
-  uniqueAcc('tear_abyss', 'Tear of the Abyss', 'high', 'ear', { mp: (l) => 10 + l * 2.4, spell: (l) => 0.03 + l * 0.0009 }, 0xb07aff);
-  uniqueAcc('amulet_eternity', 'Amulet of Eternity', 'high', 'neck', { atkSpd: (l) => 0.03 + l * 0.0008, crit: () => 0.03 }, 0xd0b0ff);
-  uniqueAcc('belt_hollow', 'Belt of the Hollow King', 'high', 'belt', { hp: (l) => 14 + l * 2.6, armor: (l) => 3 + l * 0.8 }, 0x9a6aff);
+  uniqueAcc('ring_nyxara', 'Ring of Nyxara', 'high', 'ring', { str: 1, vit: 1 }, 0xff4ad8);
+  uniqueAcc('tear_abyss', 'Tear of the Abyss', 'high', 'ear', { int: 1 }, 0xb07aff);
+  uniqueAcc('amulet_eternity', 'Amulet of Eternity', 'high', 'neck', { dex: 2, str: 1 }, 0xd0b0ff);
+  uniqueAcc('belt_hollow', 'Belt of the Hollow King', 'high', 'belt', { vit: 2, str: 1 }, 0x9a6aff);
 }
 export const UNIQUES = { low: [], mid: [], high: [] };
+const TOP_ITEM_LEVEL = Math.max(...Object.values(ITEMS).map((d) => d.level)); // (the best items: what monsters past it drop)
 for (const d of Object.values(ITEMS)) if (d.unique) UNIQUES[d.tier].push(d.key);
 
 // ---------------------------------------------------------------- things you use up
@@ -299,6 +309,14 @@ stack('recipe_low', { name: 'Low Class Upgrade Recipe', kind: 'recipe', tier: 'l
 stack('recipe_mid', { name: 'Middle Class Upgrade Recipe', kind: 'recipe', tier: 'mid', level: 1, price: 200, stack: 20, icon: 'recipe_mid', desc: 'The anvil in Emberwood camp upgrades a middle class item one step with it. It never fails.' });
 stack('recipe_high', { name: 'High Class Upgrade Recipe', kind: 'recipe', tier: 'high', level: 1, price: 600, stack: 20, icon: 'recipe_high', desc: 'The anvil in Emberwood camp upgrades a high class item one step with it. It never fails.' });
 
+// The hidden caves' keys (caves.js): one at a time, bound to the hero who found it (no bank, trade or sale).
+for (const [land, name, near] of [['emberwood', 'Bramble Hollow', 'the Bandit Hideout'], ['frostfang', 'the Rimewell', 'the Snowdrift Fields'], ['cinderfall', 'the Ember Vein', 'the Ashen Flats'], ['shadowmere', 'the Gloamdeep', 'the Gloom Marsh']]) {
+  stack(`cave_key_${land}`, {
+    name: `Key to ${name}`, kind: 'key', land, level: 1, price: 0, stack: 1, bound: true, icon: `key_${land}`,
+    desc: `Opens the hidden cave near ${near} for you and your party. While you carry it, its mouth glows among the bushes. One cave a day.`,
+  });
+}
+
 // Elixirs' boosts (Player.recompute applies them; they last through travel and saves).
 export const ELIXIRS = {
   elixir_might: { dur: 600, dmgPct: 0.1, name: 'Might' },
@@ -310,7 +328,7 @@ export const ELIXIRS = {
 // What merchants ask for an item (selling one brings a quarter, more for upgrades).
 const PRICE = [[1, 40], [10, 450], [20, 1800], [30, 4500], [40, 9500], [50, 18000], [60, 30000]];
 for (const d of Object.values(ITEMS)) {
-  if (d.price) continue;
+  if (d.price !== undefined) continue;
   const base = lerpTable(PRICE, d.level);
   d.price = Math.round((d.kind === 'weapon' ? base : d.kind === 'offhand' ? base * 0.7 : d.kind === 'armor' ? base * 0.45 : base * 0.8) * (d.unique ? 4 : 1) / 5) * 5;
 }
@@ -332,16 +350,12 @@ export function makeItem(key, opts = {}) {
 // How strong an item is at its plus: 1 at +1 (normal) or +0 (unique), a tenth more for each step.
 export const plusMult = (it) => { const d = itemDef(it); return 1 + UPGRADE_GAIN * ((it.p ?? 0) - (d?.unique ? 0 : 1)); };
 
-// The item's stats at its plus: damage, armor, life and mana grow; percentages grow half as fast.
+// The item's stats at its plus: damage, armor and attributes all grow (its speed doesn't).
 export function itemStats(it) {
   const d = itemDef(it);
   if (!d?.stats) return {};
-  const m = plusMult(it), half = 1 + (m - 1) * 0.5, out = {};
-  for (const [k, v] of Object.entries(d.stats)) {
-    if (k === 'speed') out[k] = v;
-    else if (k === 'dmgMin' || k === 'dmgMax' || k === 'armor' || k === 'hp' || k === 'mp') out[k] = Math.round(v * m);
-    else out[k] = v * half;
-  }
+  const m = plusMult(it), out = {};
+  for (const [k, v] of Object.entries(d.stats)) out[k] = k === 'speed' ? v : Math.round(v * m);
   return out;
 }
 
@@ -395,9 +409,10 @@ export function rollDrop(level, cls) {
     const keys = Object.values(ITEMS).filter((d) => d.kind === 'acc' && !d.unique && d.tier === tier && d.level <= level + 4).map((d) => d.key);
     if (keys.length) return makeItem(pick(keys));
   }
-  // weapons and clothes no more than a few levels above the monster, and not far below it; the newest of
-  // them (the best for a hero hunting here) come less often than older ones
-  const fits = (d) => !d.unique && !d.stack && d.kind !== 'acc' && d.level <= level + 2 && d.level >= Math.max(1, level - 14);
+  // weapons and clothes no more than a few levels above the monster, and not far below it (past the best
+  // items' level, the best ones still); the newest of them (the best for a hero hunting here) come less often
+  const lo = Math.min(Math.max(1, level - 14), TOP_ITEM_LEVEL - 10);
+  const fits = (d) => !d.unique && !d.stack && d.kind !== 'acc' && d.level <= level + 2 && d.level >= lo;
   const pool = Object.values(ITEMS).filter(fits);
   if (!pool.length) return null;
   const weight = (x) => (x.classes?.includes(cls) ? 3 : 1) * (x.kind === 'armor' ? 0.6 : 1) * (x.level >= level - 4 ? 0.35 : 1);
@@ -415,23 +430,17 @@ export function rollPotion(level) {
 export const rollUnique = (tier) => makeItem(pick(UNIQUES[tier]));
 
 // ---------------------------------------------------------------- tooltips
-const pct = (v) => `${Math.round(v * 1000) / 10}%`;
 export const STAT_LINES = [
-  ['armor', (v) => `+${v} Armor`], ['hp', (v) => `+${v} Max Life`], ['mp', (v) => `+${v} Max Mana`],
-  ['dmgPct', (v) => `+${pct(v)} Damage`], ['spell', (v) => `+${pct(v)} Spell Power`], ['atkSpd', (v) => `+${pct(v)} Attack Speed`],
-  ['crit', (v) => `+${pct(v)} Critical Chance`], ['moveSpd', (v) => `+${pct(v)} Move Speed`], ['regen', (v) => `+${v.toFixed(1)} Life per Second`],
+  ['armor', (v) => `+${v} Armor`], ...ATTRS.map((k) => [k, (v) => `+${v} ${ATTR_NAME[k]}`]),
 ];
 
-// Lines for an item's tooltip: { main: damage and armor lines, stats: the rest }.
+// Lines for an item's tooltip: { main: its damage and speed, or its armor; stats: the attributes it gives }.
 export function itemLines(it) {
   const d = itemDef(it), s = itemStats(it), main = [], stats = [];
   if (!d) return { main, stats };
   if (s.dmgMin) main.push(`${s.dmgMin}–${s.dmgMax} Damage`, `${s.speed.toFixed(2)} Attacks per Second`);
-  for (const [k, fmt] of STAT_LINES) {
-    if (!s[k]) continue;
-    if (k === 'armor' && (d.kind === 'armor' || d.type === 'shield')) main.push(`${s[k]} Armor`);
-    else stats.push(fmt(s[k]));
-  }
+  if (s.armor) main.push(`${s.armor} Armor`);
+  for (const k of ATTRS) if (s[k]) stats.push(`+${s[k]} ${ATTR_NAME[k]}`);
   return { main, stats };
 }
 

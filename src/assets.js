@@ -284,6 +284,7 @@ export function iconFor(it) {
 const SVG_ICONS = {
   potion: (c1, c2, size) => `<path d="M26 6h12v8l${size} ${12 + size}a12 12 0 0 1-11 18H25a12 12 0 0 1-11-18l${size} -${12 + size}z" fill="#2a2018" stroke="#c8b898" stroke-width="2.5" stroke-linejoin="round"/><path d="M18 34h28l2 4a9 9 0 0 1-8 12H24a9 9 0 0 1-8-12z" fill="${c1}"/><path d="M22 38h6" stroke="${c2}" stroke-width="3" stroke-linecap="round"/><rect x="24" y="2" width="16" height="6" rx="2" fill="#8a6a3a"/>`,
   elixir: (c1) => `<path d="M28 4h8v12l10 16v22a6 6 0 0 1-6 6H24a6 6 0 0 1-6-6V32l10-16z" fill="#2a2018" stroke="#c8b898" stroke-width="2.5" stroke-linejoin="round"/><path d="M20 34h24v20a4 4 0 0 1-4 4H24a4 4 0 0 1-4-4z" fill="${c1}"/><circle cx="27" cy="44" r="3" fill="#fff" opacity=".6"/>`,
+  key: (c1) => `<circle cx="20" cy="22" r="11" fill="none" stroke="#e8c060" stroke-width="6"/><circle cx="20" cy="22" r="11" fill="none" stroke="#8a6a2a" stroke-width="1.5" opacity=".6"/><circle cx="20" cy="22" r="4.5" fill="${c1}" stroke="#fff" stroke-width="1"/><path d="M28 30l22 22" stroke="#e8c060" stroke-width="6" stroke-linecap="round"/><path d="M44 46l6-6M38 40l5-5" stroke="#e8c060" stroke-width="5" stroke-linecap="round"/><path d="M30 32l19 19" stroke="#fff6d0" stroke-width="1.5" opacity=".6"/>`,
   scroll: (c1) => `<rect x="14" y="12" width="36" height="40" rx="3" fill="#f1e1bf" stroke="#8a6a3a" stroke-width="2.5"/><rect x="10" y="8" width="44" height="8" rx="4" fill="#c8a070" stroke="#6a4a2a" stroke-width="2"/><rect x="10" y="48" width="44" height="8" rx="4" fill="#c8a070" stroke="#6a4a2a" stroke-width="2"/><path d="M20 24h24M20 30h24M20 36h16" stroke="#8a6a3a" stroke-width="2"/><circle cx="42" cy="40" r="5" fill="${c1}"/>`,
 };
 const ICON_SPECS = {
@@ -291,6 +292,7 @@ const ICON_SPECS = {
   potion_blue: ['potion', '#3a78e0', '#9ac0ff', 2], potion_blue2: ['potion', '#2a5ae0', '#8ab0ff', 4], potion_blue3: ['potion', '#1a3ac0', '#7aa0ff', 6],
   elixir_red: ['elixir', '#ff6a2a'], elixir_grey: ['elixir', '#a8b4c4'], elixir_green: ['elixir', '#4ad46a'],
   scroll: ['scroll', '#5ad0ff'], recipe_low: ['scroll', '#e8e4da'], recipe_mid: ['scroll', '#6aa9ff'], recipe_high: ['scroll', '#ffd84a'],
+  key_emberwood: ['key', '#7dff9a'], key_frostfang: ['key', '#7fd8ff'], key_cinderfall: ['key', '#ff7a2a'], key_shadowmere: ['key', '#c07aff'],
 };
 function svgIcon(name) {
   const [kind, ...args] = ICON_SPECS[name] || ['scroll', '#888'];

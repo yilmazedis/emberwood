@@ -16,7 +16,8 @@ import { Projectiles, LootManager } from './combat.js';
 import { UI } from './ui.js';
 import { Doll } from './doll.js';
 import { Sfx } from './audio.js';
-import { rollDrop, rollPotion, rollUnique, makeItem, itemName, itemColor, tierAt } from './items.js';
+import { ITEMS, rollDrop, rollPotion, rollUnique, makeItem, itemName, itemColor, tierAt } from './items.js';
+import { CAVES, CAVE_LANDS, KEY_RANGE, KEY_CHANCE, caveLandFor, dayNumber, untilTomorrow } from './caves.js';
 import { monsterXp } from './monsters.js';
 import { Input } from './input.js';
 import { Npcs } from './npcs.js';
@@ -34,6 +35,8 @@ import { loadSettings, saveSettings } from './settings.js';
 import { angleDiff, yawTo, randInt, rand, chance, clamp } from './util.js';
 
 const SAVE_KEY = 'emberwood-save-v1'; // the local save (offline play: ?autostart)
+const CAVE_OPEN_FOR = 45 * 60000; // ms a party's open cave shows its mouth to the members (the server decides)
+const escHtml = (t) => String(t).replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
 // Graphics, from Settings: how many of the screen's pixels to draw (a multiple of its size, never more than it
 // has), smoothed edges (MSAA samples), the sun's shadow map (0: no shadows; phones get half, at least 1024) and
 // soft shadow edges, and the glow (its size, a share of the screen's; 0: none).
@@ -198,10 +201,12 @@ export class Game {
   setCharacter(char) {
     this.character = { id: char.id, name: char.name, cls: char.cls, look: char.look || 0 };
     this.rev = char.rev || 0; // (saves older than a trade are refused: see server)
+    this.caveOpen = null; // a cave open to our hero: { land, until, mine } (see caveFound)
     const p = this.player;
     p.setClass(char.cls, char.look || 0);
     p.reset();
     if (char.save) p.load(char.save); else p.starterKit();
+    p.cave.day = Math.max(p.cave.day, char.caveDay || 0); // (the server keeps the day of the last cave run)
     if (char.id === 'local') this.bank.loadLocal(); else this.bank.load(char.bank);
     // nothing of the previous hero's world stays behind: a hero starts in Emberwood's camp
     this.places.enter('emberwood');
@@ -227,6 +232,13 @@ export class Game {
       ], 60000), 1500);
       delete p.migrated;
       this.save();
+    }
+    if (p.newAttrs) { // a hero from before attributes: every point is free to spend
+      setTimeout(() => this.ui.prompt(`<b>Attributes are here!</b><br>Strength, Dexterity, Intelligence and Vitality: you get 5 points a level to spend as you like, and your gear gives more. You have <b>${p.freeAttr}</b> points waiting (your items give attributes now instead of their old bonuses).`, [
+        ['Spend them the usual way', () => { p.suggestAttrs(); this.ui.centerMsg(`Spent the ${CLASSES[p.cls].name}'s way: change it any time in your character window`); }, 'go'],
+        ['Choose myself', () => this.ui.openInventory('character')], ['Later', () => {}],
+      ], 120000), 1800);
+      delete p.newAttrs;
     }
     this.renderer.compile(this.scene, this.camera); // the new model's shaders, before the first frame
   }
@@ -669,7 +681,7 @@ export class Game {
     return n;
   }
 
-  // Everything within radius of a spot (leaps, novas, rains of arrows): spell: scaled by Spell Power;
+  // Everything within radius of a spot (leaps, novas, rains of arrows): spell: spell damage (Intelligence);
   // quiet: no hitstop (things that tick, like burning ground).
   areaHit({ at, radius, mult, knock = 0.4, eff = null, spell = false, critBonus = 0, quiet = false }) {
     const p = this.player, from = at.clone();
@@ -760,9 +772,10 @@ export class Game {
   }
 
   // ---------------------------------------------------------------- helping other heroes
-  // A heal on a friendly hero (us, or another: their game heals them): a share of their maximum Life.
+  // A heal on a friendly hero (us, or another: their game heals them): a share of their maximum Life, more
+  // with the healer's healing (the Restoration tree, Intelligence).
   healAlly(who, share, quiet = false) {
-    const p = this.player, amount = share * (1 + p.stats.healPct) * (1 + (p.stats.spell - 1) * 0.5);
+    const p = this.player, amount = share * p.stats.heal;
     if (who === p) { p.heal(Math.round(p.stats.maxHp * amount), quiet); return; }
     if (!who.isHero || who.hostile || !who.alive) return;
     this.link.help(who, 'heal', Math.round(amount * 1000) / 1000);
@@ -772,7 +785,7 @@ export class Game {
   // A buff on a friendly hero (us, or another: their game takes it).
   buffAlly(who, id, v) {
     const p = this.player;
-    if (BUFFS[id]?.ally && id !== 'swiftness' && id !== 'shadow_mantle' && id !== 'sanctuary' && id !== 'divine_shield') v *= 1 + p.stats.healPct * 0.5;
+    if (BUFFS[id]?.ally && id !== 'swiftness' && id !== 'shadow_mantle' && id !== 'sanctuary' && id !== 'divine_shield') v *= 1 + (p.stats.heal - 1) * 0.5;
     if (who === p) { p.addBuff(id, v); return; }
     if (!who.isHero || who.hostile) return;
     this.link.help(who, 'buff', [id, Math.round(v * 1000) / 1000]);
@@ -831,6 +844,7 @@ export class Game {
     p.gainXp(xp);
     this.ui.floater(new THREE.Vector3(pos.x, pos.y + height + 0.6, pos.z), `+${xp} XP`, 'xp');
     this.quests.onEvent('kill', { type, pos: new THREE.Vector3(pos.x, pos.y + height + 1.2, pos.z) });
+    this.rollKey(pos);
     if (!loot) return;
     const at = pos.clone();
     const gold = () => Math.round(randInt(d.gold[0], d.gold[1]) * (1 + 0.2 * (level - 1)));
@@ -857,6 +871,105 @@ export class Game {
     } else if (chance(d.drop * ITEM_DROP)) {
       const it = rollDrop(level, p.cls);
       if (it) this.loot.dropItem(it, at);
+    }
+  }
+
+  // ---------------------------------------------------------------- the hidden caves (caves.js)
+  // A kill near a land's hidden cave may bring its key: to a hero whose cave that is, carrying no key yet.
+  // Each hero credited with the kill rolls for their own.
+  rollKey(pos) {
+    const land = this.places.id, cave = MAPS[land]?.hiddenCave, p = this.player;
+    if (!cave || caveLandFor(p.level) !== land || Math.hypot(pos.x - cave.mouth.x, pos.z - cave.mouth.z) > KEY_RANGE) return;
+    if (this.hasCaveKey() || !chance(KEY_CHANCE)) return;
+    const key = makeItem(cave.key);
+    if (p.addItem(key)) {
+      this.ui.log(`Something glints where it fell: <b style="color:#ffd84a">${ITEMS[cave.key].name}</b>! The cave's mouth shows itself near ${cave.near}.`, 'lvl');
+      this.ui.centerMsg(`You found the ${ITEMS[cave.key].name}!`);
+      this.sfx.play('quest');
+      this.fx.levelUp(pos);
+      this.save();
+    } else this.loot.dropItem(key, pos.clone());
+  }
+
+  // Where a key's cave is, and whether our hero may go in today.
+  keyHint(d) {
+    const c = CAVES[d.land], here = this.places.id === d.land;
+    const today = this.player.cave.day === dayNumber() ? ` You have been in a cave today: tomorrow, in ${untilTomorrow()}.` : ' You can go in today.';
+    this.ui.centerMsg(`${c.name}: near ${c.near}${here ? '' : ` in ${MAPS[d.land].name}`}`);
+    this.ui.log(`<b>${c.name}</b> hides near ${c.near} in ${MAPS[d.land].name}: its mouth glows among the bushes while you carry the key (a pulsing ring on your minimap too).${today}`, 'xp');
+  }
+
+  hasCaveKey() {
+    return CAVE_LANDS.some((l) => this.player.count(CAVES[l].key) > 0);
+  }
+
+  // May our hero see (and go into) land's cave? With its key, or while its party's copy is open to it (or
+  // the hero was in it already).
+  caveFound(land) {
+    const p = this.player, c = CAVES[land];
+    if (!c || !p.alive || caveLandFor(p.level) !== land) return false;
+    if (p.count(c.key) > 0) return true;
+    const o = this.caveOpen;
+    return !!o && o.land === land && Date.now() < o.until && (o.mine || p.cave.day !== dayNumber());
+  }
+
+  // Into land's hidden cave: through its mouth (with the key, or into the copy our party opened), or
+  // answering a party member's call (join). The world decides, and the server takes the key.
+  async enterCave(land, { join = false } = {}) {
+    const c = CAVES[land], ui = this.ui, p = this.player;
+    if (this.traveling || !c || !p.alive) return false;
+    this.traveling = true;
+    ui.closeInventory();
+    this.places.closeTravel();
+    p.control.stopAuto(true);
+    ui.fade(true, `Into ${c.name}…`);
+    this.sfx.play('portal');
+    let r;
+    try {
+      await Promise.all([this.places.load(c.id), new Promise((res) => setTimeout(res, 420))]);
+      r = await this.link.cave(land, { join, save: join ? null : p.serialize() });
+    } catch (err) {
+      ui.fade(false);
+      ui.centerMsg(err.message);
+      this.traveling = false;
+      return false;
+    }
+    if (r.key) {
+      p.takeOut(r.key);
+      ui.log(`The key turns in the rock and crumbles: <b>${c.name}</b> opens${this.party.id ? ' for your party' : ''}. Ten chambers, and its keeper at the bottom.`, 'lvl');
+    }
+    if (r.rev) this.rev = r.rev; // (the server wrote our save without the key: older ones are refused)
+    p.cave.day = r.day;
+    this.caveOpen = { land, until: Date.now() + CAVE_OPEN_FOR, mine: true };
+    await this.arrive(r);
+    ui.fade(false);
+    this.traveling = false;
+    this.save();
+    return true;
+  }
+
+  // A party member opened a cave: go in with them? (The server only asks those who may.)
+  caveOpened(m) {
+    const c = CAVES[m.land], p = this.player;
+    if (!c) return;
+    const who = escHtml(m.from);
+    if (m.done || p.cave.day === dayNumber()) { this.ui.log(`${who} opened <b>${c.name}</b>. You have been in a cave today: the caves open to you again in ${untilTomorrow()}.`, 'xp'); return; }
+    if (caveLandFor(p.level) !== m.land) { this.ui.log(`${who} opened <b>${c.name}</b>, a cave for heroes of level ${c.heroes[0]} – ${c.heroes[1]}.`, 'xp'); return; }
+    this.caveOpen = { land: m.land, until: Date.now() + CAVE_OPEN_FOR, mine: false };
+    this.ui.prompt(`<b>${who}</b> opened <b>${c.name}</b>, the hidden cave in ${MAPS[m.land].name}. Go in with your party?<br><small>It is your cave for today.</small>`, [
+      ['Go in', () => this.enterCave(m.land, { join: true }), 'go'],
+      ['Later', () => this.ui.log(`${c.name} stays open for your party: its mouth glows near ${c.near}.`, 'xp')],
+    ], 60000);
+  }
+
+  // A key whose land our hero has outgrown crumbles (its cave is for lower levels now).
+  checkKeys() {
+    const p = this.player, mine = caveLandFor(p.level);
+    for (const land of CAVE_LANDS) {
+      const k = CAVES[land].key;
+      if (land === mine || !p.count(k)) continue;
+      p.takeOut(k, p.count(k));
+      this.ui.log(`The ${ITEMS[k].name} crumbles to dust: that cave is for lower levels now. Yours is ${CAVES[mine].name}, near ${CAVES[mine].near} in ${MAPS[mine].name}.`, 'xp');
     }
   }
 

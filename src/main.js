@@ -124,6 +124,7 @@ function attachWorld(net) {
   net.on('party', (m) => game.party.receive(m));
   net.on('partyInvite', (m) => game.party.invited(m));
   net.on('recall', (m) => game.recalled(m));
+  net.on('caveOpen', (m) => game.caveOpened(m));
   net.on('tradeAsk', (m) => game.trade.asked(m));
   net.on('tradeState', (m) => game.trade.state(m));
   net.on('tradeDone', (m) => game.trade.done(m));

@@ -64,8 +64,10 @@ automated tests; `&cls=scientist`, `rogue` or `healer` picks the class of a new 
   and losses are kept per hero (`arena.json` in the data folder) for the champions' board in the arena's yard.
 - **Chat:** one world channel (Enter, or the Chat button on phones); nearby heroes also show it in a bubble.
   Last 20 lines are shown to heroes who arrive.
-- **Levels:** up to 60. Quick to 10; after that each level asks for more kills of your own level (about 50 at 20,
+- **Levels:** up to 80. Quick to 10; after that each level asks for more kills of your own level (about 50 at 20,
   130 at 40, 240 at 59; some 5 700 such kills from 1 to 60, plus what quests give). Monsters' life and damage, and what armor takes, grow faster past 10 with the gear.
+  No monsters outside the caves are above level 62: from 58 to 80 the **hidden caves** (below) are the way up, one a
+  day, a good share of a level each.
 - **Away:** a browser stops a hidden tab's frames. With auto-hunt on, the hero keeps hunting there anyway
   (Settings, In the background: Keep hunting, the default; a small worker ticks the game ten times a second,
   without drawing); set to Pause, or without auto-hunt, the hero waits where it stands and monsters leave it
@@ -121,16 +123,44 @@ skill trees.
 | **Rogue** | Two daggers (assassin) · a bow (archer) | Critical hits, the fastest feet; Swiftness (+move speed for 10 minutes) on any friendly hero |
 | **Healer** | Mace and shield · a warrior's two-handed sword, spear or maul (not Raptor and the other warrior-only weapons) | Heals, blessings that last 10 minutes, resurrection; fights alone with holy fire but kills slower than the rest |
 
-Basic attacks: melee weapons swing, bows shoot arrows, staves and short staves fire bolts. Spell power raises the
-damage of spells (a Scientist's and a Healer's), weapon damage the rest. An archer (hero or monster) raises the bow
+Basic attacks: melee weapons swing, bows shoot arrows, staves and short staves fire bolts. Intelligence raises the
+damage of spells (a Scientist's and a Healer's, staff bolts too), Strength (and with daggers and bows, Dexterity)
+weapon damage. An archer (hero or monster) raises the bow
 upright with the string toward them, draws to the cheek and looses with a twang; the arrow flies head first and
 sticks a moment in whatever it hits.
+
+## Attributes
+
+Four attributes (`src/attributes.js`), the same for every class: a class only decides what it needs most.
+
+| Attribute | What each point gives |
+|---|---|
+| **Strength** | +0.75% weapon damage (melee, bows, weapon skills), +0.15 armor |
+| **Dexterity** | +0.08% attack speed, +0.05% critical chance, +0.02% dodge (15% at most); daggers and bows count the average of Strength and Dexterity for their damage |
+| **Intelligence** | +1% spell damage (staff bolts too), +0.1% healing, +2 Mana |
+| **Vitality** | +5 Life, +0.06 Life a second (Life and Mana per point times the class's own multiplier) |
+
+A hero starts with its class's (Warrior 18 / 10 / 6 / 16, Scientist 6 / 10 / 22 / 12, Rogue 12 / 20 / 6 / 12, Healer
+12 / 8 / 16 / 14) and gets **5 points a level** to spend anywhere, in the character window (+1, +5, or **Suggested**:
+the class's usual split, Warrior 3 STR 1 DEX 1 VIT, Scientist 3 INT 1 DEX 1 VIT, Rogue 3 DEX 1 STR 1 VIT, Healer
+2 INT 1 STR 2 VIT). **Take back all** returns every point for the same fee as skill points. Every level also adds a
+little of its own (1.4% damage, and some Life, Mana and armor), so points are a choice, not a toll.
+
+**Items give attributes**, not bonuses: a weapon has its damage and speed, clothes and shields their armor, and
+everything else an item gives is attributes, by its level, its slot (a two-handed weapon or a book most, gloves
+least) and its kind (swords Strength and Vitality, daggers and bows Dexterity and Strength, staves Intelligence,
+the Rogue's leathers Dexterity, the Scientist's coats Intelligence and Vitality…). Upgrades raise them like the rest.
+
+**Balance:** with the suggested split, each class kills and lasts about as it did before attributes (within a tenth).
+Going all in on damage (all Strength, all Intelligence, all Dexterity for a rogue) kills 7–24% faster with a fifth
+less Life; all Vitality doubles Life for a third less damage. A Scientist can take Vitality to stand longer, or
+Dexterity to cast its bolts faster; a Healer chooses between healing (Intelligence) and the mace (Strength).
 
 ## Skills
 
 A hero gets **one skill point per level** and puts it in one of their class's three trees (K, or the Skills
 button). A tree's four skills open at 1, 6, 15 and 30 points in it; every point makes its skills 1.2% stronger and
-adds the tree's own small bonus. Sixty points can't fill everything: go all in on one or two trees, or spread
+adds the tree's own small bonus. Eighty points can't fill everything: go all in on one or two trees, or spread
 out and be good at more but best at nothing. The skill window takes every point back for a fee (free below
 level 10). Click (or tap) an open skill to put it on one of the 8 action slots.
 
@@ -174,9 +204,10 @@ much slower when built for healing). In the Arena the skills hit heroes at 45%.
 
 ## Items
 
-Every item has a fixed name and fixed stats: a Giant Sword is always the same Giant Sword (`src/items.js`).
-Items come in three classes, **low** (levels 1–19), **middle** (20–39) and **high** (40–60), and every hero class
-has its own weapons and clothes in each. Clothes are four-piece sets per class and item class (the Warrior's are
+Every item has a fixed name and fixed stats: a Giant Sword is always the same Giant Sword (`src/items.js`): its
+damage and speed (weapons) or armor (clothes, shields), and attributes (above). Items come in three classes, **low**
+(levels 1–19), **middle** (20–39) and **high** (40–80; the best are level 50, and monsters past that drop them),
+and every hero class has its own weapons and clothes in each. Clothes are four-piece sets per class and item class (the Warrior's are
 Plate, Chitin and Shell; the Scientist's Linen, Alchemist and Aether; the Rogue's Leather, Stalker and Nightshade;
 the Healer's Chain, Blessed and Seraph).
 
@@ -247,6 +278,39 @@ room has a **trapdoor down** to a deeper, harder floor with its own boss:
 | Frostfang Highlands (snow) | 10 – 22 | Hrimgar the Frost Jarl | Rimeheart Caverns (20 – 24, Vorrak the Rime King) | The Frozen Deep (25 – 28, Ymira of the Deep) |
 | Cinderfall Wastes (ash and lava) | 22 – 40 | Vulkhar the Ashen King | The Molten Forge (38 – 42, Forgemaster Kaldur) | The Magma Core (43 – 46, the Magmaborn) |
 | Shadowmere (twilight marsh) | 40 – 58 | Malakar the Hollow King | The Abyssal Vault (56 – 60, Nyxara) | The Void Below (60 – 62, the Void Herald) |
+
+**Hidden caves** (`src/caves.js`, `src/maps/caves.js`, drawn by `src/cave-view.js`): every land hides one, its
+mouth in the bushes beside an easy zone. Its **key** drops now and then (one kill in 25) from the monsters within
+30 m of the mouth, for every hero credited with the kill whose cave it is; only while a hero carries the key (or its
+party's cave is open to it) does the mouth show itself, its bushes parting and a glow pulsing there (a ring on the
+minimap too).
+
+| Land | Cave | Heroes (levels) | Its monsters | Keeper |
+|---|---|---|---|---|
+| Emberwood | Bramble Hollow (by the Bandit Hideout) | 1 – 7 | 3 – 9 | Old Mossjaw |
+| Frostfang Highlands | the Rimewell (by the Snowdrift Fields) | 8 – 19 | 10 – 24 | Frostmaw, the Rimewell Warden |
+| Cinderfall Wastes | the Ember Vein (by the Ashen Flats) | 20 – 37 | 22 – 42 | the Scorchmother |
+| Shadowmere | the Gloamdeep (by the Gloom Marsh) | 38 – 80 | 40 – 80 | the Gloam Stalker |
+
+- **Which cave:** a hero finds (and uses) only the key of the furthest land it may enter: once Cinderfall opens to a
+  hero (level 20), Emberwood's and Frostfang's caves are behind it, and a key it still carries for one of them
+  crumbles. One key at a time; a key stays with the hero who found it (no bank, trade or sale).
+- **Going in:** at the mouth, with the key: the server takes the key out of the hero's save (older saves are
+  refused after, as with trades) and opens a private copy of the cave for the hero's **party**. Every member who
+  may use that cave is called and can step in from wherever they are (or walk in by the glowing mouth while it's
+  open). Alone is allowed, and hard.
+- **One a day:** a hero who has been in a cave today (Turkey's day: midnight there) stays out of every other, even if
+  its party opens one; going back into the copy it was in (after falling, or stepping out) is fine. The server keeps
+  the day.
+- **Ten chambers:** the monsters of each chamber rise as the one before falls silent (its gate of fallen rock
+  crumbles); every one of them must fall before the next gate opens. They are elites (30% more Life, 15% harder
+  blows, 30% more XP), of the heroes' own level (within the cave's), a level more every three chambers, and the
+  tenth holds the cave's **keeper** (three levels up, calling for help) and two of its guards. Each hero in the cave
+  beyond the first adds monsters (three more per chamber for every four heroes) and half again their Life (and
+  XP), so a party's members earn about what one hero alone would, faster and safer.
+- **The reward:** when the keeper falls, everyone in the cave gets **40% of the XP of their next level** (on top of
+  the kills), the keeper's treasure opens (gold, potions, often an item and a recipe), and daylight opens a way out
+  in its hall.
 
 **World bosses** roam the lands: Gorehorn the Wanderer in Emberwood (low class uniques), Skadi the Frost Giant in
 Frostfang (low), Ignis, the Living Pyre in Cinderfall (middle) and Umbra the Devourer in Shadowmere (high). One rises
@@ -378,7 +442,10 @@ Variants: `?size=192`, `?size=512&maskable` (Android adaptive icon), `?size=180&
 - `src/monsters.js`: monster types and the spawn table; `src/terrain.js`: ground height, zones, what blocks the way
   (with fixed seeds, so the game and the server agree); `src/crypt-map.js`: the crypt's map, walls and paths
   (these three, `classes.js`, `util.js` and `noise.js` are plain data and math, shared with the server)
-- `src/items.js`: every item (weapons, clothes, accessories, uniques, potions, recipes), tiers, upgrades, loot rolls
+- `src/items.js`: every item (weapons, clothes, accessories, uniques, potions, recipes, cave keys), tiers, upgrades,
+  loot rolls; `src/attributes.js`: what Strength, Dexterity, Intelligence and Vitality do
+- `src/caves.js`: the hidden caves' rules (shared with the server); `src/maps/caves.js` their plans;
+  `src/cave-view.js` the caves and their mouths, drawn
 - `src/gear.js`: procedural models (maces, spears, mauls, gloves, boots, accessories, potions, recipes)
 - `src/enchant.js`: the glow of a held item upgraded to +8, +9 or +10
 - `src/camps.js`: who stands in each camp (shared with the server); `src/npcs.js`: the camp's people drawn, their

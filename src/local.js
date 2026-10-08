@@ -1,6 +1,7 @@
 // Offline play (?autostart, used by the automated tests): the shared world (sim/world.js) runs right
 // here in the page instead of on the game server, behind the same messages, so the game can't tell.
 import { WorldSim, TICK } from './sim/world.js';
+import { CAVES, dayNumber } from './caves.js';
 
 export class LocalWorld {
   constructor() {
@@ -32,6 +33,16 @@ export class LocalWorld {
       const r = this.sim.travel(1, String(data.to || ''), { respawn: !!data.respawn, camp: !!data.camp });
       if (r.error) throw new Error(r.error);
       return { t: 'traveled', ...r };
+    }
+    if (t === 'cave') { // as the game server does it (server/main.mjs), the save being this browser's
+      const cave = CAVES[data.land], save = data.save || {}, today = dayNumber();
+      const hasKey = !!cave && Array.isArray(save.bag) && save.bag.some((it) => it && it.k === cave.key);
+      const e = this.sim.caveEntry(1, String(data.land || ''), { join: !!data.join, today, lastDay: Number(save.cave?.day) || 0, hasKey });
+      if (e.error) throw new Error(e.error);
+      const area = e.open ? this.sim.openCave(this.sim.players.get(1), data.land) : e.area;
+      const r = this.sim.enterCave(1, area);
+      if (r.error) throw new Error(r.error);
+      return { t: 'caved', ...r, day: today, key: e.open ? cave.key : null };
     }
     if (t === 'recall' || t.startsWith('trade')) throw new Error('That needs other heroes: play online.');
     if (t === 'exit') {

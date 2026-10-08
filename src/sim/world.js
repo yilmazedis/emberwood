@@ -13,9 +13,10 @@
 import { ENEMY_TYPES, monsterHp, WORLD_BOSSES, WORLD_BOSS_FIRST, WORLD_BOSS_RETURN } from '../monsters.js';
 import { planWorld, zoneAt, resolveCollision, isWalkable, randomWalkablePoint } from '../terrain.js';
 import { MAPS, START, portalTo, arrival } from '../maps.js';
+import { CAVES, STAGES, STAGE_ROOMS, MOUTH_REACH, stageSlots, caveLandFor, untilTomorrow } from '../caves.js';
 import { rand, clamp, dampAngle, yawTo, TAU } from '../util.js';
 
-export const PROTOCOL = 5; // bump when the messages change: older games are asked to reload
+export const PROTOCOL = 6; // bump when the messages change: older games are asked to reload
 export const TICK = 0.1; // seconds between world updates
 export const STATES = ['spawn', 'idle', 'chase', 'return', 'dead'];
 const CODE = Object.fromEntries(STATES.map((s, i) => [s, i]));
@@ -23,6 +24,7 @@ const SEE_MONSTERS = 56; // a game hears about monsters this far (each way) from
 const SEE_PLAYERS = 80; // … and about other heroes
 const ACTIVE = 90; // monsters further than this from every hero rest
 const INSTANCE_TTL = 300; // seconds an empty dungeon copy is kept (come back for what you left)
+const STAGE_PAUSE = 2.5; // s between a cave chamber cleared (its gate crumbles) and the next one's monsters rising
 const HERO_RADIUS = 0.5;
 const SHARE_RANGE = 60; // party members this near a kill share it
 const PARTY_BONUS = 0.2; // each extra member in range adds this much to the party's XP
@@ -79,8 +81,10 @@ class Monster {
     this.type = slot.type;
     this.def = d;
     this.level = slot.lvl;
-    this.maxHp = monsterHp(d, this.level);
+    this.maxHp = Math.round(monsterHp(d, this.level) * (slot.hpMul || 1)); // (a cave's are stronger: caves.js)
     this.hp = this.maxHp;
+    this.dmgMul = slot.dmgMul || 1;
+    this.xpMul = slot.xpMul || 1;
     this.radius = d.radius * (d.scale || 1);
     this.dun = area.dun; // in a dungeon: walls to path around, and no seeing through them
     const home = slot.ring ? ringPoint(slot) : randomWalkablePoint(slot.x, slot.z, slot.r);
@@ -550,7 +554,7 @@ class Monster {
       const n = t.heroes.length, pool = (t.dmg / total) * (1 + PARTY_BONUS * (n - 1));
       const levels = t.heroes.reduce((sum, h) => sum + h.level, 0);
       const looter = t !== best ? null : t.party ? t.heroes[sim.turn(t.party) % n] : t.heroes[0];
-      for (const h of t.heroes) out.push([h.pid, r3((pool * h.level) / levels), h === looter || (this.hitters.get(h.pid) || 0) >= fair ? 1 : 0]);
+      for (const h of t.heroes) out.push([h.pid, r3((pool * h.level * this.xpMul) / levels), h === looter || (this.hitters.get(h.pid) || 0) >= fair ? 1 : 0]);
     }
     return out;
   }
@@ -581,6 +585,39 @@ class Area {
     // a land's world boss: it comes some minutes after heroes arrive, and again ten minutes after it falls
     const wb = !map.instanced && WORLD_BOSSES[map.id];
     this.wb = wb ? { ...wb, timer: WORLD_BOSS_FIRST, monster: null } : null;
+    // a hidden cave (caves.js): its chambers one by one; cleared: how many have fallen silent
+    this.cave = map.cave ? { def: map.cave, stage: 0, cleared: 0, done: false, nextAt: 3, entered: new Set(), t: 0 } : null;
+  }
+
+  // A cave's chambers: the first one's monsters a moment after the first hero arrives; then, as each
+  // chamber's last monster falls, its gate opens and the next chamber's rise (for the heroes there then:
+  // more heroes, stronger monsters). After the tenth (the keeper's), the cave is done.
+  caveTick(dt) {
+    const c = this.cave;
+    c.t += dt;
+    if (c.done) return;
+    if (c.stage > c.cleared) { // a chamber is being fought
+      for (const m of this.monsters.values()) if (m.slot.stage === c.stage && m.state !== 'dead') return;
+      c.cleared = c.stage;
+      if (c.cleared >= STAGES) { c.done = true; return; }
+      c.nextAt = c.t + STAGE_PAUSE;
+      return;
+    }
+    if (c.t < c.nextAt) return;
+    c.stage++;
+    const room = this.dun.rooms[STAGE_ROOMS[c.stage - 1]];
+    for (const slot of stageSlots(c.def, c.stage, room, [...this.players].map((p) => p.level))) {
+      const m = this.spawn(slot);
+      m.state = 'spawn';
+    }
+  }
+
+  // How the cave stands, for the heroes in it: [chambers cleared, monsters left in this one, done].
+  caveView() {
+    const c = this.cave;
+    let left = 0;
+    if (c.stage > c.cleared) for (const m of this.monsters.values()) if (m.slot.stage === c.stage && m.state !== 'dead') left++;
+    return [c.cleared, left, c.done ? 1 : 0];
   }
 
   update(dt) {
@@ -590,12 +627,13 @@ class Area {
     }
     this.emptyT = 0;
     const heroes = [...this.players];
+    if (this.cave) this.caveTick(dt);
     if (this.wb && !this.wb.monster) {
       this.wb.timer -= dt;
       if (this.wb.timer <= 0) this.spawnWorldBoss(heroes);
     }
     for (const s of this.slots) {
-      if (s.monster) continue;
+      if (s.monster || s.once) continue;
       s.timer -= dt;
       // rise out of sight (or eight seconds later anyway: a hero hunting right there doesn't wait long)
       if (s.timer <= 0 && (s.timer < -8 || heroes.every((p) => Math.hypot(p.x - s.x, p.z - s.z) > s.r + 6))) this.spawn(s);
@@ -609,7 +647,7 @@ class Area {
       if (!m.removed) continue;
       this.monsters.delete(m.id);
       if (this.wb?.monster === m) { this.wb.monster = null; this.wb.timer = WORLD_BOSS_RETURN; }
-      if (m.slot.monster === m) {
+      if (m.slot.monster === m && !m.slot.once) {
         m.slot.monster = null;
         m.slot.timer = m.def.respawn || rand(9, 14); // (bosses: their own time)
       }
@@ -661,6 +699,57 @@ export class WorldSim {
     this.players = new Map(); // pid -> hero
     this.areas = new Map(); // key -> Area: a land by its id, a dungeon copy by `<dungeon>:<party or hero>`
     this.turns = new Map(); // party -> whose turn it is for loot (a counter)
+    this.caves = new Map(); // `<cave>:<party or hero>` -> its open copy (an Area)
+    this.caveN = 0;
+  }
+
+  // ---------------------------------------------------------------- the hidden caves (caves.js)
+  // The copy of land's cave open for hero p's party (or p alone), if any is still there.
+  caveFor(p, land) {
+    const c = CAVES[land], a = c && this.caves.get(`${c.id}:${p.party ? `p${p.party}` : `h${p.key}`}`);
+    return a && this.areas.get(a.key) === a ? a : null;
+  }
+
+  // A new copy of land's cave for hero p's party (a key was used; the server checked it).
+  openCave(p, land) {
+    const c = CAVES[land], who = p.party ? `p${p.party}` : `h${p.key}`;
+    const a = this.area(`${c.id}:${who}:${++this.caveN}`, MAPS[c.id]);
+    this.caves.set(`${c.id}:${who}`, a);
+    return a;
+  }
+
+  // May hero pid go into land's hidden cave? At its mouth (or, join: anywhere but a cave or the arena, when its
+  // party opened one), its land the furthest the hero may enter, not yet in a cave today (lastDay: the day of
+  // its last cave run) unless it is going back into the copy it was in. A new copy needs a key (hasKey).
+  // { area } (the open copy to go into), { open: true } (use the key: openCave), or { error }.
+  caveEntry(pid, land, { join = false, today = 0, lastDay = 0, hasKey = false } = {}) {
+    const p = this.players.get(pid), c = CAVES[land], L = MAPS[land];
+    if (!p?.area || !c) return { error: 'There is no such cave.' };
+    if (!p.alive) return { error: 'You have fallen.' };
+    const mine = caveLandFor(p.level);
+    if (mine !== land) return { error: `${c.name} is for heroes of level ${c.heroes[0]} – ${c.heroes[1]}: yours is ${CAVES[mine].name} in ${MAPS[mine].name}.` };
+    if (join) {
+      if (p.area.map.kind === 'arena' || p.area.map.cave) return { error: 'The way there does not open from here.' };
+    } else if (p.area.map.id !== land || Math.hypot(p.x - L.hiddenCave.mouth.x, p.z - L.hiddenCave.mouth.z) > MOUTH_REACH) return { error: 'Stand at the mouth of the cave.' };
+    const area = this.caveFor(p, land);
+    if (area?.cave.entered.has(p.key)) return { area }; // (back in)
+    if (lastDay === today) return { error: `You have been in a cave today. The caves open to you again in ${untilTomorrow()}.` };
+    if (area && !area.cave.done) return { area };
+    if (join) return { error: 'That cave has closed.' };
+    if (!hasKey) return { error: `You need the key to ${c.name}.` };
+    return { open: true };
+  }
+
+  // Hero pid into cave copy `area` (caveEntry said it may go in): it stands inside the mouth.
+  enterCave(pid, area) {
+    const p = this.players.get(pid);
+    if (!p?.area || !area) return { error: 'The cave has closed.' };
+    if (!p.alive) return { error: 'You have fallen.' };
+    area.cave.entered.add(p.key);
+    this.place(p, area);
+    const at = area.map.arrive;
+    Object.assign(p, { x: at.x, z: at.z, yaw: at.yaw ?? 0 });
+    return { map: area.map.id, x: at.x, z: at.z, yaw: at.yaw ?? 0, ep: p.ep, copy: 'cave' };
   }
 
   // Whose turn for a party's loot (round robin).
@@ -708,7 +797,17 @@ export class WorldSim {
     const want = MAPS[info.map], x = Number(info.p?.[0]), z = Number(info.p?.[1]);
     const fits = want && p.level >= want.minLevel && Number.isFinite(x) && Number.isFinite(z) && want.contains(x, z);
     const map = fits ? want : MAPS[START];
-    this.place(p, this.areaFor(map, p));
+    let area = null;
+    if (fits && want.cave) { // back into its cave if it's still open and the hero was in it; else outside its mouth
+      area = this.caveFor(p, want.land);
+      if (!area?.cave.entered.has(p.key)) {
+        const out = MAPS[want.land].hiddenCave.outside;
+        this.place(p, this.areaFor(MAPS[want.land], p));
+        Object.assign(p, { x: out.x, z: out.z, yaw: out.yaw });
+        return { map: want.land, ep: p.ep, at: { ...out } };
+      }
+    }
+    this.place(p, area || this.areaFor(map, p));
     if (fits) {
       this.input(pid, { p: info.p });
       return { map: map.id, ep: p.ep };
@@ -739,6 +838,7 @@ export class WorldSim {
     p.knownP.clear();
     p.lastHit = null;
     p.wbAt = undefined; // (tell it about the world boss here, if any)
+    p.caveKey = undefined; // (and how the cave stands)
   }
 
   // Hero pid goes to map `to`: through a portal it stands at (a waystone, a dungeon's door or stairs), or,
@@ -758,6 +858,7 @@ export class WorldSim {
       if (!p.alive) return { error: 'You have fallen.' };
       const portal = portalTo(from, to, p.x, p.z);
       if (!portal) return { error: 'The way there is not here.' };
+      if (portal.needs === 'cleared' && !p.area.cave?.done) return { error: 'The way out opens when the keeper falls.' };
       if (p.level < map.minLevel) return { error: `${map.name} is for heroes of level ${map.minLevel} and up.` };
       at = arrival(portal, to);
     }
@@ -775,6 +876,7 @@ export class WorldSim {
     if (p.level < map.minLevel) return { error: `${map.name} is for heroes of level ${map.minLevel} and up.` };
     const area = map.instanced ? (p.party && p.party === o.party ? o.area : null) : o.area;
     if (!area) return { error: 'The door has closed.' };
+    if (area.cave && !area.cave.entered.has(p.key)) return { error: 'The door does not open into a cave you have not been in.' };
     const a = rand(0, TAU), x = o.x + Math.cos(a) * 1.6, z = o.z + Math.sin(a) * 1.6;
     const at = isWalkable(x, z, 0.5) ? { x, z } : { x: o.x, z: o.z };
     this.place(p, area);
@@ -901,7 +1003,10 @@ export class WorldSim {
     for (const p of this.players.values()) p.budget = Math.min(60, p.budget + dt * 40);
     for (const [key, a] of this.areas) {
       a.update(dt);
-      if (a.map.instanced && !a.players.size && a.emptyT > INSTANCE_TTL) this.areas.delete(key);
+      if (a.map.instanced && !a.players.size && a.emptyT > INSTANCE_TTL) {
+        this.areas.delete(key);
+        for (const [k, v] of this.caves) if (v === a) this.caves.delete(k);
+      }
     }
     const ts = this.now();
     for (const p of this.players.values()) deliver(p.pid, this.snapshot(p, ts));
@@ -925,7 +1030,9 @@ export class WorldSim {
       const x = r2(mon.x), z = r2(mon.z), yaw = r2(mon.yaw), hp = Math.max(0, Math.round(mon.hp)), st = CODE[mon.state], sp = r1(mon.speed);
       const k = me.knownM.get(mon.id);
       if (!k) {
-        m.push({ i: mon.id, t: mon.type, l: mon.level, x, z, y: yaw, h: hp, mh: mon.maxHp, s: st, st: r2(mon.stateT), sp, e: mon.enraged ? 1 : 0 });
+        const rec = { i: mon.id, t: mon.type, l: mon.level, x, z, y: yaw, h: hp, mh: mon.maxHp, s: st, st: r2(mon.stateT), sp, e: mon.enraged ? 1 : 0 };
+        if (mon.dmgMul !== 1) rec.k = r2(mon.dmgMul); // (a cave's elite: hits harder)
+        m.push(rec);
         me.knownM.set(mon.id, { x, z, yaw, hp, st, sp });
       } else if (k.x !== x || k.z !== z || k.yaw !== yaw || k.hp !== hp || k.st !== st || k.sp !== sp) {
         m.push([mon.id, x, z, yaw, sp, hp, st]);
@@ -962,6 +1069,11 @@ export class WorldSim {
       const b = area.wb.monster, v = b && b.state !== 'dead' ? [b.type, r1(b.x), r1(b.z), r2(b.hp / b.maxHp)] : 0;
       if (v ? !me.wbAt || ts - me.wbAt >= 1000 : me.wbAt !== 0) { out.wb = v; me.wbAt = v ? ts : 0; }
     } else if (me.wbAt) { out.wb = 0; me.wbAt = 0; }
+    // in a cave: its chambers, when that changes (and on arriving)
+    if (area.cave) {
+      const v = area.caveView(), key = v.join();
+      if (me.caveKey !== key) { out.cv = v; me.caveKey = key; }
+    }
     if (m.length) out.m = m;
     if (mg.length) out.mg = mg;
     if (pl.length) out.p = pl;
