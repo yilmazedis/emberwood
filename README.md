@@ -80,6 +80,10 @@ so movement stays smooth between updates. The messages have a version (`PROTOCOL
 that doesn't match the server asks to reload (or, if the server is the older one, to try again in a minute). Its data lives outside the website, in `$EMBERWOOD_DATA` or `~/emberwood-data`: one JSON file per account
 (`accounts/<name>.json`), `names.json` (who has which hero name) and `secret.key` (signs the tokens; keep it private).
 To back up, copy that folder.
+**Forgotten passwords:** passwords are kept only as scrypt hashes, so nobody can read one back. On the server's
+terminal, `node server/accounts.mjs` lists the accounts (their heroes, last sign-in) and `node server/accounts.mjs
+password <name>` sets a new password (typed twice, not shown); then press Restart for the app. Close any game still
+signed in to that account first, or the server may save the old password back.
 
 ## Deploy
 
