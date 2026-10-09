@@ -6,6 +6,9 @@
 //                                               a new hero there (warrior, scientist, rogue or healer) at that
 //                                               level (1–80), in its class's best gear for it, upgraded, with
 //                                               potions, scrolls and gold; its points all free to spend
+//   node server/accounts.mjs level <account> <Hero> <level>
+//                                               an existing hero's level (1–80), nothing else (its new points
+//                                               are free to spend; fewer levels than points spent: all back)
 // After any change, press Restart for the Node.js app, so the server reads the files afresh.
 // It reads and writes the same data folder as the game server ($EMBERWOOD_DATA, or ~/emberwood-data). After a
 // new password, press Restart for the Node.js app, so the server reads the account afresh. (A game still
@@ -127,14 +130,40 @@ function hero(account, name, cls, lvl) {
   console.log(`Done: ${name}, a level ${level} ${CLASSES[cls].name}, is in ${acc.user}'s heroes, wearing ${worn}. Now press Restart for the Node.js app.`);
 }
 
+// An existing hero to another level: only its level (and its XP toward the next, back to 0). Its save's revision
+// goes up, so a game still open with it can't save the old level back.
+function setLevel(account, name, lvl) {
+  const acc = readJSON(fileOf(String(account || '').toLowerCase()));
+  if (!acc) { console.log(`No account called "${account}". Run without arguments to see them all.`); process.exitCode = 1; return; }
+  const ch = acc.characters.find((c) => c.name.toLowerCase() === String(name || '').trim().toLowerCase());
+  if (!ch) { console.log(`${acc.user} has no hero called "${name}" (${acc.characters.map((c) => c.name).join(', ') || 'no heroes'}).`); process.exitCode = 1; return; }
+  const level = Math.round(Number(lvl));
+  if (!(level >= 1 && level <= 80)) { console.log('The level is a number from 1 to 80.'); process.exitCode = 1; return; }
+  const was = ch.save?.level ?? ch.level ?? 1;
+  if (!ch.save) { // (never played: its class's first things, as a new hero gets)
+    const eq = emptyEquipment(), bag = new Array(30).fill(null);
+    for (const key of CLASSES[ch.cls].start) { const d = ITEMS[key]; eq[d.slot === 'weapon' && eq.weapon ? 'offhand' : d.slot] = makeItem(key); }
+    [makeItem('hp_potion_1', { n: 5 }), makeItem('mp_potion_1', { n: 3 }), makeItem('camp_scroll', { n: 1 })].forEach((it, i) => { bag[i] = it; });
+    ch.save = { v: 2, level, xp: 0, gold: 30, bag, equipment: eq, quests: { done: [], active: [] }, sk: { pts: {}, bar: [] }, cave: { day: 0 }, buffs: {} };
+  }
+  ch.save.level = level;
+  ch.save.xp = 0;
+  ch.level = level;
+  ch.rev = (ch.rev || 0) + 1;
+  writeJSON(fileOf(acc.lower), acc);
+  console.log(`Done: ${ch.name} (${CLASSES[ch.cls]?.name || ch.cls}) is level ${level} now (was ${was}). Now press Restart for the Node.js app, then play.`);
+}
+
 const [cmd, arg, ...more] = process.argv.slice(2);
 if (!cmd) list();
 else if (cmd === 'password' && arg) await setPassword(arg);
 else if (cmd === 'create' && arg) await create(arg);
 else if (cmd === 'hero' && arg && more.length >= 2) hero(arg, more[0], more[1], more[2]);
+else if (cmd === 'level' && arg && more.length >= 2) setLevel(arg, more[0], more[1]);
 else {
   console.log(`Usage: node server/accounts.mjs                                  list the accounts
        node server/accounts.mjs password <name>                  a new password
        node server/accounts.mjs create <name>                    a new account
-       node server/accounts.mjs hero <account> <Name> <class> [level]   a new hero (warrior, scientist, rogue, healer)`);
+       node server/accounts.mjs hero <account> <Name> <class> [level]   a new hero (warrior, scientist, rogue, healer)
+       node server/accounts.mjs level <account> <Hero> <level>          an existing hero's level`);
 }

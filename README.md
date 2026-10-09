@@ -84,7 +84,7 @@ To back up, copy that folder.
 for the app): `node server/accounts.mjs` lists the accounts (their heroes, last sign-in); `password <name>` sets a
 new password (passwords are kept only as scrypt hashes: nobody can read one back); `create <name>` makes an
 account; `hero <account> <Name> <class> [level]` adds a hero at that level in its class's gear, with potions and
-gold, every point free (for testing). Close any game still signed in to that account first, or the server may save
+gold, every point free (for testing). `level <account> <Hero> <level>` changes an existing hero's level, nothing else. Close any game still signed in to that account first, or the server may save
 the old data back.
 
 ## Deploy
