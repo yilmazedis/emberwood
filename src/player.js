@@ -322,13 +322,14 @@ export class Player {
         else s[k] = (s[k] || 0) + v * n;
       }
     }
-    // timed boosts (skills, tonics, elixirs)
+    // timed boosts (skills, tonics, elixirs); boosted: which stats they raise now (the character window shows it)
+    const boosted = {};
     for (const [id, b] of Object.entries(this.buffs || {})) {
       const def = BUFFS[id];
       if (!def) continue;
-      for (const k of ['armorPct', 'hpPct', 'dmgPct', 'atkSpd', 'moveSpd', 'crit']) if (def[k]) s[k] += def[k](b.v);
-      if (def.evade) s.evade = Math.max(s.evade, def.evade(b.v));
-      if (def.taken) s.taken *= def.taken(b.v);
+      for (const k of ['armorPct', 'hpPct', 'dmgPct', 'atkSpd', 'moveSpd', 'crit']) if (def[k]) { s[k] += def[k](b.v); boosted[k] = true; }
+      if (def.evade) { s.evade = Math.max(s.evade, def.evade(b.v)); boosted.evade = true; }
+      if (def.taken) { s.taken *= def.taken(b.v); boosted.taken = true; }
     }
     // the attributes (the class's primary one powers its weapon blows)
     s.attrs = A;
@@ -356,7 +357,9 @@ export class Player {
     // does, slower past 50 (the best normal gear's level), so the same armor counts nearly as much up there
     s.dr = Math.min(0.85, s.armor / (s.armor + 60 + 8 * (clamp(L, 10, 50) - 10) + 3 * Math.max(0, L - 50)));
     s.style = this.styleName();
+    s.boosted = boosted;
     this.stats = s;
+    this.game?.ui?.statsChanged?.();
     if (this.hp !== undefined) {
       this.hp = Math.min(this.hp, s.maxHp);
       this.mp = Math.min(this.mp, s.maxMp);

@@ -29,6 +29,22 @@ const ATTACK_SVG = {
   arrow: `<svg viewBox="0 0 32 32"><path d="M7 3c9 5 9 21 0 26" fill="none" stroke="#c8a070" stroke-width="2.4"/><path d="M7 3v26" stroke="#e8e0d0" stroke-width="1"/><path d="M9 16h19" stroke="#e8e0d0" stroke-width="2"/><path d="M29 16l-5-3v6z" fill="#fff"/></svg>`,
   auto: `<svg viewBox="0 0 32 32"><circle cx="16" cy="16" r="11" fill="none" stroke="#9be06a" stroke-width="2.4" stroke-dasharray="5 3"/><path d="M13 10l9 6-9 6z" fill="#d8ffc0"/></svg>`,
 };
+// A timed boost's name and what it does now (the buff bar's tooltip): "War Cry · +30% armor".
+function buffText(id, v) {
+  const d = BUFFS[id];
+  if (!d) return id;
+  const pct = (x) => `${Math.round(x * 100)}%`, says = [];
+  if (d.armorPct) says.push(`+${pct(d.armorPct(v))} armor`);
+  if (d.hpPct) says.push(`+${pct(d.hpPct(v))} Life`);
+  if (d.dmgPct) says.push(`+${pct(d.dmgPct(v))} damage`);
+  if (d.atkSpd) says.push(`+${pct(d.atkSpd(v))} attack speed`);
+  if (d.moveSpd) says.push(`+${pct(d.moveSpd(v))} move speed`);
+  if (d.crit) says.push(`+${pct(d.crit(v))} critical`);
+  if (d.evade) says.push(`${pct(d.evade(v))} dodge`);
+  if (d.taken) says.push(`${pct(1 - d.taken(v))} less damage taken`);
+  return says.length ? `${d.name} · ${says.join(', ')}` : d.name;
+}
+
 const BUFF_COLOR = { war_cry: '#ffd060', shield_wall: '#8fc0ff', last_stand: '#ff5a4a', battle_rage: '#ff4a2a', poison_blade: '#7dff4a', smoke: '#9a96a8', vanish: '#9a6dff', swiftness: '#bfe8ff', shadow_mantle: '#a08aff', blessing: '#ff8a7a', holy_armor: '#a8d0ff', divine_shield: '#bfe8ff', sanctuary: '#9affc8', renew: '#7dff9a', elixir_might: '#ff6a2a', elixir_iron: '#a8b4c4', elixir_vigor: '#4ad46a' };
 
 export class UI {
@@ -663,7 +679,7 @@ export class UI {
   // Little badges under the hero's frame for what's on it now.
   refreshBuffs() {
     const p = this.game.player, list = Object.entries(p.buffs || {});
-    this.el.buffs.innerHTML = list.map(([id, b]) => `<i class="buff" style="--c:${BUFF_COLOR[id] || '#ccc'}" title="${esc(BUFFS[id]?.name || id)}" data-id="${id}"><b>${(BUFFS[id]?.name || id).split(' ').map((w) => w[0]).join('').slice(0, 2)}</b><span></span></i>`).join('');
+    this.el.buffs.innerHTML = list.map(([id, b]) => `<i class="buff" style="--c:${BUFF_COLOR[id] || '#ccc'}" title="${esc(buffText(id, b.v))}" data-id="${id}"><b>${(BUFFS[id]?.name || id).split(' ').map((w) => w[0]).join('').slice(0, 2)}</b><span></span></i>`).join('');
     this.buffEls = [...this.el.buffs.querySelectorAll('.buff')];
   }
 
@@ -1243,17 +1259,28 @@ export class UI {
       d.className = `eq-slot${d.classList.contains('acc') ? ' acc' : ''}${it ? def.unique ? ' r-unique' : ` r-${def.tier}` : ''}`;
       d.innerHTML = it ? this.slotHtml(it) : `<span>${SLOT_LABEL[d.dataset.slot]}</span>`;
     }
-    $('char-style').textContent = `${CLASSES[p.cls].name} · ${p.stats.style}`;
-    const s = p.stats;
+    this.refreshStats();
+  }
+
+  // The character window's numbers, with what timed boosts (War Cry, tonics, elixirs…) add now in green. Kept
+  // up to date while the window is open (statsChanged).
+  refreshStats() {
+    const p = this.game.player, s = p.stats, up = s.boosted || {};
+    $('char-style').textContent = `${CLASSES[p.cls].name} · ${s.style}`;
     const rows = [
-      ['Weapon damage', `${s.dmgLo}–${s.dmgHi}`], ['Spell damage', `${s.spellLo}–${s.spellHi}`],
-      ['Life', Math.round(s.maxHp)], ['Mana', Math.round(s.maxMp)],
-      ['Armor', `${s.armor} (${Math.round(s.dr * 100)}%)`], ['Attack speed', s.atkSpeed.toFixed(2)],
-      ['Critical', `${Math.round(s.crit * 100)}%`], ['Dodge', `${Math.round(s.evade * 100)}%`],
+      ['Weapon damage', `${s.dmgLo}–${s.dmgHi}`, up.dmgPct], ['Spell damage', `${s.spellLo}–${s.spellHi}`, up.dmgPct],
+      ['Life', Math.round(s.maxHp), up.hpPct], ['Mana', Math.round(s.maxMp)],
+      ['Armor', `${s.armor} (${Math.round(s.dr * 100)}%)`, up.armorPct], ['Attack speed', s.atkSpeed.toFixed(2), up.atkSpd],
+      ['Critical', `${Math.round(s.crit * 100)}%`, up.crit], ['Dodge', `${Math.round(s.evade * 100)}%`, up.evade],
+      ['Blows taken', `${Math.round((1 - s.dr) * s.taken * 100)}%`, up.armorPct || up.taken],
       ['Life regen', `${s.regen.toFixed(1)}/s`], ['Healing', `${Math.round(s.heal * 100)}%`],
-      ['Move speed', `${Math.round((s.moveSpeed / 5.6) * 100)}%`], ['Level', p.level],
+      ['Move speed', `${Math.round((s.moveSpeed / 5.6) * 100)}%`, up.moveSpd], ['Level', p.level],
     ];
-    this.el.stats.innerHTML = rows.map(([k, v]) => `<div><span>${k}</span><b>${v}</b></div>`).join('');
+    this.el.stats.innerHTML = rows.map(([k, v, boosted]) => `<div${boosted ? ' class="boosted"' : ''}><span>${k}</span><b>${v}</b></div>`).join('');
+  }
+
+  statsChanged() {
+    if (this.el.stats?.offsetParent) this.refreshStats(); // (only while it shows)
   }
 
   // compare: show ▲/▼ against the equipped item it would replace; hint: grey line at the bottom.

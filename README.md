@@ -162,7 +162,10 @@ everyone:
 **Armor** (clothes, shields, Agility; the character window shows it with its share): a monster's blow loses armor /
 (armor + 60 + 8 a level from 10 to 50 + 3 a level past 50), at most 85%. A Warrior in its class's gear at +5 has
 about 60% at level 40 and 55% at 70; a Scientist about 30% and 27%; going from +1 to +10 takes a sixth off every
-blow.
+blow. The character window (kept up to date while open) shows **Blows taken**, the share of a monster's blow that
+still lands (armor and Shield Wall, the Aid Station and the like together), and what a timed boost raises now in
+green; hovering a boost on the buff bar says what it does ("War Cry · +41% armor"). The Warriors' boosts (War Cry,
+Shield Wall, Last Stand, Battle Rage) are their own, not their party's.
 
 A hero starts with its class's (Warrior 24 / 14 / 10, Scientist 12 / 12 / 26, Rogue 14 / 24 / 10, Doctor
 18 / 10 / 22, in that order) and gets **5 points a level** to spend anywhere, in the character window (+1, +5, or
