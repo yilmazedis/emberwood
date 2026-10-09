@@ -267,10 +267,12 @@ export class Npcs {
   stock(e) {
     const p = this.game.player, role = e.n.role, cap = this.capOf(e);
     let defs;
-    if (role === 'weapons') defs = Object.values(ITEMS).filter((d) => (d.kind === 'weapon' || d.kind === 'offhand') && !d.unique && d.classes?.includes(p.cls) && d.level <= cap);
-    else if (role === 'armor') defs = Object.values(ITEMS).filter((d) => d.kind === 'armor' && d.classes?.includes(p.cls) && d.level <= cap);
+    // (high class items aren't sold: they only drop, rarely: items.js rollDrop)
+    const sold = (d) => d.tier !== 'high' && d.tier !== 'rare';
+    if (role === 'weapons') defs = Object.values(ITEMS).filter((d) => (d.kind === 'weapon' || d.kind === 'offhand') && !d.unique && sold(d) && d.classes?.includes(p.cls) && d.level <= cap);
+    else if (role === 'armor') defs = Object.values(ITEMS).filter((d) => d.kind === 'armor' && sold(d) && d.classes?.includes(p.cls) && d.level <= cap);
     else if (role === 'goods') defs = Object.values(ITEMS).filter((d) => d.kind === 'potion' || d.kind === 'elixir' || d.kind === 'scroll');
-    else if (role === 'anvil') defs = Object.values(ITEMS).filter((d) => d.kind === 'recipe');
+    else if (role === 'anvil') defs = Object.values(ITEMS).filter((d) => d.kind === 'recipe' && !d.dropOnly);
     else defs = [];
     const order = { weapon: 0, offhand: 1, head: 2, body: 3, hands: 4, feet: 5 };
     defs.sort((a, b) => a.level - b.level || (order[a.kind] ?? order[a.slot] ?? 0) - (order[b.kind] ?? order[b.slot] ?? 0) || a.price - b.price || a.name.localeCompare(b.name));

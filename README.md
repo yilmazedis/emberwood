@@ -80,10 +80,12 @@ so movement stays smooth between updates. The messages have a version (`PROTOCOL
 that doesn't match the server asks to reload (or, if the server is the older one, to try again in a minute). Its data lives outside the website, in `$EMBERWOOD_DATA` or `~/emberwood-data`: one JSON file per account
 (`accounts/<name>.json`), `names.json` (who has which hero name) and `secret.key` (signs the tokens; keep it private).
 To back up, copy that folder.
-**Forgotten passwords:** passwords are kept only as scrypt hashes, so nobody can read one back. On the server's
-terminal, `node server/accounts.mjs` lists the accounts (their heroes, last sign-in) and `node server/accounts.mjs
-password <name>` sets a new password (typed twice, not shown); then press Restart for the app. Close any game still
-signed in to that account first, or the server may save the old password back.
+**Accounts from the terminal** (`server/accounts.mjs`, run in the game's folder on the server; then press Restart
+for the app): `node server/accounts.mjs` lists the accounts (their heroes, last sign-in); `password <name>` sets a
+new password (passwords are kept only as scrypt hashes: nobody can read one back); `create <name>` makes an
+account; `hero <account> <Name> <class> [level]` adds a hero at that level in its class's gear, with potions and
+gold, every point free (for testing). Close any game still signed in to that account first, or the server may save
+the old data back.
 
 ## Deploy
 
@@ -128,37 +130,38 @@ skill trees.
 | **Healer** | Mace and shield · a warrior's two-handed sword, spear or maul (not Raptor and the other warrior-only weapons) | Heals, blessings that last 10 minutes, resurrection; fights alone with holy fire but kills slower than the rest |
 
 Basic attacks: melee weapons swing, bows shoot arrows, staves and short staves fire bolts. Intelligence raises the
-damage of spells (a Scientist's and a Healer's, staff bolts too), Strength (and with daggers and bows, Dexterity)
-weapon damage. An archer (hero or monster) raises the bow
+damage of spells (a Scientist's and a Healer's, staff bolts too), the class's primary attribute its weapon
+blows (below). An archer (hero or monster) raises the bow
 upright with the string toward them, draws to the cheek and looses with a twang; the arrow flies head first and
 sticks a moment in whatever it hits.
 
 ## Attributes
 
-Four attributes (`src/attributes.js`), the same for every class: a class only decides what it needs most.
+Three attributes, as in Dota 2 (`src/attributes.js`). Every class has a **primary** one that powers its weapon
+blows (Warrior: Strength; Rogue: Agility; Scientist and Healer: Intelligence); besides, each does the same for
+everyone:
 
-| Attribute | What each point gives |
-|---|---|
-| **Strength** | +0.75% weapon damage (melee, bows, weapon skills), +0.15 armor |
-| **Dexterity** | +0.08% attack speed, +0.05% critical chance, +0.02% dodge (15% at most); daggers and bows count the average of Strength and Dexterity for their damage |
-| **Intelligence** | +1% spell damage (staff bolts too), +0.1% healing, +2 Mana |
-| **Vitality** | +5 Life, +0.06 Life a second (Life and Mana per point times the class's own multiplier) |
+| Attribute | What each point gives | Primary for |
+|---|---|---|
+| **Strength** | +2 Life (times the class's Life multiplier), +0.03 Life a second | Warrior: +0.6% weapon damage |
+| **Agility** | +0.08% attack speed, +0.1 armor | Rogue: +0.6% weapon damage |
+| **Intelligence** | +1% spell damage (staff bolts too), +0.1% healing, +2 Mana | Scientist and Healer: +0.6% weapon damage |
 
-A hero starts with its class's (Warrior 18 / 10 / 6 / 16, Scientist 6 / 10 / 22 / 12, Rogue 12 / 20 / 6 / 12, Healer
-12 / 8 / 16 / 14) and gets **5 points a level** to spend anywhere, in the character window (+1, +5, or **Suggested**:
-the class's usual split, Warrior 3 STR 1 DEX 1 VIT, Scientist 3 INT 1 DEX 1 VIT, Rogue 3 DEX 1 STR 1 VIT, Healer
-2 INT 1 STR 2 VIT). **Take back all** returns every point for the same fee as skill points. Every level also adds a
-little of its own (1.4% damage, and some Life, Mana and armor), so points are a choice, not a toll.
+A hero starts with its class's (Warrior 24 / 14 / 10, Scientist 12 / 12 / 26, Rogue 14 / 24 / 10, Healer
+18 / 10 / 22, in that order) and gets **5 points a level** to spend anywhere, in the character window (+1, +5, or
+**Suggested**: Warrior 3 STR 2 AGI, Scientist 4 INT 1 STR, Rogue 4 AGI 1 STR, Healer 3 INT 2 STR). **Take back
+all** returns every point for the same fee as skill points. Every level also adds a little of its own (1.4%
+damage, Life, Mana and armor), so points are a choice, not a toll.
 
 **Items give attributes**, not bonuses: a weapon has its damage and speed, clothes and shields their armor, and
 everything else an item gives is attributes, by its level, its slot (a two-handed weapon or a book most, gloves
-least) and its kind (swords Strength and Vitality, daggers and bows Dexterity and Strength, staves Intelligence,
-the Rogue's leathers Dexterity, the Scientist's coats Intelligence and Vitality…). Upgrades raise them like the rest.
+least) and its kind (swords Strength, daggers and bows Agility and Strength, staves Intelligence…). Upgrades raise
+them like the rest.
 
-**Balance:** with the suggested split, each class kills and lasts about as it did before attributes (within a tenth).
-Going all in on damage (all Strength, all Intelligence, all Dexterity for a rogue) kills 7–24% faster with a fifth
-less Life; all Vitality doubles Life for a third less damage. A Scientist can take Vitality to stand longer, or
-Dexterity to cast its bolts faster; a Healer chooses between healing (Intelligence) and the mace (Strength).
+**Balance:** with the suggested split each class kills a monster of its level about as fast as before attributes
+(within a tenth or so) and lasts about as long (scientists a little longer, still the most fragile). All in on
+the primary attribute hits up to a third harder for less Life; a Scientist who takes Strength trades damage for a
+third more Life; a Warrior who takes Agility swings faster but hits softer.
 
 ## Skills
 
@@ -202,16 +205,22 @@ much slower when built for healing). In the Arena the skills hit heroes at 45%.
 - **Monsters that keep their distance** (casters, archers) step back when a hero comes close, but only a moment at
   a time, then stand and fight a few seconds; and a melee blow carries the hero a stride toward a foe backing
   away, so it lands.
-- **Auto-hunt:** T (or AUTO) fights the monsters around where you switched it on, picks up gold and items between
-  fights and drinks a potion when hurt. Moving stops it. With a full bag (a red "!" on the bag button) it leaves
-  items where they lie and keeps hunting.
+- **Auto-hunt:** T (or AUTO) fights the monsters around where you switched it on the way a player would: it chains
+  combos (each press as a blow's window opens) and uses the skills on the action bar, each when it makes sense
+  (in this order: walls and smokes when hurt, heals for itself or a hurt party member, long blessings that ran out,
+  buffs in a fight, skills around it when foes crowd it, area skills on groups or a boss, Execute on a weak foe,
+  Charge and Shadow Step to close in, then strikes), in a blow's combo window when it can (stronger). It keeps a
+  tenth of its mana for heals and walls, never blinks, opens doors or vanishes, and never starts a fight with a
+  hero. It picks up gold and items between fights and drinks a potion when hurt. Moving stops it. With a full bag
+  (a red "!" on the bag button) it leaves items where they lie and keeps hunting.
 
 ## Items
 
 Every item has a fixed name and fixed stats: a Giant Sword is always the same Giant Sword (`src/items.js`): its
 damage and speed (weapons) or armor (clothes, shields), and attributes (above). Items come in three classes, **low**
 (levels 1–19), **middle** (20–39) and **high** (40–80; the best are level 50, and monsters past that drop them),
-and every hero class has its own weapons and clothes in each. Clothes are four-piece sets per class and item class (the Warrior's are
+and every hero class has its own weapons and clothes in each. Above them, **rare** items (level 70) only drop in the
+Death Canyon (below). Clothes are four-piece sets per class and item class (the Warrior's are
 Plate, Chitin and Shell; the Scientist's Linen, Alchemist and Aether; the Rogue's Leather, Stalker and Nightshade;
 the Healer's Chain, Blessed and Seraph).
 
@@ -225,7 +234,8 @@ the Healer's Chain, Blessed and Seraph).
 \* Warriors and Healers both can use these. Shields (Round, Kite, Tower) are for both too.
 
 - **Drops are rare:** a monster drops an item now and then (a slime about one time in forty, a knight one in
-  fifteen), and the best ones for its level least often. A boss drops one item, sometimes a recipe too; a chest
+  fifteen), and the best ones for its level least often. **High class** items are rarer still (most of the times
+  one would drop, nothing does: about two kills in a hundred from level 45), and **no merchant sells them**. A boss drops one item, sometimes a recipe too; a chest
   in a dungeon, one now and then. Gold drops often.
 - **Accessories:** rings, earrings, necklaces and belts (copper, silver, gold), for every class. Nobody sells them:
   they only drop from monsters.
@@ -304,8 +314,9 @@ minimap too).
   may use that cave is called and can step in from wherever they are (or walk in by the glowing mouth while it's
   open). Alone is allowed, and hard.
 - **One a day:** a hero who has been in a cave today (Turkey's day: midnight there) stays out of every other, even if
-  its party opens one; going back into the copy it was in (after falling, or stepping out) is fine. The server keeps
-  the day.
+  its party opens one, and once out (stepped out, or fallen and risen in camp) it doesn't go back in, not even into
+  the copy it left. The server keeps the day. Each copy is its party's (or its lone hero's) alone: no other party or
+  hero ever comes in. The cave's rules show before going in (at the mouth, with a party's call, and from the key).
 - **Ten chambers:** the monsters of each chamber rise as the one before falls silent (its gate of fallen rock
   crumbles); every one of them must fall before the next gate opens. They are elites (30% more Life, 15% harder
   blows, 30% more XP), of the heroes' own level (within the cave's), a level more every three chambers, and the
@@ -315,6 +326,27 @@ minimap too).
 - **The reward:** when the keeper falls, everyone in the cave gets **40% of the XP of their next level** (on top of
   the kills), the keeper's treasure opens (gold, potions, often an item and a recipe), and daylight opens a way out
   in its hall.
+
+**The Death Canyon** (`src/maps/canyon.js`, drawn by `src/canyon-view.js`), through a gate of red rock west of
+Shadowmere's camp, from **level 70**: a red gorge of cliffs, lava cracks and old bones, its monsters of levels
+70–78 (Rock Slimes, Dust Stalkers, Canyon Ravagers, Bone Shamans, Canyon Archers, Scorched Knights, and in the Maw
+**Grakhul, the Canyon Tyrant**). Go in alone or with a party, whenever you like; make a party there too.
+
+- **Heroes fight heroes:** out of its camp, Last Rest (safe: a provisioner, a banker, a waystone, the gate back),
+  every hero not in your party is your foe, as in the arena's pit (blows a little under half as hard as on a
+  monster, armor and dodging counted by the server). Falling there costs a tenth of your gold, like anywhere; the
+  canyon's fights aren't on the champions' board, but the canyon hears of each one.
+- **Rare items:** only its monsters carry them: **one kill in a hundred** (the Tyrant one in ten) drops a rare item
+  (level 70, a tenth stronger than a normal item of its level: weapons, shields, books, a set of clothes for each
+  class (Warlord, Sanctified, Phantom, Stormweave) and Obsidian accessories), and apart from that one in a hundred a
+  **Rare Upgrade Recipe**, the only way to upgrade them (the anvil, as ever). Neither is sold anywhere; normal
+  monsters never drop them. Rare items glow in their own colour.
+- **Calamities:** every half a minute or so the canyon strikes the heroes out in it (never the camp), picked by the
+  world so everyone sees the same: an **earthquake** (the ground shakes; fissures burst where red rings show: 18% of
+  Life and a stagger), **meteors** (fire falls where red rings show: 28%), a **lightning storm** (the sky darkens,
+  rain, bolts where blue rings show: 22% and a stagger) or a **sandstorm** (the sand closes in: hard to see, slow to
+  walk, 1% of Life a second until it passes or you reach the camp). The first strike of each falls right by every
+  hero: keep moving.
 
 **World bosses** roam the lands: Gorehorn the Wanderer in Emberwood (low class uniques), Skadi the Frost Giant in
 Frostfang (low), Ignis, the Living Pyre in Cinderfall (middle) and Umbra the Devourer in Shadowmere (high). One rises
@@ -447,9 +479,11 @@ Variants: `?size=192`, `?size=512&maskable` (Android adaptive icon), `?size=180&
   (with fixed seeds, so the game and the server agree); `src/crypt-map.js`: the crypt's map, walls and paths
   (these three, `classes.js`, `util.js` and `noise.js` are plain data and math, shared with the server)
 - `src/items.js`: every item (weapons, clothes, accessories, uniques, potions, recipes, cave keys), tiers, upgrades,
-  loot rolls; `src/attributes.js`: what Strength, Dexterity, Intelligence and Vitality do
+  loot rolls; `src/attributes.js`: what Strength, Agility and Intelligence do
 - `src/caves.js`: the hidden caves' rules (shared with the server); `src/maps/caves.js` their plans;
   `src/cave-view.js` the caves and their mouths, drawn
+- `src/maps/canyon.js`: the Death Canyon (shared with the server: its calamities are picked in `sim/world.js`);
+  `src/canyon-view.js` draws it and its calamities
 - `src/gear.js`: procedural models (maces, spears, mauls, gloves, boots, accessories, potions, recipes)
 - `src/enchant.js`: the glow of a held item upgraded to +8, +9 or +10
 - `src/camps.js`: who stands in each camp (shared with the server); `src/npcs.js`: the camp's people drawn, their

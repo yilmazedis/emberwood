@@ -16,7 +16,7 @@ import { MAPS, START, portalTo, arrival } from '../maps.js';
 import { CAVES, STAGES, STAGE_ROOMS, MOUTH_REACH, stageSlots, caveLandFor, untilTomorrow } from '../caves.js';
 import { rand, clamp, dampAngle, yawTo, TAU } from '../util.js';
 
-export const PROTOCOL = 6; // bump when the messages change: older games are asked to reload
+export const PROTOCOL = 7; // bump when the messages change: older games are asked to reload
 export const TICK = 0.1; // seconds between world updates
 export const STATES = ['spawn', 'idle', 'chase', 'return', 'dead'];
 const CODE = Object.fromEntries(STATES.map((s, i) => [s, i]));
@@ -25,6 +25,8 @@ const SEE_PLAYERS = 80; // … and about other heroes
 const ACTIVE = 90; // monsters further than this from every hero rest
 const INSTANCE_TTL = 300; // seconds an empty dungeon copy is kept (come back for what you left)
 const STAGE_PAUSE = 2.5; // s between a cave chamber cleared (its gate crumbles) and the next one's monsters rising
+// The Death Canyon's calamities: how long each lasts (s), and how many strikes fall around each hero out there
+const CALAMITIES = { quake: [6, 3], meteors: [6, 4], storm: [9, 5], sandstorm: [12, 0] };
 const HERO_RADIUS = 0.5;
 const SHARE_RANGE = 60; // party members this near a kill share it
 const PARTY_BONUS = 0.2; // each extra member in range adds this much to the party's XP
@@ -587,6 +589,34 @@ class Area {
     this.wb = wb ? { ...wb, timer: WORLD_BOSS_FIRST, monster: null } : null;
     // a hidden cave (caves.js): its chambers one by one; cleared: how many have fallen silent
     this.cave = map.cave ? { def: map.cave, stage: 0, cleared: 0, done: false, nextAt: 3, entered: new Set(), t: 0 } : null;
+    this.calamity = map.calamities ? { next: rand(20, 35), last: null } : null;
+  }
+
+  // The Death Canyon's calamities: every half a minute or so one strikes around the heroes out in the canyon
+  // (never in its camp). The world picks the kind and where (the first strike right by each hero: move!), so
+  // every game sees the same; each hero's game takes its own hurt (canyon-view.js).
+  // ['Z', kind, seconds, [x, z, delay, …]]
+  calamityTick(dt, heroes) {
+    const c = this.calamity;
+    if ((c.next -= dt) > 0) return;
+    c.next = rand(30, 50);
+    const out = heroes.filter((p) => p.alive && !p.away && !zoneAt(p.x, p.z)?.safe).slice(0, 10);
+    if (!out.length) { c.next = 10; return; }
+    const kinds = Object.keys(CALAMITIES).filter((k) => k !== c.last);
+    const kind = kinds[Math.floor(Math.random() * kinds.length)], [dur, n] = CALAMITIES[kind];
+    c.last = kind;
+    const spots = [];
+    for (const p of out) {
+      for (let i = 0; i < n; i++) {
+        for (let tries = 0; tries < 8; tries++) {
+          const a = rand(0, TAU), d = i === 0 ? rand(0, 1.5) : rand(2, 8), x = p.x + Math.cos(a) * d, z = p.z + Math.sin(a) * d;
+          if (!isWalkable(x, z, 0.4) || zoneAt(x, z)?.safe) continue;
+          spots.push(r2(x), r2(z), r2(i === 0 ? rand(1.6, 2.4) : rand(1.8, dur - 0.4)));
+          break;
+        }
+      }
+    }
+    this.events.push({ all: true, ev: ['Z', kind, dur, spots] });
   }
 
   // A cave's chambers: the first one's monsters a moment after the first hero arrives; then, as each
@@ -628,6 +658,7 @@ class Area {
     this.emptyT = 0;
     const heroes = [...this.players];
     if (this.cave) this.caveTick(dt);
+    if (this.calamity) this.calamityTick(dt, heroes);
     if (this.wb && !this.wb.monster) {
       this.wb.timer -= dt;
       if (this.wb.timer <= 0) this.spawnWorldBoss(heroes);
@@ -720,7 +751,8 @@ export class WorldSim {
 
   // May hero pid go into land's hidden cave? At its mouth (or, join: anywhere but a cave or the arena, when its
   // party opened one), its land the furthest the hero may enter, not yet in a cave today (lastDay: the day of
-  // its last cave run) unless it is going back into the copy it was in. A new copy needs a key (hasKey).
+  // its last cave run; once in, a hero never goes back in, even into the copy it left). A new copy needs a key
+  // (hasKey). Each copy is its party's (or its hero's) alone: nobody else ever comes in.
   // { area } (the open copy to go into), { open: true } (use the key: openCave), or { error }.
   caveEntry(pid, land, { join = false, today = 0, lastDay = 0, hasKey = false } = {}) {
     const p = this.players.get(pid), c = CAVES[land], L = MAPS[land];
@@ -732,7 +764,7 @@ export class WorldSim {
       if (p.area.map.kind === 'arena' || p.area.map.cave) return { error: 'The way there does not open from here.' };
     } else if (p.area.map.id !== land || Math.hypot(p.x - L.hiddenCave.mouth.x, p.z - L.hiddenCave.mouth.z) > MOUTH_REACH) return { error: 'Stand at the mouth of the cave.' };
     const area = this.caveFor(p, land);
-    if (area?.cave.entered.has(p.key)) return { area }; // (back in)
+    if (area?.cave.entered.has(p.key)) return { error: 'You have been in this cave today: once out, you can\'t go back in.' };
     if (lastDay === today) return { error: `You have been in a cave today. The caves open to you again in ${untilTomorrow()}.` };
     if (area && !area.cave.done) return { area };
     if (join) return { error: 'That cave has closed.' };
@@ -876,7 +908,7 @@ export class WorldSim {
     if (p.level < map.minLevel) return { error: `${map.name} is for heroes of level ${map.minLevel} and up.` };
     const area = map.instanced ? (p.party && p.party === o.party ? o.area : null) : o.area;
     if (!area) return { error: 'The door has closed.' };
-    if (area.cave && !area.cave.entered.has(p.key)) return { error: 'The door does not open into a cave you have not been in.' };
+    if (area.cave) return { error: 'The door does not open into a cave.' };
     const a = rand(0, TAU), x = o.x + Math.cos(a) * 1.6, z = o.z + Math.sin(a) * 1.6;
     const at = isWalkable(x, z, 0.5) ? { x, z } : { x: o.x, z: o.z };
     this.place(p, area);

@@ -16,8 +16,8 @@ import { Projectiles, LootManager } from './combat.js';
 import { UI } from './ui.js';
 import { Doll } from './doll.js';
 import { Sfx } from './audio.js';
-import { ITEMS, rollDrop, rollPotion, rollUnique, makeItem, itemName, itemColor, tierAt } from './items.js';
-import { CAVES, CAVE_LANDS, KEY_RANGE, KEY_CHANCE, caveLandFor, dayNumber, untilTomorrow } from './caves.js';
+import { ITEMS, rollDrop, rollPotion, rollUnique, rollRare, makeItem, itemName, itemColor, tierAt } from './items.js';
+import { CAVES, CAVE_LANDS, KEY_RANGE, KEY_CHANCE, caveLandFor, caveRules, dayNumber, untilTomorrow } from './caves.js';
 import { monsterXp } from './monsters.js';
 import { Input } from './input.js';
 import { Npcs } from './npcs.js';
@@ -36,6 +36,7 @@ import { angleDiff, yawTo, randInt, rand, chance, clamp } from './util.js';
 
 const SAVE_KEY = 'emberwood-save-v1'; // the local save (offline play: ?autostart)
 const CAVE_OPEN_FOR = 45 * 60000; // ms a party's open cave shows its mouth to the members (the server decides)
+const RARE_CHANCE = 0.01; // a Death Canyon monster's chance of a rare item with each kill (and, apart, of a rare recipe)
 const escHtml = (t) => String(t).replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
 // Graphics, from Settings: how many of the screen's pixels to draw (a multiple of its size, never more than it
 // has), smoothed edges (MSAA samples), the sun's shadow map (0: no shadows; phones get half, at least 1024) and
@@ -233,8 +234,9 @@ export class Game {
       delete p.migrated;
       this.save();
     }
-    if (p.newAttrs) { // a hero from before attributes: every point is free to spend
-      setTimeout(() => this.ui.prompt(`<b>Attributes are here!</b><br>Strength, Dexterity, Intelligence and Vitality: you get 5 points a level to spend as you like, and your gear gives more. You have <b>${p.freeAttr}</b> points waiting (your items give attributes now instead of their old bonuses).`, [
+    if (p.newAttrs) { // a hero from before attributes (or from the four of the first days): every point is free
+      const prim = { str: 'Strength', agi: 'Agility', int: 'Intelligence' }[CLASSES[p.cls].primary];
+      setTimeout(() => this.ui.prompt(`<b>Attributes${p.newAttrs === 'changed' ? ' have changed' : ' are here'}!</b><br>Strength (Life), Agility (attack speed, armor) and Intelligence (spells, healing, Mana), as in Dota 2. Your class's primary attribute, <b>${prim}</b>, powers your weapon too. 5 points a level, and your gear gives more. You have <b>${p.freeAttr}</b> points to spend.`, [
         ['Spend them the usual way', () => { p.suggestAttrs(); this.ui.centerMsg(`Spent the ${CLASSES[p.cls].name}'s way: change it any time in your character window`); }, 'go'],
         ['Choose myself', () => this.ui.openInventory('character')], ['Later', () => {}],
       ], 120000), 1800);
@@ -851,6 +853,18 @@ export class Game {
     const recipe = () => makeItem(`recipe_${tierAt(level)}`);
     if (chance(0.75)) this.loot.dropGold(gold(), at);
     if (!d.boss && chance(0.05)) this.loot.dropItem(rollPotion(level), at);
+    if (d.canyon) { // the Death Canyon's monsters: now and then a rare item, or a rare recipe (only they carry them)
+      if (chance(d.rare ?? RARE_CHANCE)) {
+        const r = rollRare(p.cls);
+        this.loot.dropItem(r, at);
+        this.ui.log(`<b style="color:${itemColor(r)}">${itemName(r)}</b>! A rare item drops.`, 'lvl');
+        this.ui.centerMsg(`A rare item: ${itemName(r)}!`);
+      }
+      if (chance(d.rare ?? RARE_CHANCE)) {
+        this.loot.dropItem(makeItem('recipe_rare'), at);
+        this.ui.log(`<b style="color:#e05cff">A Rare Upgrade Recipe</b> drops!`, 'lvl');
+      }
+    }
     if (d.worldBoss) { // the roaming ones: a unique one time in five, and one thing more
       for (let i = 0; i < 4; i++) this.loot.dropGold(gold(), at);
       if (chance(0.2)) {
@@ -893,24 +907,32 @@ export class Game {
 
   // Where a key's cave is, and whether our hero may go in today.
   keyHint(d) {
-    const c = CAVES[d.land], here = this.places.id === d.land;
-    const today = this.player.cave.day === dayNumber() ? ` You have been in a cave today: tomorrow, in ${untilTomorrow()}.` : ' You can go in today.';
-    this.ui.centerMsg(`${c.name}: near ${c.near}${here ? '' : ` in ${MAPS[d.land].name}`}`);
-    this.ui.log(`<b>${c.name}</b> hides near ${c.near} in ${MAPS[d.land].name}: its mouth glows among the bushes while you carry the key (a pulsing ring on your minimap too).${today}`, 'xp');
+    const c = CAVES[d.land], [title, ...rules] = caveRules(c);
+    const today = this.player.cave.day === dayNumber() ? `<b>You have been in a cave today:</b> again in ${untilTomorrow()}.` : 'You can go in today.';
+    this.ui.prompt(`${title}<br>It hides near ${c.near} in ${MAPS[d.land].name}: while you carry the key, its mouth glows among the bushes (a pulsing ring on your minimap too).<ul class="rules">${rules.map((x) => `<li>${x}</li>`).join('')}</ul>${today}`, [['OK', () => {}]], 60000);
   }
 
   hasCaveKey() {
     return CAVE_LANDS.some((l) => this.player.count(CAVES[l].key) > 0);
   }
 
-  // May our hero see (and go into) land's cave? With its key, or while its party's copy is open to it (or
-  // the hero was in it already).
+  // May our hero see (and go into) land's cave? With its key, or while its party's copy is open to it and the
+  // hero hasn't been in a cave today.
   caveFound(land) {
     const p = this.player, c = CAVES[land];
     if (!c || !p.alive || caveLandFor(p.level) !== land) return false;
     if (p.count(c.key) > 0) return true;
     const o = this.caveOpen;
-    return !!o && o.land === land && Date.now() < o.until && (o.mine || p.cave.day !== dayNumber());
+    return !!o && o.land === land && Date.now() < o.until && p.cave.day !== dayNumber();
+  }
+
+  // At the mouth: what the cave is and its rules first, then in (or not).
+  askCave(land) {
+    const c = CAVES[land], p = this.player, list = (l) => `<ul class="rules">${l.map((x) => `<li>${x}</li>`).join('')}</ul>`;
+    const [title, ...rules] = caveRules(c);
+    if (p.cave.day === dayNumber()) { this.ui.prompt(`${title}${list(rules)}<b>You have been in a cave today:</b> they open to you again in ${untilTomorrow()}.`, [['OK', () => {}]]); return; }
+    const how = p.count(c.key) ? `Your <b>${ITEMS[c.key].name}</b> opens it${this.party.id ? ' for your party' : ''} (and crumbles).` : 'Your party has opened it: you can go in with them.';
+    this.ui.prompt(`${title}${list(rules)}${how}`, [['Go in', () => this.enterCave(land), 'go'], ['Not now', () => {}]], 60000);
   }
 
   // Into land's hidden cave: through its mouth (with the key, or into the copy our party opened), or
@@ -940,7 +962,7 @@ export class Game {
     }
     if (r.rev) this.rev = r.rev; // (the server wrote our save without the key: older ones are refused)
     p.cave.day = r.day;
-    this.caveOpen = { land, until: Date.now() + CAVE_OPEN_FOR, mine: true };
+    this.caveOpen = null; // (once in, never again today)
     await this.arrive(r);
     ui.fade(false);
     this.traveling = false;
@@ -955,8 +977,9 @@ export class Game {
     const who = escHtml(m.from);
     if (m.done || p.cave.day === dayNumber()) { this.ui.log(`${who} opened <b>${c.name}</b>. You have been in a cave today: the caves open to you again in ${untilTomorrow()}.`, 'xp'); return; }
     if (caveLandFor(p.level) !== m.land) { this.ui.log(`${who} opened <b>${c.name}</b>, a cave for heroes of level ${c.heroes[0]} – ${c.heroes[1]}.`, 'xp'); return; }
-    this.caveOpen = { land: m.land, until: Date.now() + CAVE_OPEN_FOR, mine: false };
-    this.ui.prompt(`<b>${who}</b> opened <b>${c.name}</b>, the hidden cave in ${MAPS[m.land].name}. Go in with your party?<br><small>It is your cave for today.</small>`, [
+    this.caveOpen = { land: m.land, until: Date.now() + CAVE_OPEN_FOR };
+    const rules = caveRules(c).slice(1).map((x) => `<li>${x}</li>`).join('');
+    this.ui.prompt(`<b>${who}</b> opened <b>${c.name}</b>, the hidden cave in ${MAPS[m.land].name}. Go in with your party?<ul class="rules">${rules}</ul>`, [
       ['Go in', () => this.enterCave(m.land, { join: true }), 'go'],
       ['Later', () => this.ui.log(`${c.name} stays open for your party: its mouth glows near ${c.near}.`, 'xp')],
     ], 60000);
@@ -1002,7 +1025,7 @@ export class Game {
       this.fx.levelUp(this.player.pos);
     } else if (loser === this.link.pid) {
       const o = this.others.byId.get(winner);
-      if (o) this.deathNote = `${o.name} won this one. No gold is lost in the arena.`;
+      if (o) this.deathNote = this.places.map.kind === 'arena' ? `${o.name} won this one. No gold is lost in the arena.` : `${o.name} cut you down. The canyon takes a tenth of your gold.`;
     }
   }
 

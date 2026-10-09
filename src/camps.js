@@ -31,6 +31,11 @@ export const CAMPS = {
   frostfang: at(1000, 66, LAND(['Sigrun', 'Ulf', 'Elka', 'Torvald'], [{ model: 'Barbarian', tint: 0xd0e0f0 }, { model: 'Knight', tint: 0xc8d8e8 }, { model: 'Mage', palette: 'cleric' }, { model: 'Rogue_Hooded', tint: 0xb8c8d8 }])),
   cinderfall: at(2000, 70, LAND(['Kael', 'Brann', 'Mira', 'Dorn'], [{ model: 'Knight', tint: 0xa89890 }, { model: 'Barbarian', tint: 0xc8a090 }, { model: 'Mage', tint: 0xffc0a0 }, { model: 'Rogue_Hooded', tint: 0x9a8a80 }])),
   shadowmere: at(3000, 70, LAND(['Vesna', 'Morrow', 'Lyra', 'Silas'], [{ model: 'Rogue', tint: 0xb8a8d8 }, { model: 'Knight', tint: 0x9890b0 }, { model: 'Mage', palette: 'alchemist' }, { model: 'Rogue_Hooded', tint: 0x8a80a0 }])),
+  // the Death Canyon's camp: only potions and a bank (its rare gear is never sold)
+  canyon: at(4000, 72, [
+    { role: 'goods', x: -7.4, z: 3.6, name: 'Hesk', title: 'Provisioner', model: 'Barbarian', tint: 0xc89070 },
+    { role: 'bank', x: 3.4, z: -8.2, name: 'Old Varro', title: 'Banker', model: 'Rogue_Hooded', tint: 0xa8806a },
+  ]),
 };
 
 // what weapon and armor merchants sell, by land: items up to this level

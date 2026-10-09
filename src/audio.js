@@ -153,6 +153,14 @@ export class Sfx {
         this._tone(now, 0.12, 'sawtooth', 165, 70, 0.08 * v, 0.002);
         this._noise(now, 0.09, 'bandpass', 3000, 1200, 0.18 * v, 3);
         break;
+      case 'rumble': // the ground groans (an earthquake)
+        this._noise(now, 1.4, 'lowpass', 180, 60, 0.9 * v, 0.7);
+        this._tone(now, 1.2, 'sine', 48, 30, 0.5 * v, 0.08);
+        break;
+      case 'thunder': // a crack, then the roll
+        this._noise(now, 0.14, 'highpass', 3200, 1400, 0.55 * v, 0.6);
+        this._noise(now + 0.05, 1.8, 'lowpass', 900, 70, 0.95 * v, 0.5);
+        break;
       case 'arrowhit': // the head bites in
         this._noise(now, 0.07, 'lowpass', 1400, 300, 0.42 * v, 1);
         this._tone(now, 0.05, 'square', 220, 90, 0.08 * v, 0.001);

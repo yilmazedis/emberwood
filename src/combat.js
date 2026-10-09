@@ -247,7 +247,7 @@ export class LootManager {
     const a = rand(0, Math.PI * 2), s = rand(1.2, 2.6);
     const l = { kind, group, obj, data, vel: new THREE.Vector3(Math.cos(a) * s, rand(4.5, 6), Math.sin(a) * s), landed: false, t: 0, bounces: 0 };
     if (kind === 'item') {
-      const d = itemDef(data), beam = d.unique ? 0xff7a1a : d.kind === 'key' ? 0xffd23f : d.stack ? null : { mid: 0x4d8dff, high: 0xffd23f }[d.tier];
+      const d = itemDef(data), beam = d.unique ? 0xff7a1a : d.kind === 'key' ? 0xffd23f : d.key === 'recipe_rare' ? 0xe05cff : d.stack ? null : { mid: 0x4d8dff, high: 0xffd23f, rare: 0xe05cff }[d.tier];
       if (beam) {
         l.beam = new THREE.Mesh(beamGeo, beamMaterial(beam));
         l.beam.visible = false;

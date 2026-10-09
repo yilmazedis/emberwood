@@ -1,14 +1,34 @@
 // What our hero does besides the keys and the joystick: the target it has picked (click or tap a foe or a
 // friend, Z for the nearest foe, Esc lets go), where a click on the ground sends it, walking into range of what
 // it was told to attack or cast at, holding the attack, and hunting on its own (auto, T): it picks the
-// nearest monster around the spot it was switched on, fights it, picks up the loot and drinks when hurt.
+// nearest monster around the spot it was switched on, fights it the way a player would (combos, and the skills
+// on the action bar, each when it makes sense), picks up the loot and drinks when hurt.
 import * as THREE from 'three';
 import { heightAt } from './world.js';
-import { SKILLS } from './skills.js';
+import { SKILLS, manaCost } from './skills.js';
 
 const AUTO_RANGE = 15; // m from where auto was switched on that it hunts
 const AUTO_LEASH = 26; // …and it walks back if it ends up farther than this
 const LOOT_RANGE = AUTO_RANGE + 3; // (what falls where its monster fell)
+
+// How auto-hunt uses each skill on the action bar, in this order: guard (hurt: a wall, a smoke, a shield),
+// heal (us, or a party member, hurt), bless (a long blessing that isn't on), buff (in a fight, not on yet),
+// around (foes around us), area (at the target, with foes around it, or a boss), finisher (a foe low on
+// Life), opener (a foe still some way off), strike (at the target). Not used: blinks, doors, vanishing,
+// raising the dead (those are a player's calls).
+const AUTO_SKILL = {
+  shield_wall: 'guard', last_stand: 'guard', smoke_bomb: 'guard', divine_shield: 'guard', sanctuary: 'guard',
+  heal: 'heal', renew: 'heal', circle_healing: 'heal',
+  blessing: 'bless', holy_armor: 'bless', swiftness: 'bless',
+  war_cry: 'buff', battle_rage: 'buff', poison_blade: 'buff', shadow_mantle: 'buff',
+  cleave: 'around', whirlwind: 'around', frost_nova: 'around', consecration: 'around',
+  leap: 'area', earthshatter: 'area', flame_wave: 'area', inferno: 'area', meteor: 'area', blizzard: 'area', toxic_flask: 'area', plague: 'area', multi_shot: 'area', arrow_rain: 'area', judgement: 'area',
+  execute: 'finisher',
+  charge: 'opener', shadow_step: 'opener',
+  power_strike: 'strike', shield_bash: 'strike', fireball: 'strike', ice_bolt: 'strike', glacial_prison: 'strike', backstab: 'strike', eviscerate: 'strike', power_shot: 'strike', crippling_arrow: 'strike', smite: 'strike', holy_strike: 'strike',
+};
+const AUTO_ORDER = ['guard', 'heal', 'bless', 'buff', 'around', 'area', 'finisher', 'opener', 'strike'];
+const BUFF_OF = { smoke_bomb: 'smoke' }; // (a skill's buff, when it's named otherwise)
 
 export class Control {
   constructor(game, player) {
@@ -263,18 +283,71 @@ export class Control {
       }
     }
     // a held attack (or hunting): keep swinging at the target while it's in reach
-    if ((this.holding || this.auto) && this.isFoe(t) && !this.pending) {
-      if (this.dist(t) <= p.attackRange(t) && !p.action && p.cd.attack <= 0) p.basicAttack(t, false);
+    if ((this.holding || this.auto) && this.isFoe(t) && !this.pending && this.dist(t) <= p.attackRange(t)) {
+      if (this.auto) this.autoSwing(t);
+      else if (!p.action && p.cd.attack <= 0) p.basicAttack(t, false);
     }
     if (this.auto) this.hunt(dt);
   }
 
-  // Auto: a target around the hunting ground, potions when hurt, loot after a kill.
+  // Hunting presses the attack as a player chaining combos would: each press as the last blow's window opens
+  // (perfect), so the chain (and its bonus) shows as it does for a player.
+  autoSwing(t) {
+    const p = this.p, now = this.game.time;
+    if (p.action && !p.action.swing) return; // (a skill is playing)
+    if (p.action && now < p.combo.open) return;
+    if (!this.autoSkills()) p.basicAttack(t, true); // (a skill, if one is ready, takes the moment: it's stronger then)
+  }
+
+  // Hunting casts the skills on the action bar, each when it makes sense (AUTO_SKILL), in a blow's combo window
+  // when it's swinging (stronger, as for a player). A little mana is kept back for heals and walls.
+  autoSkills() {
+    const g = this.game, p = this.p, s = p.stats, now = g.time, foe = this.isFoe(this.target) ? this.target : null;
+    if (p.stunT > 0 || p.channel || (p.action && !(p.action.swing && now >= p.combo.open))) return false;
+    const hp = p.hp / s.maxHp, fighting = !!foe && (this.dist(foe) < 16 || foe.state === 'chase');
+    const near = (at, r) => g.foes.reduce((n, e) => n + (this.isFoe(e) && Math.hypot(e.pos.x - at.x, e.pos.z - at.z) < r + e.radius ? 1 : 0), 0);
+    const big = (e) => !!e && (e.def?.boss || e.elite);
+    const on = (id) => !!p.buffs[BUFF_OF[id] || id];
+    const hurtFriend = (range) => g.others.list.find((o) => o.alive && !o.hostile && g.party.has(o.id) && o.hp < 0.5 && this.dist(o) < range) || null;
+    const ready = p.sk.bar.filter((id) => id && AUTO_SKILL[id] && p.skillOpen(id) && !p.skillBlocked(id) && !((p.cd[id] || 0) > 0))
+      .filter((id) => { const k = AUTO_SKILL[id], cost = manaCost(SKILLS[id], p.level); return p.mp >= cost + (k === 'guard' || k === 'heal' ? 0 : s.maxMp * 0.1); });
+    if (!ready.length) return false;
+    const want = (id) => {
+      const sk = SKILLS[id], range = sk.range || 0, d = foe ? this.dist(foe) : Infinity;
+      switch (AUTO_SKILL[id]) {
+        case 'guard': return fighting && hp < 0.4 && !on(id);
+        case 'heal': return (hp < 0.55 && !(id === 'renew' && on(id))) || (sk.target === 'ally' && !!hurtFriend(range));
+        case 'bless': return hp > 0.5 && !on(id);
+        case 'buff': return fighting && d < Math.max(6, range) && !on(id);
+        case 'around': return fighting && (near(p.pos, 4.5) >= 2 || (big(foe) && d < 4.5));
+        case 'area': return !!foe && d <= range && (near(foe.pos, 5) >= 2 || big(foe));
+        case 'finisher': return !!foe && foe.hp / foe.maxHp < 0.33 && d <= range + foe.radius;
+        case 'opener': return !!foe && d > 4 && d <= range + foe.radius;
+        case 'strike': return !!foe && d <= range + foe.radius;
+        default: return false;
+      }
+    };
+    const pickOrder = (a, b) => AUTO_ORDER.indexOf(AUTO_SKILL[a]) - AUTO_ORDER.indexOf(AUTO_SKILL[b]) || SKILLS[b].cd - SKILLS[a].cd; // (bigger hits first)
+    const id = ready.filter(want).sort(pickOrder)[0];
+    if (!id) return false;
+    const friend = AUTO_SKILL[id] === 'heal' && SKILLS[id].target === 'ally' && !(hp < 0.55) ? hurtFriend(SKILLS[id].range) : null;
+    if (friend) { // (a heal on a party member: aim at them a moment)
+      const back = this.target;
+      this.setTarget(friend);
+      const ok = p.castSkill(id, { queued: true });
+      this.setTarget(back && this.valid(back) ? back : null);
+      return ok;
+    }
+    return p.castSkill(id, { queued: true });
+  }
+
+  // Auto: a target around the hunting ground, skills and potions, loot after a kill.
   hunt(dt) {
     const g = this.game, p = this.p, a = this.auto;
     if (g.currentZone?.safe) { this.stopAuto(); return; }
     if (p.hp < p.stats.maxHp * 0.35) p.drink('hp');
     if (p.mp < p.stats.maxMp * 0.15) p.drink('mp');
+    if ((a.skillT = (a.skillT || 0) - dt) <= 0) { a.skillT = 0.2; this.autoSkills(); }
     const away = Math.hypot(a.anchor.x - p.pos.x, a.anchor.z - p.pos.z);
     // nothing on us: pick up what fell close by first (steer walks there)
     const threat = g.enemies.list.some((e) => this.isFoe(e) && e.state === 'chase' && this.dist(e) < 14);

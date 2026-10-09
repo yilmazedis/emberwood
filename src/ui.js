@@ -1226,9 +1226,9 @@ export class UI {
     t.classList.toggle('free', free > 0);
     $('attrs').innerHTML = ATTRS.map((k) => {
       const spent = p.attr[k] || 0, total = s.attrs[k], gear = total - (c.attrs[k] || 0) - spent;
-      return `<div class="attr" data-k="${k}"><span class="an">${ATTR_NAME[k]}${gear ? `<i>+${gear} from gear</i>` : ''}</span>
+      return `<div class="attr${c.primary === k ? ' primary' : ''}" data-k="${k}"><span class="an">${ATTR_NAME[k]}${c.primary === k ? ' <i class="prim">primary</i>' : ''}${gear ? `<i>+${gear} from gear</i>` : ''}</span>
         <span class="av">${total}</span><button data-k="${k}" data-n="1"${free ? '' : ' disabled'} aria-label="One point into ${ATTR_NAME[k]}">+</button><button data-k="${k}" data-n="5"${free ? '' : ' disabled'} aria-label="Five points into ${ATTR_NAME[k]}">+5</button>
-        <div class="ae">${attrEffects(k, total, c, s.weapon).join(' · ')}</div></div>`;
+        <div class="ae">${attrEffects(k, total, c).join(' · ')}</div></div>`;
     }).join('');
     $('attr-suggest').disabled = !free;
     $('attr-reset').textContent = p.spentAttr() ? `Take back all${p.respecFee() ? ` (${p.respecFee()}g)` : ''}` : 'Take back all';
@@ -1289,7 +1289,7 @@ export class UI {
       ${main.map((l) => `<div class="tt-main">${l}</div>`).join('')}
       ${stats.map((l) => `<div class="tt-aff">${l}</div>`).join('')}
       ${d.desc ? `<div>${d.desc}</div>` : ''}
-      ${d.unique ? '<div class="tt-unique">Unique: only world bosses carry it.</div>' : ''}${upg}
+      ${d.unique ? '<div class="tt-unique">Unique: only world bosses carry it.</div>' : ''}${d.tier === 'rare' && !d.stack ? '<div class="tt-unique rare">Rare: only the Death Canyon\'s monsters carry it. Rare recipes upgrade it.</div>' : ''}${upg}
       ${cmp}${hint ? `<div class="tt-hint">${hint}</div>` : ''}`;
   }
 

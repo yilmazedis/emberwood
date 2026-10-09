@@ -10,6 +10,7 @@ import { DungeonView, fetchPack } from './dungeon.js';
 import { ArenaView } from './arena.js';
 import { FLOOR_Y } from './dungeon-map.js';
 import { CaveView, CaveMouth } from './cave-view.js';
+import { CanyonView } from './canyon-view.js';
 
 const REACH = 2.4; // how close the hero must stand to use something
 const EMBER_LOOK = { fog: 0xcfe2ea, near: 60, far: 150, hemiSky: 0xcfe6ff, hemiGround: 0x5d7a3a, hemi: 1.25, sun: 0xfff0d6, sunI: 2.6, sky: [0x3f8fe0, 0xa6d2f2, 0xd4e6ec] };
@@ -100,7 +101,7 @@ export class Places {
   viewOf(id) {
     if (!this.views[id]) {
       const m = MAPS[id];
-      this.views[id] = m.cave ? new CaveView(this.game, m) : m.kind === 'dungeon' ? new DungeonView(this.game, m) : m.kind === 'arena' ? new ArenaView(this.game, m) : new LandView(this.game, m);
+      this.views[id] = m.cave ? new CaveView(this.game, m) : m.calamities ? new CanyonView(this.game, m) : m.kind === 'dungeon' ? new DungeonView(this.game, m) : m.kind === 'arena' ? new ArenaView(this.game, m) : new LandView(this.game, m);
       if (m.kind === 'outdoor') this.addMouth(id, this.views[id]);
     }
     return this.views[id];

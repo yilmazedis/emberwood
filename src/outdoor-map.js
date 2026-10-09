@@ -100,7 +100,7 @@ export class OutdoorMap {
     if (this.door && Math.hypot(x - this.door.x, z - this.door.z) < 8 + margin) return false;
     if (this.pathDist(x, z) < 3 + margin) return false;
     for (const p of this.pools) if (Math.hypot(x - p.x, z - p.z) < p.r + 3 + margin) return false;
-    for (const zn of this.zones) if (Math.hypot(x - zn.x, z - zn.z) < zn.r * 0.72 + margin) return false;
+    for (const zn of this.zones) if (!zn.all && Math.hypot(x - zn.x, z - zn.z) < zn.r * 0.72 + margin) return false; // (all: a zone for all the rest)
     return true;
   }
 

@@ -11,7 +11,7 @@ import {
 import { dampAngle, yawTo, rand, has, clamp } from './util.js';
 import { CLASSES, lookOf as classLook } from './classes.js';
 import { SKILLS, TREES, BUFFS, power, manaCost, auraTick } from './skills.js';
-import { ATTRS, K as AK, FINESSE, ATTR_PER_LEVEL, attrPoints } from './attributes.js';
+import { ATTRS, K as AK, ATTR_PER_LEVEL, attrPoints } from './attributes.js';
 import { aimedAt, handPos } from './skills/common.js';
 import { Control } from './control.js';
 import { hdr } from './fx.js';
@@ -43,7 +43,7 @@ export const COMBO = { open: 0.8, grace: 0.32, perfect: 0.12, mults: [1, 1.04, 1
 // body (and from middle class shows the cape), gloves and boots tint hands and feet. eq: slot -> item.
 export function applyEquipmentVisuals(h, eq, cls, look = 0) {
   // (upgrades show from +8: enchant.js; a unique item has its own glow at any level)
-  const L = classLook(cls, look), glowOf = (it) => { const d = itemDef(it); return d?.unique ? d.glow ?? null : null; };
+  const L = classLook(cls, look), glowOf = (it) => { const d = itemDef(it); return d?.unique || d?.tier === 'rare' ? d.glow ?? null : null; };
   const wd = itemDef(eq.weapon), od = itemDef(eq.offhand), middle = (d) => d?.type === 'shield' || d?.type === 'book' || d?.type === 'bow';
   const leftBow = wd && WEAPON_TYPES[wd.type]?.left;
   h.equip(leftBow ? 'l' : 'r', wd ? wd.model : null, glowOf(eq.weapon), wd?.tint ?? null, eq.weapon?.p ?? 0, middle(wd));
@@ -231,7 +231,8 @@ export class Player {
     this.attr = freshAttrs();
     for (const k of ATTRS) this.attr[k] = clamp(Math.round(Number(s.attr?.[k]) || 0), 0, attrPoints(MAX_LEVEL));
     if (this.spentAttr() > attrPoints(this.level)) this.attr = freshAttrs(); // (shouldn't happen: start over)
-    if (!s.attr && this.level > 1) this.newAttrs = true; // (a hero from before attributes: game.js explains)
+    // a hero from before attributes, or from the four of the first days: every point free again (game.js explains)
+    if ((!s.attr || 'vit' in s.attr || 'dex' in s.attr) && this.level > 1) { this.attr = freshAttrs(); this.newAttrs = s.attr ? 'changed' : 'new'; }
     this.cave = { day: Math.max(0, Math.round(Number(s.cave?.day) || 0)) };
     this.buffs = {};
     for (const [id, b] of Object.entries(s.buffs || {})) if (BUFFS[id]?.long && Array.isArray(b)) this.buffs[id] = { t: clamp(Number(b[0]) || 0, 0, BUFFS[id].dur), v: Number(b[1]) || 0 };
@@ -329,23 +330,22 @@ export class Player {
       if (def.evade) s.evade = Math.max(s.evade, def.evade(b.v));
       if (def.taken) s.taken *= def.taken(b.v);
     }
-    // the attributes
+    // the attributes (the class's primary one powers its weapon blows)
     s.attrs = A;
-    const auto = AK.auto * (L - 1), phys = FINESSE.includes(s.weapon) ? (A.str + A.dex) / 2 : A.str;
-    s.maxHp = Math.round((10 + 11 * L + A.vit * AK.vitHp) * c.hp * (1 + s.hpPct));
+    const auto = AK.auto * (L - 1), phys = A[c.primary] || 0;
+    s.maxHp = Math.round((40 + 16 * L + A.str * AK.strHp) * c.hp * (1 + s.hpPct));
     s.maxMp = Math.round((40 + 6 * L + A.int * AK.intMp) * c.mp);
-    s.armor = Math.round((s.armor + A.str * AK.strArmor) * c.armor * (1 + s.armorPct));
-    s.regen += A.vit * AK.vitRegen;
+    s.armor = Math.round((s.armor + A.agi * AK.agiArmor) * c.armor * (1 + s.armorPct));
+    s.regen += A.str * AK.strRegen;
     s.mpRegen *= 1 + s.mpRegenPct;
-    s.atkSpd += A.dex * AK.dexSpd;
-    s.crit += A.dex * AK.dexCrit;
-    s.evade = Math.min(0.6, s.evade + Math.min(AK.dodgeCap, A.dex * AK.dexDodge));
+    s.atkSpd += A.agi * AK.agiSpd;
+    s.evade = Math.min(0.6, s.evade);
     s.atkSpeed = s.speed * (1 + s.atkSpd);
     s.moveSpeed = 5.6 * (1 + Math.min(0.6, s.moveSpd));
     // a blow: the weapon's damage and the level's share, times weapon damage (Strength) or spell damage (Intelligence)
     s.baseLo = s.dmgMin + s.levelDmg;
     s.baseHi = s.dmgMax + s.levelDmg;
-    s.physMul = (1 + auto + phys * AK.str + s.dmgPct + s.typePct) * s.dmgMult;
+    s.physMul = (1 + auto + phys * AK.prim + s.dmgPct + s.typePct) * s.dmgMult;
     s.spellMul = (1 + auto + A.int * AK.int + s.dmgPct) * s.dmgMult * (1 + s.spellPct);
     s.dmgLo = Math.max(1, Math.round(s.baseLo * s.physMul));
     s.dmgHi = Math.max(s.dmgLo + 1, Math.round(s.baseHi * s.physMul));

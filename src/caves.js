@@ -5,9 +5,9 @@
 // cave's keeper. When it falls the way out opens, with a treasure, and everyone in the cave gets a good share
 // of a level's XP. Past level 58 there are no monsters of a hero's level outside the caves: they are the way
 // up to 80.
-//   One cave a day (a day by Turkey's clock) for each hero: entering is what counts. Any party member's key
-//   opens it for the whole party, but a member who has been in a cave today stays out (one who was already
-//   in this very copy, and fell or stepped out, may go back).
+//   One cave a day (a day by Turkey's clock) for each hero: entering is what counts, and once out (stepped out,
+//   or fallen and risen in camp) a hero can't go back in. Any party member's key opens it for the whole party,
+//   but a member who has been in a cave today stays out. Each copy is its party's (or its lone hero's) alone.
 //   A hero carries one key at most, can't bank, trade or sell it, and only finds (and uses) the key of the
 //   furthest land it may enter: a hero who may go to Shadowmere only finds Shadowmere's. Outgrowing a land
 //   crumbles its key.
@@ -71,6 +71,17 @@ export const CAVES = {
 };
 
 // The land whose cave a hero of this level may use: the furthest land it may enter.
+// What a hero should know before going in (the game shows it at the mouth, and with a party's call).
+export function caveRules(cave) {
+  return [
+    `<b>${cave.name}</b>, a hidden cave: ten chambers deep.`,
+    'Every monster in a chamber must fall before the way to the next one opens. The tenth holds the cave\'s keeper.',
+    'Your party is called in with you; alone it is hard. The cave is yours alone: no other party or hero comes in.',
+    'One cave a day: once you have gone in, you can\'t go in again today, even after you leave or fall.',
+    'Clear it: everyone inside gets 40% of a level in XP, the keeper\'s treasure opens, and daylight shows the way out.',
+  ];
+}
+
 export function caveLandFor(level) {
   let land = CAVE_LANDS[0];
   for (const id of CAVE_LANDS) if (level >= CAVES[id].heroes[0]) land = id;

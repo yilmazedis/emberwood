@@ -1,48 +1,42 @@
-// Attributes: Strength, Dexterity, Intelligence and Vitality. A hero starts with its class's, gets five points
-// to spend at every level (any class may put them anywhere), and its gear gives more (items.js). What a
-// point does is the same for everyone; a class only decides what it needs most:
-//   Strength: weapon damage (swords, axes, maces, great weapons; half of it with daggers and bows) and a
-//     little armor
-//   Dexterity: attack speed, critical hits and dodging blows; with daggers and bows also damage (they
-//     count the average of Strength and Dexterity)
-//   Intelligence: spell damage (staves' bolts too), healing and mana
-//   Vitality: Life and Life regeneration
-// Besides points, every level makes a hero a little stronger by itself (AUTO). Plain data and numbers.
+// Attributes, as in Dota 2: Strength, Agility and Intelligence. A hero starts with its class's, gets five points
+// to spend at every level (any class may put them anywhere), and its gear gives more (items.js). Every class has
+// a primary attribute that powers its weapon blows (Warrior: Strength, Rogue: Agility, Scientist and Healer:
+// Intelligence); besides, each does the same for everyone:
+//   Strength: Life and Life regeneration
+//   Agility: attack speed and armor
+//   Intelligence: spell damage (staves' bolts too), healing and Mana
+// Every level also makes a hero a little stronger by itself (AUTO). Plain data and numbers.
 import { ATTRS, ATTR_NAME, ATTR_SHORT } from './items.js';
 
 export { ATTRS, ATTR_NAME, ATTR_SHORT };
 export const ATTR_PER_LEVEL = 5;
 export const K = {
   auto: 0.014, // weapon and spell damage per level, for everyone
-  str: 0.0075, strArmor: 0.15,
-  dexSpd: 0.0008, dexCrit: 0.0005, dexDodge: 0.0002, dodgeCap: 0.15,
+  prim: 0.006, // weapon damage per point of the class's primary attribute
+  strHp: 2, strRegen: 0.03,
+  agiSpd: 0.0008, agiArmor: 0.1,
   int: 0.01, intHeal: 0.001, intMp: 2,
-  vitHp: 5, vitRegen: 0.06,
 };
-// weapons that count Dexterity for their damage as much as Strength
-export const FINESSE = ['dagger', 'bow'];
 
 // The points a hero of this level has had to spend.
 export const attrPoints = (level) => ATTR_PER_LEVEL * (Math.max(1, level) - 1);
 
-// What a total of each attribute gives (cls: its Life and Mana multipliers), for the character window.
-// weapon: what it holds (daggers and bows also count Dexterity for damage).
-export function attrEffects(k, total, cls, weapon) {
+// What a total of each attribute gives a hero of class `cls` (its definition: primary, Life, Mana and armor
+// multipliers), for the character window.
+export function attrEffects(k, total, cls) {
   const pct = (v, d = 1) => `${(v * 100).toFixed(d).replace(/\.0+$/, '')}%`;
-  const finesse = FINESSE.includes(weapon);
+  const prim = cls.primary === k ? [`+${pct(total * K.prim)} weapon damage`] : [];
   switch (k) {
-    case 'str': return [`+${pct(total * K.str * (finesse ? 0.5 : 1))} weapon damage`, `+${Math.round(total * K.strArmor * cls.armor)} armor`];
-    case 'dex': return [...(finesse ? [`+${pct(total * K.str * 0.5)} weapon damage`] : []), `+${pct(total * K.dexSpd)} attack speed`, `+${pct(total * K.dexCrit)} critical chance`, `+${pct(Math.min(K.dodgeCap, total * K.dexDodge))} dodge`];
-    case 'int': return [`+${pct(total * K.int)} spell damage`, `+${pct(total * K.intHeal)} healing`, `+${Math.round(total * K.intMp * cls.mp)} Mana`];
-    case 'vit': return [`+${Math.round(total * K.vitHp * cls.hp)} Life`, `+${(total * K.vitRegen).toFixed(1)} Life a second`];
+    case 'str': return [...prim, `+${Math.round(total * K.strHp * cls.hp)} Life`, `+${(total * K.strRegen).toFixed(1)} Life a second`];
+    case 'agi': return [...prim, `+${pct(total * K.agiSpd)} attack speed`, `+${Math.round(total * K.agiArmor * cls.armor)} armor`];
+    case 'int': return [...prim, `+${pct(total * K.int)} spell damage`, `+${pct(total * K.intHeal)} healing`, `+${Math.round(total * K.intMp * cls.mp)} Mana`];
     default: return [];
   }
 }
 
-// One line on what an attribute is for, and who wants it.
+// One line on what an attribute is for (the primary one: the class's weapon damage too).
 export const ATTR_ABOUT = {
-  str: 'Weapon damage and some armor. Warriors, and healers who fight with a mace. Daggers and bows count it half.',
-  dex: 'Attack speed, critical hits and dodging. Daggers and bows count it for damage too, as much as Strength.',
-  int: 'Spell damage, healing and Mana. Scientists and healers.',
-  vit: 'Life and Life regeneration. Everyone who wants to stay standing.',
+  str: 'Life and Life regeneration, for everyone. A Warrior\'s primary attribute: its weapon damage too.',
+  agi: 'Attack speed and armor, for everyone. A Rogue\'s primary attribute: its weapon damage too.',
+  int: 'Spell damage, healing and Mana, for everyone. A Scientist\'s and a Healer\'s primary attribute: their weapon damage too.',
 };

@@ -51,8 +51,9 @@ const world = new WorldSim();
 world.onHeroDown = (winner, loser) => {
   const cw = inWorld.get(winner.pid), cl = inWorld.get(loser.pid);
   if (!cw?.char || !cl?.char) return;
-  store.arenaResult({ ...cw.char, level: winner.level }, { ...cl.char, level: loser.level });
-  const msg = { t: 'chat', s: 1, x: `⚔ ${cw.char.name} defeated ${cl.char.name} in the Arena!` };
+  const arena = winner.area.map.kind === 'arena'; // (the Death Canyon's fights aren't on the champions' board)
+  if (arena) store.arenaResult({ ...cw.char, level: winner.level }, { ...cl.char, level: loser.level });
+  const msg = { t: 'chat', s: 1, x: arena ? `⚔ ${cw.char.name} defeated ${cl.char.name} in the Arena!` : `☠ ${cw.char.name} cut down ${cl.char.name} in the ${winner.area.map.name}!` };
   for (const p of winner.area.players) inWorld.get(p.pid)?.send(msg);
 };
 // a world boss rises in a land, or falls: everyone in that land hears

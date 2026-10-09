@@ -9,7 +9,8 @@ import { SPAWNS } from './monsters.js';
 import { crypt, CRYPT_SPAWNS } from './maps/crypt.js';
 import { frostfang, FROSTFANG_SPAWNS, rimeheart, RIMEHEART_SPAWNS } from './maps/frostfang.js';
 import { cinderfall, CINDERFALL_SPAWNS, forge, FORGE_SPAWNS } from './maps/cinderfall.js';
-import { shadowmere, SHADOWMERE_SPAWNS, abyss, ABYSS_SPAWNS } from './maps/shadowmere.js';
+import { shadowmere, SHADOWMERE_SPAWNS, abyss, ABYSS_SPAWNS, CANYON_GATE } from './maps/shadowmere.js';
+import { canyon, CANYON_SPAWNS, GATE as CANYON_BACK } from './maps/canyon.js';
 import { arena, ARENA } from './maps/arena.js';
 import { crypt2, CRYPT2_SPAWNS, rimeheart2, RIMEHEART2_SPAWNS, forge2, FORGE2_SPAWNS, abyss2, ABYSS2_SPAWNS } from './maps/depths.js';
 import { CAMPS } from './camps.js'; // (the people in each camp, and what blocks the way there)
@@ -134,7 +135,7 @@ for (const [above, deep] of [['crypt', 'crypt2'], ['rimeheart', 'rimeheart2'], [
   p.at = MAPS[deep].arrive;
   p.title = `${MAPS[deep].name} · Level ${MAPS[deep].levels[0]} – ${MAPS[deep].levels[1]}`;
 }
-for (const [id, list] of Object.entries(CAMPS)) MAPS[id].npcs = list;
+for (const [id, list] of Object.entries(CAMPS)) if (MAPS[id]) MAPS[id].npcs = list; // (the canyon's: below)
 
 MAPS.arena = {
   id: 'arena', name: 'The Arena', sub: 'Hero against hero · from level 5', kind: 'arena', pvp: true, levels: [5, 80], minLevel: 5, music: 'world',
@@ -144,6 +145,28 @@ MAPS.arena = {
   look: { fog: 0xdccdb0, near: 70, far: 170, hemiSky: 0xfff0d8, hemiGround: 0x8a6a4a, hemi: 1.25, sun: 0xfff0d0, sunI: 2.6, sky: [0x4a8ad8, 0xb8d4ec, 0xead8bc] },
   portals: [{ id: 'waystone', ...arena.waystone, to: LANDS, name: 'Waystone', title: 'Travel to another land', action: 'Travel' }],
 };
+
+// The Death Canyon (maps/canyon.js), through its gate in Shadowmere, from level 70: heroes fight heroes there
+// (pvp: anyone not in their party, out of its camp), its monsters alone carry the rare items, and calamities
+// (sim/world.js) strike its heroes.
+{
+  const sm = MAPS.shadowmere, gate = { x: shadowmere.cx + CANYON_GATE.x, z: shadowmere.cz + CANYON_GATE.z };
+  const back = { x: canyon.cx + CANYON_BACK.x, z: canyon.cz + CANYON_BACK.z };
+  const stone = canyon.plan.props.find((p) => p.kind === 'waystone');
+  MAPS.canyon = {
+    id: 'canyon', name: 'Death Canyon', sub: 'Level 70 – 78 · heroes fight heroes', kind: 'outdoor', pvp: true, calamities: true, levels: [70, 78], minLevel: 70, music: 'world',
+    spawns: CANYON_SPAWNS, outdoor: canyon, contains: (x, z) => canyon.contains(x, z),
+    camp: canyon.camp, waystone: { x: stone.x, z: stone.z },
+    arrive: { x: back.x, z: back.z + 2.6, yaw: 0 }, respawn: { map: 'canyon', x: canyon.camp.x - 2.5, z: canyon.camp.z - 3, yaw: Math.PI },
+    look: { fog: 0x5a3020, near: 40, far: 120, hemiSky: 0xffc8a0, hemiGround: 0x4a2418, hemi: 1.15, sun: 0xffb080, sunI: 2.2, sky: [0x2a120c, 0x7a3a22, 0xb86a3e], embers: true },
+    portals: [
+      { id: 'waystone', x: stone.x, z: stone.z, to: LANDS, name: 'Waystone', title: 'Travel to another land', action: 'Travel' },
+      { id: 'gate', x: back.x, z: back.z + 2.2, to: 'shadowmere', at: { x: gate.x, z: gate.z + 2.6, yaw: 0 }, name: 'Gate to Shadowmere', title: 'Out of the canyon', action: 'Leave' },
+    ],
+  };
+  MAPS.canyon.npcs = CAMPS.canyon;
+  sm.portals.push({ id: 'canyon', x: gate.x, z: gate.z + 2.2, to: 'canyon', at: MAPS.canyon.arrive, name: 'Death Canyon', title: 'Level 70+ · heroes fight heroes', action: 'Enter' });
+}
 
 function campSpot(om) {
   return { x: om.camp.x - 2.5, z: om.camp.z - 3, yaw: Math.PI };

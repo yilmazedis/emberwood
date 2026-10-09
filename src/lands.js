@@ -22,6 +22,11 @@ const BIOMES = {
     crack: C(0x8a2e12), patches: { cf_obsidian: [C(0x262226), 0.75], cf_lava: [C(0x4a2a1e), 0.55], cf_throne: [C(0x2e2424), 0.7] },
     pool: { lava: C(0x5a2414) }, rocks: [0x3e3936, 0x4c4542],
   },
+  canyon: {
+    a: C(0x8a4e36), b: C(0x7a432e), dark: C(0x5a2c1e), rock: C(0x6a3a2a), path: C(0xa8784e), pathEdge: C(0x8a5e40), camp: C(0x6a4a3a),
+    crack: C(0xff5a10), patches: { dc_scar: [C(0x2e2222), 0.65], dc_spine: [C(0xb89a7a), 0.45], dc_maw: [C(0x3a1e18), 0.65] },
+    pool: { lava: C(0x5a2414) }, rocks: [0x7a4a38, 0x5e3628],
+  },
   shadowmere: {
     a: C(0x3c3a4a), b: C(0x343a38), dark: C(0x2a2834), rock: C(0x56526a), path: C(0x5e5664), pathEdge: C(0x4a4452), camp: C(0x4e4452),
     moss: C(0x3e5a42), patches: { sm_bones: [C(0x8a8478), 0.55], sm_wraith: [C(0x2e2a36), 0.6], sm_spire: [C(0x26222e), 0.7] },
@@ -342,6 +347,25 @@ function buildProps(om, group, rng, out) {
       const gp = new THREE.Vector3(x + Math.sin(rotY) * 1.5, om.heightAt(x, z) + 1.6, z + Math.cos(rotY) * 1.5);
       out.lights.push({ pos: gp, color: 0xff6a1a, power: 12, dist: 12, flicker: 3 });
       out.fires.push({ pos: new THREE.Vector3(x + Math.sin(rotY) * 2.2 - Math.cos(rotY) * 2.2, om.heightAt(x, z) + 10.2, z + Math.cos(rotY) * 2.2), scale: 0.8, color: 0x3a3430, smoke: true });
+    },
+    canyongate({ x, z, rotY, glow }) { // two pillars of red rock and a lintel; between them a glow, the way through
+      for (const s of [-1, 1]) {
+        add(colored(jitter(new THREE.CylinderGeometry(0.7, 0.95, 5.6, 6, 3), 0.12, rng).translate(s * 1.9, 2.8, 0), 0x6a3a2a), x, z, { rotY });
+        add(colored(jitter(new THREE.DodecahedronGeometry(1.0, 0), 0.3, rng).translate(s * 1.9, 0.5, 0), 0x5a3022), x, z, { rotY });
+      }
+      add(colored(jitter(new THREE.BoxGeometry(5.6, 1.0, 1.4, 3, 1, 1), 0.15, rng).translate(0, 5.9, 0), 0x6a3a2a), x, z, { rotY });
+      for (const s of [-1, 1]) add(colored(new THREE.ConeGeometry(0.35, 1.3, 5).translate(s * 2.3, 7.0, 0), 0xe8dcc8), x, z, { rotY }); // (horns)
+      const glowPlane = new THREE.Mesh(new THREE.PlaneGeometry(2.8, 4.8), glowMat(glow, 1.4));
+      glowPlane.material.transparent = true;
+      glowPlane.material.opacity = 0.75;
+      glowPlane.material.blending = THREE.AdditiveBlending;
+      glowPlane.material.depthWrite = false;
+      glowPlane.material.side = THREE.DoubleSide;
+      glowPlane.position.set(x, om.heightAt(x, z) + 2.6, z);
+      glowPlane.rotation.y = rotY;
+      group.add(glowPlane);
+      out.lights.push({ pos: new THREE.Vector3(x + Math.sin(rotY) * 1.4, om.heightAt(x, z) + 2.2, z + Math.cos(rotY) * 1.4), color: glow, power: 10, dist: 12 });
+      out.doorGlow.push({ pos: new THREE.Vector3(x, om.heightAt(x, z) + 2.0, z), color: glow });
     },
     obelisk({ x, z, color, glow }) {
       add(colored(new THREE.CylinderGeometry(1.6, 1.9, 0.5, 6).translate(0, 0.2, 0), color), x, z);

@@ -135,6 +135,7 @@ export class WorldLink {
     else if (ev[0] === 'B') { if (ev[1] === this.pid) g.helped(ev); else g.others.helped(ev); } // (a friend's heal or blessing)
     else if (stale) return;
     else if (ev[0] === 'p') g.others.act(ev[1], ev[2]);
+    else if (ev[0] === 'Z') g.places.view.calamity?.(ev); // (the Death Canyon's calamities)
     else g.enemies.event(ev);
   }
 

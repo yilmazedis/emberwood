@@ -556,7 +556,7 @@ export class CaveMouth {
     const top = new THREE.Vector3(), ui = game.ui;
     this.label = ui.createNpcLabel(cave.name, 'Hidden cave', 'Enter', () => this.use(), (o) => o.copy(top));
     this.top = top.set(at.x + Math.sin(at.yaw) * 0.4, g.position.y + 3.6, at.z + Math.cos(at.yaw) * 0.4);
-    this.spot = { id: `mouth_${land}`, x: at.x + Math.sin(at.yaw) * 1.2, z: at.z + Math.cos(at.yaw) * 1.2, label: this.label, can: () => this.found, use: () => game.enterCave(land) };
+    this.spot = { id: `mouth_${land}`, x: at.x + Math.sin(at.yaw) * 1.2, z: at.z + Math.cos(at.yaw) * 1.2, label: this.label, can: () => this.found, use: () => game.askCave(land) };
   }
 
   use() {

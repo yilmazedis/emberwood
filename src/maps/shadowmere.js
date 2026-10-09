@@ -4,6 +4,8 @@
 import { OutdoorMap } from '../outdoor-map.js';
 import { DungeonMap } from '../dungeon-map.js';
 
+export const CANYON_GATE = { x: -24, z: 62 }; // (around the land's centre)
+
 export const shadowmere = new OutdoorMap({
   id: 'shadowmere', cx: 3000, cz: 0, radius: 100, seed: 3313,
   ground: { base: 1.2, hills: 2.2, rough: 0.2 },
@@ -65,6 +67,9 @@ export const shadowmere = new OutdoorMap({
     for (const s of [-4, 4]) put('brazier', 4 + s, -81, { color: 0x9a5aff }, 0.35);
     put('bones', 4, -74);
     put('vault', 62, -58, { rotY: 0 }, 0);
+    // the gate to the Death Canyon, west of Duskwatch (maps.js: the way through, from level 70)
+    put('canyongate', CANYON_GATE.x, CANYON_GATE.z, { rotY: 0, glow: 0xff4a1a }, 0);
+    for (const s of [-1, 1]) put('pillar', CANYON_GATE.x + s * 1.9, CANYON_GATE.z - 0.2, {}, 0.75);
   },
 });
 

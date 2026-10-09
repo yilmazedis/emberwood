@@ -206,7 +206,7 @@ const ARMOR_STYLE = { warrior: 'plate', healer: 'coif', rogue: 'hood', scientist
 export function itemModel(it, { glow = true } = {}) {
   const d = typeof it === 'string' ? ITEMS[it] : it?.key ? it : itemDef(it);
   if (!d) return new THREE.Group();
-  if (d.model) return cloneItem(d.model, glow && d.unique ? d.glow ?? 0xff6a10 : null, d.tint ?? null);
+  if (d.model) return cloneItem(d.model, glow && (d.unique || d.tier === 'rare') ? d.glow ?? 0xff6a10 : null, d.tint ?? null);
   return buildGearModel(gearSpec(d));
 }
 export function gearSpec(d) {
@@ -291,7 +291,7 @@ const ICON_SPECS = {
   potion_red: ['potion', '#e8322a', '#ff9a8a', 2], potion_red2: ['potion', '#d81a2a', '#ff7a8a', 4], potion_red3: ['potion', '#b8102a', '#ff6a7a', 6],
   potion_blue: ['potion', '#3a78e0', '#9ac0ff', 2], potion_blue2: ['potion', '#2a5ae0', '#8ab0ff', 4], potion_blue3: ['potion', '#1a3ac0', '#7aa0ff', 6],
   elixir_red: ['elixir', '#ff6a2a'], elixir_grey: ['elixir', '#a8b4c4'], elixir_green: ['elixir', '#4ad46a'],
-  scroll: ['scroll', '#5ad0ff'], recipe_low: ['scroll', '#e8e4da'], recipe_mid: ['scroll', '#6aa9ff'], recipe_high: ['scroll', '#ffd84a'],
+  scroll: ['scroll', '#5ad0ff'], recipe_low: ['scroll', '#e8e4da'], recipe_mid: ['scroll', '#6aa9ff'], recipe_high: ['scroll', '#ffd84a'], recipe_rare: ['scroll', '#e05cff'],
   key_emberwood: ['key', '#7dff9a'], key_frostfang: ['key', '#7fd8ff'], key_cinderfall: ['key', '#ff7a2a'], key_shadowmere: ['key', '#c07aff'],
 };
 function svgIcon(name) {
