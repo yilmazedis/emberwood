@@ -80,12 +80,15 @@ so movement stays smooth between updates. The messages have a version (`PROTOCOL
 that doesn't match the server asks to reload (or, if the server is the older one, to try again in a minute). Its data lives outside the website, in `$EMBERWOOD_DATA` or `~/emberwood-data`: one JSON file per account
 (`accounts/<name>.json`), `names.json` (who has which hero name) and `secret.key` (signs the tokens; keep it private).
 To back up, copy that folder.
-**Accounts from the terminal** (`server/accounts.mjs`, run in the game's folder on the server; then press Restart
-for the app): `node server/accounts.mjs` lists the accounts (their heroes, last sign-in); `password <name>` sets a
-new password (passwords are kept only as scrypt hashes: nobody can read one back); `create <name>` makes an
-account; `hero <account> <Name> <class> [level]` adds a hero at that level in its class's gear, with potions and
-gold, every point free (for testing). `level <account> <Hero> <level>` changes an existing hero's level, nothing else. Close any game still signed in to that account first, or the server may save
-the old data back.
+**Accounts from the terminal** (`server/accounts.mjs`, run in the game's folder on the server):
+`node server/accounts.mjs` lists the accounts (their heroes, last sign-in); `password <name>` sets a new password
+(passwords are kept only as scrypt hashes: nobody can read one back); `create <name>` makes an account;
+`hero <account> <Name> <class> [level]` adds a hero at that level in its class's gear, with potions and gold, every
+point free (for testing); `level <account> <Hero> <level>` changes an existing hero's level, nothing else. The tool
+never edits the files itself (the running server keeps accounts in memory and would write its own copy back): it
+leaves an order in `admin/` in the data folder, which the server carries out within a couple of seconds (no
+Restart) and answers. A hero being played when its account changes goes back to the hero list, with a note; its
+older saves are refused. If the server isn't running, the order waits for it to start.
 
 ## Deploy
 

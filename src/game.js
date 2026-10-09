@@ -201,6 +201,7 @@ export class Game {
   // The hero to play: { id, name, cls, look, save, bank, rev } from the server (or the local one when offline).
   setCharacter(char) {
     this.character = { id: char.id, name: char.name, cls: char.cls, look: char.look || 0 };
+    this.lastCharId = char.id;
     this.rev = char.rev || 0; // (saves older than a trade are refused: see server)
     this.caveOpen = null; // a cave open to our hero: { land, until, mine } (see caveFound)
     const p = this.player;

@@ -159,13 +159,14 @@ export class AccountScreen {
   }
 
   // Back from the game: fetch the list again (levels changed) and select the hero just played.
-  async backFromGame(charId) {
+  async backFromGame(charId, note = null) {
     try {
       const r = await this.ask('chars');
       this.chars = r.chars;
       this.world = r.world;
     } catch { /* show what we have */ }
     this.showChars(charId);
+    if (note) $('chars-err').textContent = note;
   }
 
   // The four classes, and the looks of the one picked.

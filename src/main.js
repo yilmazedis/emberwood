@@ -143,7 +143,8 @@ game.onLeave = (why) => {
   }
   text.textContent = '';
   if (why) accounts.start(why); // signed out (e.g. signed in elsewhere): say why
-  else accounts.backFromGame(game.character?.id);
+  else accounts.backFromGame(game.character?.id || game.lastCharId, game.leaveNote);
+  game.leaveNote = null;
 };
 
 game.init((f, label) => {
@@ -185,6 +186,11 @@ game.init((f, label) => {
     if (!reloadForUpdate()) game.kicked('Emberwood was updated. Reload the page to keep playing.');
   });
   net.on('kicked', (m) => game.kicked(m.msg));
+  net.on('heroChanged', (m) => { // (the account tool changed this hero: back to the hero list, to pick it again)
+    game.leaveNote = String(m.msg || '');
+    game.character = null; // (nothing of the old one is saved)
+    game.leave();
+  });
   net.on('signedOut', (m) => game.kicked(m.msg));
   net.on('connection', ({ online }) => {
     game.ui.connection(online);

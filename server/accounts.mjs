@@ -9,24 +9,52 @@
 //   node server/accounts.mjs level <account> <Hero> <level>
 //                                               an existing hero's level (1–80), nothing else (its new points
 //                                               are free to spend; fewer levels than points spent: all back)
-// After any change, press Restart for the Node.js app, so the server reads the files afresh.
-// It reads and writes the same data folder as the game server ($EMBERWOOD_DATA, or ~/emberwood-data). After a
-// new password, press Restart for the Node.js app, so the server reads the account afresh. (A game still
-// signed in to that account keeps saving it: close it first, or the server may write the old password back.)
-// Passwords are kept only as scrypt hashes: nobody can read one back, only set a new one.
+// The game server keeps accounts in memory and writes them back, so changes don't go into its files from here:
+// they go to it, as an order in <data>/admin/, which it carries out within a couple of seconds (no Restart; a
+// hero being played goes back to its hero list) and answers here. If it isn't running, the order waits for it.
+// It uses the same data folder as the game server ($EMBERWOOD_DATA, or ~/emberwood-data). Passwords are kept
+// only as scrypt hashes: nobody can read one back, only set a new one.
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import readline from 'node:readline';
 import crypto from 'node:crypto';
 import { hashPassword } from './auth.mjs';
-import { CLASSES, MAX_CHARACTERS, NAME_RULE, USER_RULE } from '../src/classes.js';
+import { CLASSES, NAME_RULE, USER_RULE } from '../src/classes.js';
 import { ITEMS, SLOTS, emptyEquipment, makeItem, maxPlus, tierAt } from '../src/items.js';
 
 const DATA_DIR = process.env.EMBERWOOD_DATA || path.join(os.homedir(), 'emberwood-data');
 const ACCOUNTS = path.join(DATA_DIR, 'accounts');
 const fileOf = (lower) => path.join(ACCOUNTS, `${lower}.json`);
-const NAMES = path.join(DATA_DIR, 'names.json');
+const ADMIN = path.join(DATA_DIR, 'admin');
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const fail = (msg) => { console.log(msg); process.exitCode = 1; };
+
+// Hand an order to the game server and wait (10 s at most) for what it says.
+async function order(o) {
+  fs.mkdirSync(ADMIN, { recursive: true, mode: 0o700 });
+  const id = `${Date.now()}-${crypto.randomBytes(3).toString('hex')}`, done = path.join(ADMIN, `${id}.done`);
+  writeJSON(path.join(ADMIN, `${id}.json`), o);
+  for (let i = 0; i < 40; i++) {
+    await sleep(250);
+    if (!fs.existsSync(done)) continue;
+    const said = fs.readFileSync(done, 'utf8');
+    fs.unlinkSync(done);
+    console.log(`The game server: ${said}`);
+    return;
+  }
+  console.log('The game server didn\'t answer in 10 seconds (is the Node.js app running?). The order waits: it is carried out as soon as the server starts.');
+}
+
+// a password typed twice; null (and why) if it won't do
+async function newPassword(prompt) {
+  const q = asker(), pass = await q.ask(prompt);
+  if (pass.length < 6 || pass.length > 72) { q.close(); fail('Passwords need 6 to 72 characters. Nothing changed.'); return null; }
+  const again = await q.ask('The same again: ');
+  q.close();
+  if (again !== pass) { fail('They differ. Nothing changed.'); return null; }
+  return hashPassword(pass);
+}
 function writeJSON(file, data) { // (written whole, then swapped in, like the server does)
   const tmp = `${file}.${process.pid}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(data), { mode: 0o600 });
@@ -61,31 +89,18 @@ function asker() {
 }
 
 async function setPassword(name) {
-  const lower = String(name || '').trim().toLowerCase(), file = fileOf(lower);
-  const acc = readJSON(file);
-  if (!acc) { console.log(`No account called "${name}" in ${ACCOUNTS}. Run without arguments to see them all.`); process.exitCode = 1; return; }
-  const q = asker(), pass = await q.ask(`New password for ${acc.user}: `);
-  if (pass.length < 6 || pass.length > 72) { q.close(); console.log('Passwords need 6 to 72 characters. Nothing changed.'); process.exitCode = 1; return; }
-  const again = await q.ask('The same again: ');
-  q.close();
-  if (again !== pass) { console.log('They differ. Nothing changed.'); process.exitCode = 1; return; }
-  Object.assign(acc, await hashPassword(pass));
-  writeJSON(file, acc);
-  console.log(`Done: ${acc.user} has a new password. Now press Restart for the Node.js app, then sign in.`);
+  const acc = readJSON(fileOf(String(name || '').trim().toLowerCase()));
+  if (!acc) return fail(`No account called "${name}" in ${ACCOUNTS}. Run without arguments to see them all.`);
+  const h = await newPassword(`New password for ${acc.user}: `);
+  if (h) await order({ op: 'password', account: acc.lower, ...h });
 }
 
 async function create(name) {
-  const user = String(name || '').trim(), lower = user.toLowerCase();
-  if (!USER_RULE.test(user)) { console.log('Account names are 3–16 letters, numbers or _.'); process.exitCode = 1; return; }
-  if (fs.existsSync(fileOf(lower))) { console.log(`There is already an account called ${user}.`); process.exitCode = 1; return; }
-  const q = asker(), pass = await q.ask(`Password for ${user}: `);
-  if (pass.length < 6 || pass.length > 72) { q.close(); console.log('Passwords need 6 to 72 characters. Nothing made.'); process.exitCode = 1; return; }
-  const again = await q.ask('The same again: ');
-  q.close();
-  if (again !== pass) { console.log('They differ. Nothing made.'); process.exitCode = 1; return; }
-  fs.mkdirSync(ACCOUNTS, { recursive: true, mode: 0o700 });
-  writeJSON(fileOf(lower), { user, lower, ...(await hashPassword(pass)), created: Date.now(), lastLogin: 0, characters: [], bank: { items: [], gold: 0 } });
-  console.log(`Done: the account ${user} is made. Now press Restart for the Node.js app, then sign in.`);
+  const user = String(name || '').trim();
+  if (!USER_RULE.test(user)) return fail('Account names are 3–16 letters, numbers or _.');
+  if (fs.existsSync(fileOf(user.toLowerCase()))) return fail(`There is already an account called ${user}.`);
+  const h = await newPassword(`Password for ${user}: `);
+  if (h) await order({ op: 'create', user, ...h });
 }
 
 // A hero ready to play at `level`: the best weapon(s) and clothes of its class for it (+5, the weapon +7),
@@ -111,55 +126,38 @@ function heroSave(cls, level) {
   return { v: 2, level, xp: 0, gold: Math.round(500 + level * level * 4), bag, equipment: Object.fromEntries(SLOTS.map((s) => [s, eq[s] || null])), quests: { done: [], active: [] }, sk: { pts: {}, bar: [] }, cave: { day: 0 }, buffs: {} };
 }
 
-function hero(account, name, cls, lvl) {
+async function hero(account, name, cls, lvl) {
   const acc = readJSON(fileOf(String(account || '').toLowerCase()));
-  if (!acc) { console.log(`No account called "${account}". Run without arguments to see them all.`); process.exitCode = 1; return; }
+  if (!acc) return fail(`No account called "${account}". Run without arguments to see them all.`);
   name = String(name || '').trim();
-  if (!NAME_RULE.test(name)) { console.log('Hero names are 3–14 letters, no spaces or numbers.'); process.exitCode = 1; return; }
-  if (!Object.hasOwn(CLASSES, cls)) { console.log(`The class is one of: ${Object.keys(CLASSES).join(', ')}.`); process.exitCode = 1; return; }
+  if (!NAME_RULE.test(name)) return fail('Hero names are 3–14 letters, no spaces or numbers.');
+  if (!Object.hasOwn(CLASSES, cls)) return fail(`The class is one of: ${Object.keys(CLASSES).join(', ')}.`);
   const level = Math.max(1, Math.min(80, Math.round(Number(lvl) || 1)));
-  const names = readJSON(NAMES) || {};
-  if (Object.hasOwn(names, name.toLowerCase())) { console.log(`Someone already has the name ${name}.`); process.exitCode = 1; return; }
-  if (acc.characters.length >= MAX_CHARACTERS) { console.log(`${acc.user} has ${MAX_CHARACTERS} heroes already.`); process.exitCode = 1; return; }
-  const save = heroSave(cls, level);
-  acc.characters.push({ id: crypto.randomBytes(4).toString('hex'), name, cls, look: 0, created: Date.now(), level, save, rev: 0 });
-  names[name.toLowerCase()] = acc.lower;
-  writeJSON(fileOf(acc.lower), acc);
-  writeJSON(NAMES, names);
-  const worn = Object.values(save.equipment).filter(Boolean).map((it) => `+${it.p} ${ITEMS[it.k].name}`).join(', ');
-  console.log(`Done: ${name}, a level ${level} ${CLASSES[cls].name}, is in ${acc.user}'s heroes, wearing ${worn}. Now press Restart for the Node.js app.`);
+  await order({ op: 'hero', account: acc.lower, name, cls, save: heroSave(cls, level) });
 }
 
-// An existing hero to another level: only its level (and its XP toward the next, back to 0). Its save's revision
-// goes up, so a game still open with it can't save the old level back.
-function setLevel(account, name, lvl) {
+// An existing hero to another level: only its level (and its XP toward the next, back to 0).
+async function setLevel(account, name, lvl) {
   const acc = readJSON(fileOf(String(account || '').toLowerCase()));
-  if (!acc) { console.log(`No account called "${account}". Run without arguments to see them all.`); process.exitCode = 1; return; }
+  if (!acc) return fail(`No account called "${account}". Run without arguments to see them all.`);
   const ch = acc.characters.find((c) => c.name.toLowerCase() === String(name || '').trim().toLowerCase());
-  if (!ch) { console.log(`${acc.user} has no hero called "${name}" (${acc.characters.map((c) => c.name).join(', ') || 'no heroes'}).`); process.exitCode = 1; return; }
+  if (!ch) return fail(`${acc.user} has no hero called "${name}" (${acc.characters.map((c) => c.name).join(', ') || 'no heroes'}).`);
   const level = Math.round(Number(lvl));
-  if (!(level >= 1 && level <= 80)) { console.log('The level is a number from 1 to 80.'); process.exitCode = 1; return; }
-  const was = ch.save?.level ?? ch.level ?? 1;
-  if (!ch.save) { // (never played: its class's first things, as a new hero gets)
-    const eq = emptyEquipment(), bag = new Array(30).fill(null);
-    for (const key of CLASSES[ch.cls].start) { const d = ITEMS[key]; eq[d.slot === 'weapon' && eq.weapon ? 'offhand' : d.slot] = makeItem(key); }
-    [makeItem('hp_potion_1', { n: 5 }), makeItem('mp_potion_1', { n: 3 }), makeItem('camp_scroll', { n: 1 })].forEach((it, i) => { bag[i] = it; });
-    ch.save = { v: 2, level, xp: 0, gold: 30, bag, equipment: eq, quests: { done: [], active: [] }, sk: { pts: {}, bar: [] }, cave: { day: 0 }, buffs: {} };
-  }
-  ch.save.level = level;
-  ch.save.xp = 0;
-  ch.level = level;
-  ch.rev = (ch.rev || 0) + 1;
-  writeJSON(fileOf(acc.lower), acc);
-  console.log(`Done: ${ch.name} (${CLASSES[ch.cls]?.name || ch.cls}) is level ${level} now (was ${was}). Now press Restart for the Node.js app, then play.`);
+  if (!(level >= 1 && level <= 80)) return fail('The level is a number from 1 to 80.');
+  // (a hero never played has no save yet: its class's first things, as a new hero gets)
+  const eq = emptyEquipment(), bag = new Array(30).fill(null);
+  for (const key of CLASSES[ch.cls].start) { const d = ITEMS[key]; eq[d.slot === 'weapon' && eq.weapon ? 'offhand' : d.slot] = makeItem(key); }
+  [makeItem('hp_potion_1', { n: 5 }), makeItem('mp_potion_1', { n: 3 }), makeItem('camp_scroll', { n: 1 })].forEach((it, i) => { bag[i] = it; });
+  const blank = { v: 2, level, xp: 0, gold: 30, bag, equipment: eq, quests: { done: [], active: [] }, sk: { pts: {}, bar: [] }, cave: { day: 0 }, buffs: {} };
+  await order({ op: 'level', account: acc.lower, hero: ch.name, level, blank });
 }
 
 const [cmd, arg, ...more] = process.argv.slice(2);
 if (!cmd) list();
 else if (cmd === 'password' && arg) await setPassword(arg);
 else if (cmd === 'create' && arg) await create(arg);
-else if (cmd === 'hero' && arg && more.length >= 2) hero(arg, more[0], more[1], more[2]);
-else if (cmd === 'level' && arg && more.length >= 2) setLevel(arg, more[0], more[1]);
+else if (cmd === 'hero' && arg && more.length >= 2) await hero(arg, more[0], more[1], more[2]);
+else if (cmd === 'level' && arg && more.length >= 2) await setLevel(arg, more[0], more[1]);
 else {
   console.log(`Usage: node server/accounts.mjs                                  list the accounts
        node server/accounts.mjs password <name>                  a new password

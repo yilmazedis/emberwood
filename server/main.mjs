@@ -4,6 +4,7 @@
 // game an update ten times a second ({ t: 'w', ... }), and chat ({ t: 'chat', ... }) as it happens.
 import http from 'node:http';
 import fs from 'node:fs';
+import path from 'node:path';
 import { attachWebSocket } from './ws.mjs';
 import * as store from './store.mjs';
 import { hashPassword, checkPassword, makeToken, readToken } from './auth.mjs';
@@ -233,6 +234,79 @@ function checkBank(bank) {
 // through to the caster's side.
 const RECALL_FOR = 30000;
 const recalls = new Map(); // member's character id -> { from: caster's pid, at }
+
+// ---------------------------------------------------------------- the account tool (server/accounts.mjs)
+// The server keeps accounts in memory and writes them back, so the tool never edits their files while it runs:
+// it leaves an order in <data>/admin/ ({ op, … }), which the server carries out here within a couple of seconds
+// (or when it starts), answering in <order>.done (what happened, for the tool to show). A hero being played
+// when its account changes goes back to the sign-in screen, so its game loads what changed.
+const ADMIN = path.join(store.DATA_DIR, 'admin');
+function sendOff(charId, why) { // (a hero in play, back to its account's hero list)
+  const c = heroes.get(charId);
+  if (!c) return false;
+  c.send({ t: 'heroChanged', msg: why });
+  leaveWorld(c, true);
+  dropHero(c);
+  c.char = null;
+  return true;
+}
+function adminOrder(o) {
+  const acc = o.account ? store.getAccount(String(o.account)) : null;
+  switch (o.op) {
+    case 'password': {
+      if (!acc) return `No account called "${o.account}".`;
+      acc.salt = String(o.salt); acc.hash = String(o.hash);
+      store.markDirty(acc);
+      return `${acc.user} has a new password.`;
+    }
+    case 'create': {
+      const user = String(o.user || '');
+      if (!USER_RULE.test(user)) return 'Account names are 3–16 letters, numbers or _.';
+      if (store.getAccount(user)) return `There is already an account called ${user}.`;
+      store.createAccount(user, { salt: String(o.salt), hash: String(o.hash) });
+      return `The account ${user} is made.`;
+    }
+    case 'hero': {
+      if (!acc) return `No account called "${o.account}".`;
+      const name = String(o.name || '');
+      if (!NAME_RULE.test(name)) return 'Hero names are 3–14 letters, no spaces or numbers.';
+      if (!Object.hasOwn(CLASSES, o.cls)) return `The class is one of: ${Object.keys(CLASSES).join(', ')}.`;
+      if (store.nameTaken(name)) return `Someone already has the name ${name}.`;
+      if (acc.characters.length >= MAX_CHARACTERS) return `${acc.user} has ${MAX_CHARACTERS} heroes already.`;
+      store.addCharacter(acc, { name, cls: o.cls, look: 0, save: o.save && typeof o.save === 'object' ? o.save : null });
+      return `${name}, a level ${o.save?.level || 1} ${CLASSES[o.cls].name}, is in ${acc.user}'s heroes.`;
+    }
+    case 'level': {
+      if (!acc) return `No account called "${o.account}".`;
+      const ch = acc.characters.find((c) => c.name.toLowerCase() === String(o.hero || '').toLowerCase());
+      if (!ch) return `${acc.user} has no hero called "${o.hero}" (${acc.characters.map((c) => c.name).join(', ') || 'no heroes'}).`;
+      const level = Math.round(Number(o.level));
+      if (!(level >= 1 && level <= 80)) return 'The level is a number from 1 to 80.';
+      const was = ch.save?.level ?? ch.level ?? 1;
+      if (ch.save) { ch.save.level = level; ch.save.xp = 0; } else ch.save = o.blank ? { ...o.blank, level } : null;
+      ch.level = level;
+      ch.rev = (ch.rev || 0) + 1; // (a save from a game that had the old level is refused)
+      store.markDirty(acc);
+      const off = sendOff(ch.id, `${ch.name} was changed on the server (level ${level}): pick it again to play on.`);
+      return `${ch.name} is level ${level} now (was ${was})${off ? '; its game was sent back to the hero list' : ''}.`;
+    }
+    default: return `Unknown order "${o.op}".`;
+  }
+}
+function applyAdmin() {
+  let files;
+  try { files = fs.readdirSync(ADMIN).filter((f) => f.endsWith('.json')).sort(); } catch { return; }
+  for (const f of files) {
+    const file = path.join(ADMIN, f);
+    let o = null, result;
+    try { o = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { /* half written: next time */ continue; }
+    try { result = adminOrder(o); } catch (err) { result = `Failed: ${err.message}`; }
+    try { fs.unlinkSync(file); fs.writeFileSync(`${file.slice(0, -5)}.done`, result); } catch { /* the tool reads what it can */ }
+    console.log(`account tool: ${o.op} → ${result}`);
+  }
+}
+setInterval(applyAdmin, 2000).unref();
+setTimeout(applyAdmin, 500);
 
 // ---------------------------------------------------------------- messages
 const handlers = {
