@@ -326,7 +326,7 @@ function buildVegetation(scene, rng, plan, lowSpec) {
 function buildProps(scene, props, rng) {
   const parts = [];
   const fires = [];
-  const spiritFires = [];
+  const cryptFires = [];
   const waystones = [];
   const fencePosts = new Map(); // fence post index -> [x, z]; railings join neighbours
   const add = (geo, x, z, { y = 0, rotY = 0, ground = true } = {}) => {
@@ -436,11 +436,11 @@ function buildProps(scene, props, rng) {
     },
     headstone({ x, z, rotY, variant }) {
       let g;
-      if (variant === 'cross') {
-        g = mergeGeometries([
-          colored(new THREE.BoxGeometry(0.22, 1.35, 0.2).translate(0, 0.62, 0), 0x8c9095),
-          colored(new THREE.BoxGeometry(0.8, 0.2, 0.2).translate(0, 0.95, 0), 0x8c9095),
-        ]);
+      if (variant === 'tall') { // a plain tall slab, its top cut at a slant
+        g = colored(new THREE.BoxGeometry(0.55, 1.2, 0.2).translate(0, 0.55, 0), 0x8c9095);
+        const pos = g.attributes.position;
+        for (let i = 0; i < pos.count; i++) if (pos.getY(i) > 1) pos.setY(i, pos.getY(i) - (pos.getX(i) + 0.275) * 0.25);
+        g.computeVertexNormals();
       } else if (variant === 'broken') {
         g = colored(jitter(new THREE.BoxGeometry(0.8, 0.55, 0.24, 1, 2, 1), 0.12, rng).translate(0, 0.22, 0), 0x7e8388);
       } else {
@@ -486,10 +486,10 @@ function buildProps(scene, props, rng) {
       scene.add(w.group);
       waystones.push(w);
     },
-    brazier({ x, z }) { // green spirit fire
+    brazier({ x, z }) { // a fire by the crypt door
       add(colored(new THREE.CylinderGeometry(0.1, 0.14, 1.1, 6).translate(0, 0.55, 0), 0x3a3b40), x, z);
       add(colored(new THREE.CylinderGeometry(0.38, 0.2, 0.3, 8).translate(0, 1.2, 0), 0x3a3b40), x, z);
-      spiritFires.push(new THREE.Vector3(x, heightAt(x, z) + 1.35, z));
+      cryptFires.push(new THREE.Vector3(x, heightAt(x, z) + 1.35, z));
     },
   };
   for (const p of props) build[p.kind](p);
@@ -502,7 +502,7 @@ function buildProps(scene, props, rng) {
     const rot = Math.atan2(q[0] - p[0], q[1] - p[1]);
     for (const y of [0.35, 1.15]) add(colored(new THREE.BoxGeometry(0.04, 0.05, len).translate(0, y, 0), FENCE), (p[0] + q[0]) / 2, (p[1] + q[1]) / 2, { rotY: rot });
   }
-  const spiritLight = new THREE.Vector3(CRYPT.x - 3.2, heightAt(CRYPT.x - 3.2, CRYPT.z) + 2, CRYPT.z);
+  const cryptLight = new THREE.Vector3(CRYPT.x - 3.2, heightAt(CRYPT.x - 3.2, CRYPT.z) + 2, CRYPT.z);
 
   const mesh = new THREE.Mesh(mergeGeometries(parts), envMaterial());
   mesh.castShadow = true;
@@ -527,7 +527,7 @@ function buildProps(scene, props, rng) {
   crystal.castShadow = true;
   scene.add(crystal);
 
-  return { fires, crystal, spiritFires, spiritLight, waystones };
+  return { fires, crystal, cryptFires, cryptLight, waystones };
 }
 
 // A sky dome (gradient: top, middle, horizon); it follows the camera (places.js), so any land has one.
@@ -597,7 +597,7 @@ export function buildWorld(scene, { lowSpec = false } = {}) {
   buildVegetation(root, rng, plan, lowSpec);
   const sky = buildSky(scene);
   const minimap = buildMinimapBase(plan.mapDots);
-  return { root, water, sky, fires: props.fires, crystal: props.crystal, spiritFires: props.spiritFires, spiritLight: props.spiritLight, waystones: props.waystones, minimap };
+  return { root, water, sky, fires: props.fires, crystal: props.crystal, cryptFires: props.cryptFires, cryptLight: props.cryptLight, waystones: props.waystones, minimap };
 }
 
 // A waystone: a carved monolith with glowing runes and a crystal floating over it. Travelers touch it to go

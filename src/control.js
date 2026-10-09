@@ -57,7 +57,7 @@ export class Control {
     return !!e && e.isHero && !e.hostile;
   }
 
-  // Still there to aim at? (a fainted friend stays targeted: healers bring them round)
+  // Still there to aim at? (a fainted friend stays targeted: doctors bring them round)
   valid(e) {
     if (!e) return false;
     if (e.isHero) return this.game.others.byId.get(e.id) === e;

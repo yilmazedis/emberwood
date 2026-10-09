@@ -1039,7 +1039,7 @@ export class Player {
     this.game.rise();
   }
 
-  // Back on our feet with this share of our Life (all of it at camp; less when a healer raises us).
+  // Back on our feet with this share of our Life (all of it at camp; less when a doctor brings us round).
   revive(share = 1) {
     this.alive = true;
     this.hp = Math.max(1, this.stats.maxHp * share);

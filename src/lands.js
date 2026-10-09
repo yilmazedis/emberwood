@@ -298,8 +298,8 @@ function buildProps(om, group, rng, out) {
       }
     },
     headstone({ x, z, rotY, variant }) {
-      const g = variant === 'cross'
-        ? mergeGeometries([colored(new THREE.BoxGeometry(0.22, 1.35, 0.2).translate(0, 0.62, 0), 0x6e6a7a), colored(new THREE.BoxGeometry(0.8, 0.2, 0.2).translate(0, 0.95, 0), 0x6e6a7a)])
+      const g = variant === 'tall' // (a plain tall slab)
+        ? colored(new THREE.BoxGeometry(0.55, 1.2, 0.2).translate(0, 0.55, 0), 0x6e6a7a)
         : variant === 'broken'
           ? colored(jitter(new THREE.BoxGeometry(0.8, 0.55, 0.24, 1, 2, 1), 0.12, rng).translate(0, 0.22, 0), 0x5e5a6a)
           : mergeGeometries([colored(new THREE.BoxGeometry(0.8, 0.85, 0.22).translate(0, 0.38, 0), 0x726e80), colored(new THREE.CylinderGeometry(0.4, 0.4, 0.22, 12).rotateX(Math.PI / 2).translate(0, 0.8, 0), 0x726e80)]);

@@ -1,6 +1,6 @@
-// Shadowmere (levels 40–58): a cursed twilight marsh beyond the waystones. Void slimes, wraiths, death
-// knights and night stalkers; Malakar the Hollow King on his throne of bones; and the Abyssal Vault, where
-// Nyxara, Queen of the Abyss, waits at the bottom of everything.
+// Shadowmere (levels 40–58): a misty twilight marsh beyond the waystones, run by outlaws. Tar slimes, mist
+// hermits, black knights and night stalkers; Malakar the Marsh King on his throne; and the Sunken Vault, where
+// Nyxara the Smuggler Queen waits at the bottom of everything.
 import { OutdoorMap } from '../outdoor-map.js';
 import { DungeonMap } from '../dungeon-map.js';
 
@@ -10,15 +10,15 @@ export const shadowmere = new OutdoorMap({
   id: 'shadowmere', cx: 3000, cz: 0, radius: 100, seed: 3313,
   ground: { base: 1.2, hills: 2.2, rough: 0.2 },
   camp: { x: 0, z: 70, r: 11 },
-  door: { x: 62, z: -58, yaw: 0 }, // the Abyssal Vault
+  door: { x: 62, z: -58, yaw: 0 }, // the Sunken Vault
   zones: [
     { id: 'sm_camp', name: 'Duskwatch', sub: 'Safe haven · waystone', x: 0, z: 70, r: 12, safe: true },
     { id: 'sm_marsh', name: 'Gloom Marsh', sub: 'Level 40 – 44', x: 30, z: 40, r: 17 },
-    { id: 'sm_wraith', name: 'Wraithwood', sub: 'Level 44 – 48', x: -42, z: 24, r: 16 },
-    { id: 'sm_bones', name: 'Bone Fields', sub: 'Level 48 – 52', x: 40, z: -18, r: 16 },
-    { id: 'sm_spire', name: 'Spire of Night', sub: 'Level 52 – 56', x: -36, z: -46, r: 15 },
-    { id: 'sm_throne', name: 'The Hollow Throne', sub: 'Boss · Level 56', x: 4, z: -76, r: 13 },
-    { id: 'sm_door', name: 'The Abyssal Vault', sub: 'Dungeon · Level 56 – 60', x: 62, z: -58, r: 7 },
+    { id: 'sm_wraith', name: 'Mistwood', sub: 'Level 44 – 48', x: -42, z: 24, r: 16 },
+    { id: 'sm_bones', name: 'Old Battlefield', sub: 'Level 48 – 52', x: 40, z: -18, r: 16 },
+    { id: 'sm_spire', name: 'The Black Spire', sub: 'Level 52 – 56', x: -36, z: -46, r: 15 },
+    { id: 'sm_throne', name: 'The Marsh Throne', sub: 'Boss · Level 56', x: 4, z: -76, r: 13 },
+    { id: 'sm_door', name: 'The Sunken Vault', sub: 'Dungeon · Level 56 – 60', x: 62, z: -58, r: 7 },
   ],
   pools: [
     { x: 22, z: 46, r: 6, kind: 'tar' }, { x: 40, z: 32, r: 5, kind: 'tar' }, { x: 36, z: 52, r: 3.5, kind: 'tar' },
@@ -49,7 +49,7 @@ export const shadowmere = new OutdoorMap({
     // wraithwood's gravestones
     for (let i = 0; i < 18; i++) {
       const a = rng() * Math.PI * 2, r = 3 + rng() * 11;
-      put('headstone', -42 + Math.cos(a) * r, 24 + Math.sin(a) * r, { rotY: (rng() - 0.5) * 0.6, variant: rng() < 0.5 ? 'round' : rng() < 0.7 ? 'cross' : 'broken' }, 0.4);
+      put('headstone', -42 + Math.cos(a) * r, 24 + Math.sin(a) * r, { rotY: (rng() - 0.5) * 0.6, variant: rng() < 0.5 ? 'round' : rng() < 0.7 ? 'tall' : 'broken' }, 0.4);
     }
     // the bone fields
     for (let i = 0; i < 5; i++) put('bones', 40 + (rng() - 0.5) * 20, -18 + (rng() - 0.5) * 20);
@@ -91,7 +91,7 @@ export const SHADOWMERE_SPAWNS = [
   { type: 'hollow_king', ...S(4, -79), r: 1, n: 1, lvl: 56 },
 ];
 
-// The Abyssal Vault: S start, W and E the wings, P and Q the reliquaries, R the bridge, B Nyxara's abyss.
+// The Sunken Vault: S start, W and E the wings, P and Q the strongrooms, R the bridge, B Nyxara's hall.
 export const abyss = new DungeonMap({
   id: 'abyss',
   cx: 3000, cz: -420,
@@ -114,8 +114,8 @@ export const abyss = new DungeonMap({
     '#WWW####SSS####EEE#',
     '###################',
   ],
-  zone: { id: 'abyss', name: 'The Abyssal Vault', sub: 'Dungeon · Level 56 – 60' },
-  boss: { id: 'abyss_heart', name: 'The Heart of the Abyss', sub: 'Boss · Level 60' },
+  zone: { id: 'abyss', name: 'The Sunken Vault', sub: 'Dungeon · Level 56 – 60' },
+  boss: { id: 'abyss_heart', name: "The Smuggler Queen's Hall", sub: 'Boss · Level 60' },
 });
 {
   const d = abyss, R = d.rooms;
@@ -127,8 +127,8 @@ export const abyss = new DungeonMap({
   d.put('rubble_half', R.E.cx, R.E.cz, { rot: 1.2, collide: 0.8 });
   d.torch(8, 1, 'n'); d.torch(8, 4, 'n'); d.torch(8, 14, 'n'); d.torch(8, 17, 'n');
   d.banner('banner_patternA_white', 8, 2, 'n'); d.banner('banner_patternA_white', 8, 16, 'n');
-  d.chest({ id: 'reliquary_w', model: 'chest', x: R.P.x0 + 1.5, z: R.P.cz, rot: Math.PI / 2, name: 'Reliquary', title: 'Bones and silver' });
-  d.chest({ id: 'reliquary_e', model: 'chest', x: R.Q.x1 - 1.5, z: R.Q.cz, rot: -Math.PI / 2, name: 'Reliquary', title: 'Bones and silver' });
+  d.chest({ id: 'reliquary_w', model: 'chest', x: R.P.x0 + 1.5, z: R.P.cz, rot: Math.PI / 2, name: 'Strongbox', title: 'Silver and stolen goods' });
+  d.chest({ id: 'reliquary_e', model: 'chest', x: R.Q.x1 - 1.5, z: R.Q.cz, rot: -Math.PI / 2, name: 'Strongbox', title: 'Silver and stolen goods' });
   d.put('pillar_decorated', R.R.cx - 3.5, R.R.cz, { collide: 1.0 });
   d.put('pillar_decorated', R.R.cx + 3.5, R.R.cz, { collide: 1.0 });
   d.torch(1, 4, 'n'); d.torch(1, 14, 'n'); d.torch(3, 4, 'w'); d.torch(3, 14, 'e'); d.torch(5, 4, 'w'); d.torch(5, 14, 'e');

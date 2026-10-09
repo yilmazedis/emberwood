@@ -1,5 +1,5 @@
 // The Forgotten Crypt beneath Emberwood's graveyard: its plan, its monsters and the pieces that dress it
-// (see dungeon-map.js). Rooms: S start, H hall of bones, C chapel, O ossuary, V vault, B the Lich's sanctum.
+// (see dungeon-map.js). Rooms: S start, H hall of bones, C side room, O ossuary, V vault, B Morvain's laboratory.
 import { DungeonMap } from '../dungeon-map.js';
 import { mulberry32 } from '../util.js';
 
@@ -25,8 +25,8 @@ export const crypt = new DungeonMap({
     '#HHHHH##SSS####',
     '###############',
   ],
-  zone: { id: 'crypt', name: 'Forgotten Crypt', sub: 'Undead · Level 7 – 9' },
-  boss: { id: 'sanctum', name: "Morvain's Sanctum", sub: 'Boss · Level 9' },
+  zone: { id: 'crypt', name: 'Forgotten Crypt', sub: 'Grave robbers · Level 7 – 9' },
+  boss: { id: 'sanctum', name: "Morvain's Laboratory", sub: 'Boss · Level 9' },
 });
 
 const d = crypt, R = d.rooms;
@@ -75,10 +75,10 @@ d.put('barrel_small', H.x0 + 1.2, H.z0 + 1.3, { collide: 0.5 });
 d.put('box_small', H.x0 + 2.5, H.z0 + 1.2, { rot: 0.4, collide: 0.6 });
 d.put('candle_triple', H.x1 - 1.2, H.z0 + 1.1);
 
-// chapel
+// the side room
 d.torch(8, 2, 'n'); d.torch(9, 1, 'w');
 d.banner('banner_shield_red', 8, 1, 'n');
-d.chest({ id: 'chapel', model: 'chest', x: C.x0 + 2, z: C.z0 + 1.45, rot: 0, name: 'Old Chest', title: 'Crypt offerings' });
+d.chest({ id: 'chapel', model: 'chest', x: C.x0 + 2, z: C.z0 + 1.45, rot: 0, name: 'Old Chest', title: 'The robbers\' stash' });
 d.put('candle_triple', C.x1 - 1.1, C.z0 + 1.1);
 d.put('candle_triple', C.x0 + 1.0, C.z1 - 1.2, { rot: 1 });
 d.put('candle_lit', C.cx + 1.6, C.z0 + 0.9);

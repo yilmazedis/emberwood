@@ -317,12 +317,12 @@ export class Game {
     const cl = new THREE.PointLight(0xa070ff, 10, 12, 1.6);
     cl.position.copy(this.world.crystal.position);
     this.scene.add(cl);
-    this.spiritLight = new THREE.PointLight(0x4dff8a, 10, 14, 1.6);
-    this.spiritLight.position.copy(this.world.spiritLight);
-    this.scene.add(this.spiritLight);
+    this.cryptLight = new THREE.PointLight(0xff8a3a, 10, 14, 1.6);
+    this.cryptLight.position.copy(this.world.cryptLight);
+    this.scene.add(this.cryptLight);
     this.fireAcc = 0;
     // away from Emberwood these four go to the nearest torches and fires; remember how they were set up
-    this.staticLights = [...this.fireLights, cl, this.spiritLight].map((light) => ({
+    this.staticLights = [...this.fireLights, cl, this.cryptLight].map((light) => ({
       light, pos: light.position.clone(), color: light.color.clone(), distance: light.distance, decay: light.decay, intensity: light.intensity,
     }));
     this.places = new Places(this); // where we are, and the ways to the other places

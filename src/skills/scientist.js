@@ -1,4 +1,4 @@
-// Scientist: Pyrology (fire), Cryology (frost), Alchemy (poisons, curses, doors through space). The great
+// Scientist: Pyrology (fire), Cryology (frost), Alchemy (poisons, weakening brews, doors through space). The great
 // elemental spells want a long staff; the alchemist's best tricks want a book in the off hand.
 import * as THREE from 'three';
 import { heightAt } from '../world.js';

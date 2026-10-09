@@ -1,5 +1,5 @@
 // A dungeon, drawn and run: its plan (dungeon-map.js, shared with the game server) built from the KayKit
-// Dungeon pack, with its torches, chests, the rune circle in the boss's room and the boss's hoard, which
+// Dungeon pack, with its torches, chests, the ring in the boss's room and the boss's hoard, which
 // opens when the boss falls. Each party gets its own copy on the server; here there's just the one we're in.
 // Walls on the camera side of a room are cut down to knee height so they never hide the fight.
 // The pieces of every dungeon come packed in one file (tools/pack-dungeon.mjs), fetched on the way there.
@@ -66,8 +66,9 @@ export function buildMinimap(d) {
   return { canvas: cv, range: R, cx: mid.x, cz: mid.z };
 }
 
-// ---------------------------------------------------------------- the rune circle in the boss's room
-function runeCircle(room, color) {
+// ---------------------------------------------------------------- the ring in the boss's room
+// Two plain rings inlaid in the floor (an old duelling ring), softly lit, brighter when the boss calls for help.
+function bossRing(room, color) {
   const mat = new THREE.ShaderMaterial({
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
     uniforms: { uT: { value: 0 }, uPulse: { value: 0 }, uCol: { value: hdr(color, 1.5) } },
@@ -75,12 +76,9 @@ function runeCircle(room, color) {
     fragmentShader: `uniform float uT, uPulse; uniform vec3 uCol; varying vec2 vP;
       float band(float r, float at, float w) { return smoothstep(w, 0.0, abs(r - at)); }
       void main() {
-        float r = length(vP), a = atan(vP.y, vP.x);
-        float rings = band(r, 0.95, 0.03) + band(r, 0.8, 0.02) * 0.8 + band(r, 0.42, 0.018) * 0.7;
-        float runes = step(0.83, r) * step(r, 0.92) * step(0.62, fract(a * 3.8197 + uT * 0.06)) * 0.55;
-        float u = a * 0.95493 - uT * 0.04;
-        float spokes = step(0.42, r) * step(r, 0.8) * smoothstep(0.02, 0.0, abs(fract(u + 0.5) - 0.5) * 1.0472 * r) * 0.7;
-        float v = (rings + runes + spokes) * (0.6 + 0.2 * sin(uT * 2.1) + uPulse) + smoothstep(1.0, 0.0, r) * 0.06 * (1.0 + uPulse);
+        float r = length(vP);
+        float rings = band(r, 0.95, 0.03) + band(r, 0.88, 0.015) * 0.6;
+        float v = rings * (0.55 + 0.1 * sin(uT * 1.3) + uPulse) + smoothstep(1.0, 0.0, r) * 0.04 * (1.0 + uPulse);
         gl_FragColor = vec4(uCol * v, v);
       }`,
   });
@@ -138,7 +136,7 @@ export class DungeonView {
     const flame = this.look.flame;
     this.fires = this.d.flames.map((f) => ({ pos: new THREE.Vector3(f.x, f.y, f.z), scale: 0.28, color: flame }));
     this.followLight = true; // a light follows the hero down here (Diablo-style light radius)
-    // light sources: torches, the rune circle, and the hoard once it's unguarded
+    // light sources: torches, the boss's ring, and the hoard once it's unguarded
     this.lights = this.d.flames.map((f, i) => ({ pos: new THREE.Vector3(f.x + this.d.flameDirs[i].x * 0.55, f.y, f.z + this.d.flameDirs[i].z * 0.55), color: flame, power: 13, dist: 12, flicker: i }));
     const B = this.d.rooms.B;
     this.lights.push({ pos: new THREE.Vector3(B.cx, 1.6, B.cz), color: 0x9a5cff, power: 9, dist: 15, gain: () => 0.7 + this.pulseV * 0.8 });
@@ -226,9 +224,9 @@ export class DungeonView {
       c.group = obj;
       this.group.add(obj);
     }
-    this.circle = runeCircle(this.d.rooms.B, this.look.circle ?? 0x8a4dff);
+    this.circle = bossRing(this.d.rooms.B, this.look.circle ?? 0xffa040);
     this.group.add(this.circle);
-    if (this.map.down) this.group.add(trapdoor(this.map.down, this.look.circle ?? 0x8a4dff));
+    if (this.map.down) this.group.add(trapdoor(this.map.down, this.look.circle ?? 0xffa040));
   }
 
   show(on) {

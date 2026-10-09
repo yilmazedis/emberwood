@@ -10,9 +10,9 @@ import { chance } from './util.js';
 
 export const MAX_ACTIVE = 6;
 const BOSS_LABEL = {
-  brute: 'Grok defeated', lich: 'Morvain destroyed', frost_jarl: 'Hrimgar defeated', rime_king: 'Vorrak destroyed', ashen_king: 'Vulkhar defeated',
-  forgemaster: 'Kaldur defeated', hollow_king: 'Malakar destroyed', abyss_queen: 'Nyxara destroyed', bone_colossus: 'Colossus destroyed', ymira: 'Ymira defeated',
-  magmaborn: 'Magmaborn destroyed', void_herald: 'Herald silenced', gorehorn: 'Gorehorn defeated', skadi: 'Skadi defeated', ignis: 'Ignis put out', umbra: 'Umbra destroyed',
+  brute: 'Grok defeated', lich: 'Morvain defeated', frost_jarl: 'Hrimgar defeated', rime_king: 'Vorrak defeated', ashen_king: 'Vulkhar defeated',
+  forgemaster: 'Kaldur defeated', hollow_king: 'Malakar defeated', abyss_queen: 'Nyxara defeated', bone_colossus: 'Colossus defeated', ymira: 'Ylva defeated',
+  magmaborn: 'Magma Brute defeated', void_herald: 'Envoy stopped', gorehorn: 'Gorehorn defeated', skadi: 'Brynja defeated', ignis: 'Ignis defeated', umbra: 'Umbra defeated',
 };
 
 // A quest's XP and gold: a share of a level's XP (bigger for bosses), and gold for its level.

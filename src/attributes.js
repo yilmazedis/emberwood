@@ -1,6 +1,6 @@
 // Attributes, as in Dota 2: Strength, Agility and Intelligence. A hero starts with its class's, gets five points
 // to spend at every level (any class may put them anywhere), and its gear gives more (items.js). Every class has
-// a primary attribute that powers its weapon blows (Warrior: Strength, Rogue: Agility, Scientist and Healer:
+// a primary attribute that powers its weapon blows (Warrior: Strength, Rogue: Agility, Scientist and Doctor:
 // Intelligence); besides, each does the same for everyone:
 //   Strength: Life and Life regeneration
 //   Agility: attack speed and armor
@@ -38,5 +38,5 @@ export function attrEffects(k, total, cls) {
 export const ATTR_ABOUT = {
   str: 'Life and Life regeneration, for everyone. A Warrior\'s primary attribute: its weapon damage too.',
   agi: 'Attack speed and armor, for everyone. A Rogue\'s primary attribute: its weapon damage too.',
-  int: 'Spell damage, healing and Mana, for everyone. A Scientist\'s and a Healer\'s primary attribute: their weapon damage too.',
+  int: 'Spell damage, healing and Mana, for everyone. A Scientist\'s and a Doctor\'s primary attribute: their weapon damage too.',
 };

@@ -39,7 +39,7 @@ export const TREES = {
   scientist: [
     { id: 'fire', name: 'Pyrology', color: '#ff7a2a', about: 'Fire: blasts, burning ground and meteors.', passive: { spellPct: 0.003 }, skills: ['fireball', 'flame_wave', 'inferno', 'meteor'] },
     { id: 'frost', name: 'Cryology', color: '#8fdcff', about: 'Frost: slows, freezes and storms of ice.', passive: { spellPct: 0.002, armorPct: 0.005 }, skills: ['ice_bolt', 'frost_nova', 'blizzard', 'glacial_prison'] },
-    { id: 'alchemy', name: 'Alchemy', color: '#8aff6a', about: 'Poisons, curses, and doors through space.', passive: { dotPct: 0.006, mpRegenPct: 0.004 }, skills: ['toxic_flask', 'blink', 'recall', 'plague'] },
+    { id: 'alchemy', name: 'Alchemy', color: '#8aff6a', about: 'Poisons, weakening brews, and doors through space.', passive: { dotPct: 0.006, mpRegenPct: 0.004 }, skills: ['toxic_flask', 'blink', 'recall', 'plague'] },
   ],
   rogue: [
     { id: 'assassin', name: 'Assassination', color: '#c9a8ff', about: 'Daggers: from behind, with poison.', passive: { crit: 0.0012, daggerPct: 0.002 }, skills: ['backstab', 'poison_blade', 'shadow_step', 'eviscerate'] },

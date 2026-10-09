@@ -1,5 +1,5 @@
-// The deeper floors under each land's dungeon, down the stairs behind its boss: the Bone Pits under the crypt,
-// the Frozen Deep under Rimeheart, the Magma Core under the forge, and the Void Below under the vault. Harder
+// The deeper floors under each land's dungeon, down the stairs behind its boss: the Deep Pits under the crypt,
+// the Frozen Deep under Rimeheart, the Magma Core under the forge, and the Deep Mines under the vault. Harder
 // than the floors above, each with a keeper of its own. Their plans are the floors above, turned around, and
 // they're dressed from the plan (dungeon-map.js autoDress).
 import { DungeonMap } from '../dungeon-map.js';
@@ -35,8 +35,8 @@ const ABYSS = ['###################', '####BBBBBBBBBBB####', '####BBBBBBBBBBB###
 
 export const crypt2 = new DungeonMap({
   id: 'crypt2', cx: 0, cz: -560, map: mirror(RIMEHEART),
-  zone: { id: 'crypt_deep', name: 'The Bone Pits', sub: 'Dungeon · Level 11 – 14' },
-  boss: { id: 'bone_throne', name: 'The Pit of Bones', sub: 'Boss · Level 14' },
+  zone: { id: 'crypt_deep', name: 'The Deep Pits', sub: 'Dungeon · Level 11 – 14' },
+  boss: { id: 'bone_throne', name: 'The Colossus Pit', sub: 'Boss · Level 14' },
 });
 crypt2.autoDress({ seed: 0xb0e5, banner: 'banner_patternB_brown', plain: ['wall', 'wall', 'wall_cracked', 'wall_shelves', 'wall_arched'] });
 export const CRYPT2_SPAWNS = spawnsFor(crypt2, { kinds: ['bone_guard', 'skeleton_mage', 'skeleton_rogue', 'skeleton_warrior'], levels: [11, 13], boss: 'bone_colossus' });
@@ -44,7 +44,7 @@ export const CRYPT2_SPAWNS = spawnsFor(crypt2, { kinds: ['bone_guard', 'skeleton
 export const rimeheart2 = new DungeonMap({
   id: 'rimeheart2', cx: 1000, cz: -580, map: mirror(FORGE),
   zone: { id: 'rime_deep', name: 'The Frozen Deep', sub: 'Dungeon · Level 25 – 28' },
-  boss: { id: 'ymira_hall', name: "Ymira's Hall", sub: 'Boss · Level 28' },
+  boss: { id: 'ymira_hall', name: "Ylva's Hall", sub: 'Boss · Level 28' },
 });
 rimeheart2.autoDress({ seed: 0x1ce, banner: 'banner_patternC_blue', dirt: true, plain: ['wall', 'wall', 'wall_cracked', 'wall_arched'] });
 export const RIMEHEART2_SPAWNS = spawnsFor(rimeheart2, { kinds: ['frostbone', 'ice_witch', 'raider_berserker', 'frost_archer'], levels: [25, 27], boss: 'ymira' });
@@ -59,8 +59,8 @@ export const FORGE2_SPAWNS = spawnsFor(forge2, { kinds: ['molten_brute', 'flame_
 
 export const abyss2 = new DungeonMap({
   id: 'abyss2', cx: 3000, cz: -580, map: mirror(CRYPT),
-  zone: { id: 'abyss_deep', name: 'The Void Below', sub: 'Dungeon · Level 60 – 62' },
-  boss: { id: 'void_throne', name: 'The Void Throne', sub: 'Boss · Level 62' },
+  zone: { id: 'abyss_deep', name: 'The Deep Mines', sub: 'Dungeon · Level 60 – 62' },
+  boss: { id: 'void_throne', name: "The Envoy's Hall", sub: 'Boss · Level 62' },
 });
 abyss2.autoDress({ seed: 0xab2, banner: 'banner_patternA_white', plain: ['wall', 'wall', 'wall_arched', 'wall_cracked'] });
 export const ABYSS2_SPAWNS = spawnsFor(abyss2, { kinds: ['death_knight', 'wraith', 'night_stalker', 'shadow_archer'], levels: [60, 61], boss: 'void_herald' });

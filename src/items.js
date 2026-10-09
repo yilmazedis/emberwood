@@ -3,7 +3,7 @@
 // shares it), no three.js.
 //
 // Items come in three classes, low (levels 1–19), middle (20–39) and high (40–80), and each hero class has
-// its own weapons and clothes in each: a hero can't wear another class's (healers may also wield warriors'
+// its own weapons and clothes in each: a hero can't wear another class's (doctors may also wield warriors'
 // two-handed swords, spears and maces, and their shields). Accessories (rings, earrings, necklaces, belts)
 // are for everyone and only drop from monsters. Unique items only drop from the roaming world bosses: weapons,
 // shields, books and accessories, never clothes.
@@ -70,7 +70,7 @@ export const WEAPON_TYPES = {
   staff: { label: 'Long staff', hands: 2, speed: 1.15, dps: 1.035, ranged: 'bolt', model: 'staff', weight: 1.8, mix: { int: 4, agi: 1 } },
   rod: { label: 'Short staff', hands: 1, speed: 1.15, dps: 0.78, ranged: 'bolt', model: 'wand', weight: 1.0, mix: { int: 3, agi: 1 } },
 };
-// who may wield each kind (warriors' two-handed swords, spears and maces suit healers too)
+// who may wield each kind (warriors' two-handed swords, spears and maces suit doctors too)
 const WIELD = {
   sword1h: ['warrior'], axe1h: ['warrior'], axe2h: ['warrior'],
   sword2h: ['warrior', 'healer'], spear: ['warrior', 'healer'], maul: ['warrior', 'healer'],
@@ -134,7 +134,7 @@ weapon('blade_axe', 'Blade Axe', 'axe1h', 10, { tint: 0xd8e2ee });
 weapon('giant_sword', 'Giant Sword', 'sword2h', 10);
 weapon('mirage_sword', 'Mirage Sword', 'sword1h', 20, { tint: 0xbfe4ff, glow: 0x2a6aa8 });
 weapon('glaive', 'Glaive', 'spear', 20);
-weapon('sword_of_the_dead', 'Sword of the Dead', 'sword1h', 30, { model: 'Skeleton_Blade', tint: 0xd8d0e8, glow: 0x4a2a7a });
+weapon('sword_of_the_dead', 'Barrowblade', 'sword1h', 30, { model: 'Skeleton_Blade', tint: 0xd8d0e8, glow: 0x4a2a7a });
 weapon('gigantic_axe', 'Gigantic Axe', 'axe2h', 30, { tint: 0xb8b0a8 });
 weapon('raptor', 'Raptor', 'sword1h', 40, { tint: 0xffe6a0, glow: 0x8a5a10 });
 weapon('iron_impact', 'Iron Impact', 'maul', 40, { tint: 0x9aa4b0 });
@@ -151,7 +151,7 @@ for (const [p, n, lv] of [['plate', 'Plate', 1], ['chitin', 'Chitin', 20], ['she
   });
 }
 
-// ---- Healer (Emberwood's doctor): maces of their own (and warriors' great weapons and shields); Chain, Apothecary
+// ---- Doctor (Emberwood's doctor): maces of their own (and warriors' great weapons and shields); Chain, Apothecary
 // and Physician
 weapon('iron_mace', 'Iron Mace', 'mace1h', 1);
 weapon('morning_star', 'Morning Star', 'mace1h', 10, { tint: 0xd0d6de });
@@ -178,7 +178,7 @@ weapon('viper_fang', 'Viper Fang', 'dagger', 30, { tint: 0xa0ffb0, glow: 0x1a6a2
 weapon('longbow', 'Longbow', 'bow', 30, { tint: 0x8a6a4a });
 weapon('nightfang', 'Nightfang', 'dagger', 40, { tint: 0x9a8aff, glow: 0x3a1a8a });
 weapon('elven_bow', 'Elven Bow', 'bow', 40, { tint: 0xe0ffd0, glow: 0x2a6a2a });
-weapon('soul_reaper', 'Soul Reaper', 'dagger', 50, { tint: 0xff8aa0, glow: 0x7a1a3a });
+weapon('soul_reaper', 'Swiftreaver', 'dagger', 50, { tint: 0xff8aa0, glow: 0x7a1a3a });
 weapon('dragonbone_bow', 'Dragonbone Bow', 'bow', 50, { tint: 0xfff0d8, glow: 0x7a4a1a });
 for (const [p, n, lv] of [['leather', 'Leather', 1], ['stalker', 'Stalker', 20], ['nightshade', 'Nightshade', 40]]) {
   set(p, n, 'rogue', lv, {
@@ -195,7 +195,7 @@ weapon('ember_staff', 'Ember Staff', 'staff', 10, { tint: 0xffb080, glow: 0x6a2a
 weapon('galvanic_rod', 'Galvanic Rod', 'rod', 10, { tint: 0xa0d8ff, glow: 0x1a4a7a });
 weapon('frostwood_staff', 'Frostwood Staff', 'staff', 20, { tint: 0xc8ecff, glow: 0x2a5a8a });
 weapon('alchemist_rod', "Alchemist's Rod", 'rod', 20, { tint: 0xb0ffb0, glow: 0x1a6a1a });
-weapon('stormcaller', 'Stormcaller', 'staff', 30, { model: 'Skeleton_Staff', tint: 0xd8d0ff, glow: 0x3a2a9a });
+weapon('stormcaller', 'Stormcaller', 'staff', 30, { model: 'staff', tint: 0xd8d0ff, glow: 0x3a2a9a });
 weapon('catalyst_rod', 'Catalyst Rod', 'rod', 30, { tint: 0xffe08a, glow: 0x7a5a10 });
 weapon('arcanum_staff', 'Arcanum Staff', 'staff', 40, { tint: 0xe0c0ff, glow: 0x5a1a9a });
 weapon('aether_rod', 'Aether Rod', 'rod', 40, { tint: 0xc0fff8, glow: 0x1a7a7a });
@@ -251,14 +251,14 @@ for (const [tier, level] of Object.entries(ACC_LEVEL)) {
   weapon('judgement_maul', 'Maul of Reckoning', 'maul', L, { ...R, tint: 0xf0e0c0, glow: 0xffc040 });
   weapon('viper_queen', 'Viper Queen', 'dagger', L, { ...R, tint: 0xc0ffb0, glow: 0x3aff6a });
   weapon('stormstring', 'Stormstring', 'bow', L, { ...R, tint: 0xd0e8ff, glow: 0x4ab0ff });
-  weapon('cataclysm_staff', 'Staff of Cataclysm', 'staff', L, { ...R, model: 'Skeleton_Staff', tint: 0xffc0a0, glow: 0xff3a10 });
+  weapon('cataclysm_staff', 'Staff of Cataclysm', 'staff', L, { ...R, model: 'staff', tint: 0xffc0a0, glow: 0xff3a10 });
   weapon('quake_rod', 'Quake Rod', 'rod', L, { ...R, tint: 0xe0c090, glow: 0xffa020 });
   shield('ruin_bulwark', 'Bulwark of Ruin', L, { ...R, model: 'shield_spikes_color', tint: 0x8a6a5a, glow: 0xff5a1a });
   book('tome_calamity', 'Tome of Calamity', L, { ...R, tint: 0xffb090, glow: 0xff4a10 });
   const sets = [
     ['warlord', 'Warlord', 'warrior', 1, { str: 4, agi: 1 }, 0x8a3a2a, 1, 0.35, ['Helm', 'Plate', 'Gauntlets', 'Greaves']],
     ['sanctified', 'Plaguewarden', 'healer', 0.85, { int: 1, str: 1 }, 0x4a3e36, 1, 0.25, ['Mask', 'Coat', 'Gloves', 'Boots']], // (key kept for saves)
-    ['phantom', 'Phantom', 'rogue', 0.7, { agi: 3, str: 1 }, 0x2a2a3a, 0, 0.05, ['Hood', 'Jerkin', 'Gloves', 'Boots']],
+    ['phantom', 'Nightrunner', 'rogue', 0.7, { agi: 3, str: 1 }, 0x2a2a3a, 0, 0.05, ['Hood', 'Jerkin', 'Gloves', 'Boots']],
     ['stormweave', 'Stormweave', 'scientist', 0.55, { int: 3, str: 2 }, 0x3a5aa8, 1, 0, ['Cap', 'Coat', 'Gloves', 'Shoes']],
   ];
   for (const [p, n, cls, share, mix, body, helm, metal, [h, b, g, f]] of sets) {
@@ -274,7 +274,7 @@ function uniqueAcc(key, name, tier, kind, mix, gem, extra = {}) {
 }
 {
   const U = { unique: true };
-  // low: Gorehorn and the Frost Giant (Emberwood, Frostfang)
+  // low: Gorehorn and Brynja the Avalanche (Emberwood, Frostfang)
   weapon('wanderers_edge', "Wanderer's Edge", 'sword1h', 12, { ...U, tint: 0xffd8a0, glow: 0xff6a10, flavour: 'agi' });
   weapon('ogre_splitter', 'Ogre Splitter', 'axe2h', 12, { ...U, tint: 0xd8c0a0, glow: 0xff6a10, flavour: 'agi' });
   weapon('mace_of_dawn', 'Mace of Dawn', 'mace1h', 12, { ...U, tint: 0xffe8b0, glow: 0xffb030, flavour: 'str' });
@@ -288,13 +288,13 @@ function uniqueAcc(key, name, tier, kind, mix, gem, extra = {}) {
   uniqueAcc('moonstone_earring', 'Moonstone Earring', 'low', 'ear', { agi: 1, int: 1 }, 0xd0e8ff);
   uniqueAcc('pendant_wild', 'Pendant of the Wild', 'low', 'neck', { agi: 2, str: 1 }, 0x6aff6a);
   uniqueAcc('girdle_giants', 'Girdle of Giants', 'low', 'belt', { str: 3 }, 0xc8a050);
-  // middle: Ignis the Living Pyre (Cinderfall)
+  // middle: Ignis the Firebrand (Cinderfall)
   weapon('emberbrand', 'Emberbrand', 'sword1h', 28, { ...U, tint: 0xffb070, glow: 0xff3a00, flavour: 'agi' });
   weapon('ashbringer', 'Ashbringer', 'sword2h', 28, { ...U, model: 'sword_2handed_color', tint: 0xffc890, glow: 0xff4a10, flavour: 'agi' });
   weapon('pyre_mace', 'Pyre Mace', 'mace1h', 28, { ...U, tint: 0xffa060, glow: 0xff4a00, flavour: 'int' });
   weapon('cinderkiss', 'Cinderkiss', 'dagger', 28, { ...U, tint: 0xffc0a0, glow: 0xff5a20, flavour: 'agi' });
   weapon('phoenix_bow', 'Phoenix Bow', 'bow', 28, { ...U, tint: 0xffd090, glow: 0xff6a10, flavour: 'str' });
-  weapon('burning_sun', 'Staff of the Burning Sun', 'staff', 28, { ...U, model: 'Skeleton_Staff', tint: 0xffd0a0, glow: 0xff5a10, flavour: 'int' });
+  weapon('burning_sun', 'Staff of the Burning Sun', 'staff', 28, { ...U, model: 'staff', tint: 0xffd0a0, glow: 0xff5a10, flavour: 'int' });
   weapon('volatile_rod', 'Volatile Rod', 'rod', 28, { ...U, tint: 0xffe070, glow: 0xff8a10, flavour: 'agi' });
   shield('obsidian_bulwark', 'Obsidian Bulwark', 28, { ...U, model: 'shield_spikes_color', tint: 0x8a8090, glow: 0xff4a10 });
   book('codex_ignis', 'Codex Ignis', 28, { ...U, tint: 0xffb080, glow: 0xff4a10 });
@@ -302,20 +302,20 @@ function uniqueAcc(key, name, tier, kind, mix, gem, extra = {}) {
   uniqueAcc('ember_earring', 'Earring of Embers', 'mid', 'ear', { agi: 1, int: 1 }, 0xff8a2a);
   uniqueAcc('heart_forge', 'Heart of the Forge', 'mid', 'neck', { str: 3 }, 0xff6a10);
   uniqueAcc('belt_ashen', 'Belt of the Ashen King', 'mid', 'belt', { str: 2, agi: 1 }, 0x8a2a10);
-  // high: Umbra the Devourer (Shadowmere)
+  // high: Umbra the Bog Tyrant (Shadowmere)
   weapon('nightbane', 'Nightbane', 'sword1h', 46, { ...U, tint: 0xc0a8ff, glow: 0x6a2aff, flavour: 'agi' });
-  weapon('abyssal_reaver', 'Abyssal Reaver', 'axe2h', 46, { ...U, tint: 0xa898d0, glow: 0x8a2aff, flavour: 'agi' });
+  weapon('abyssal_reaver', 'Deepmarsh Reaver', 'axe2h', 46, { ...U, tint: 0xa898d0, glow: 0x8a2aff, flavour: 'agi' });
   weapon('halo_mercy', 'Scepter of Mercy', 'mace1h', 46, { ...U, model: 'proc_scepter', tint: 0xffffff, glow: 0xd0b0ff, flavour: 'int' });
-  weapon('voidstep', 'Voidstep', 'dagger', 46, { ...U, tint: 0xd0b8ff, glow: 0x7a3aff, flavour: 'agi' });
+  weapon('voidstep', 'Mistfang', 'dagger', 46, { ...U, tint: 0xd0b8ff, glow: 0x7a3aff, flavour: 'agi' });
   weapon('starfall_bow', 'Starfall Bow', 'bow', 46, { ...U, tint: 0xe8e0ff, glow: 0x9a6aff, flavour: 'agi' });
-  weapon('staff_eternity', 'Staff of Eternity', 'staff', 46, { ...U, tint: 0xf0e0ff, glow: 0xb06aff, flavour: 'int' });
+  weapon('staff_eternity', 'Staff of Ages', 'staff', 46, { ...U, tint: 0xf0e0ff, glow: 0xb06aff, flavour: 'int' });
   weapon('singularity_rod', 'Singularity Rod', 'rod', 46, { ...U, tint: 0xd8c8ff, glow: 0x8a4aff, flavour: 'int' });
   shield('wall_shadows', 'Wall of Shadows', 46, { ...U, model: 'shield_badge_color', tint: 0xb0a0d0, glow: 0x6a2aff });
-  book('tome_void', 'Tome of the Void', 46, { ...U, tint: 0xd0c0ff, glow: 0x7a3aff });
+  book('tome_void', 'Tome of the Deep', 46, { ...U, tint: 0xd0c0ff, glow: 0x7a3aff });
   uniqueAcc('ring_nyxara', 'Ring of Nyxara', 'high', 'ring', { str: 2 }, 0xff4ad8);
-  uniqueAcc('tear_abyss', 'Tear of the Abyss', 'high', 'ear', { int: 1 }, 0xb07aff);
-  uniqueAcc('amulet_eternity', 'Amulet of Eternity', 'high', 'neck', { agi: 2, str: 1 }, 0xd0b0ff);
-  uniqueAcc('belt_hollow', 'Belt of the Hollow King', 'high', 'belt', { str: 3 }, 0x9a6aff);
+  uniqueAcc('tear_abyss', 'Tear of the Deep', 'high', 'ear', { int: 1 }, 0xb07aff);
+  uniqueAcc('amulet_eternity', 'Amulet of Ages', 'high', 'neck', { agi: 2, str: 1 }, 0xd0b0ff);
+  uniqueAcc('belt_hollow', 'Belt of the Marsh King', 'high', 'belt', { str: 3 }, 0x9a6aff);
 }
 export const UNIQUES = { low: [], mid: [], high: [] };
 const TOP_ITEM_LEVEL = Math.max(...Object.values(ITEMS).filter((d) => d.tier !== 'rare').map((d) => d.level)); // (the best items monsters drop: past it, those)
@@ -403,7 +403,7 @@ export function cannotUse(it, cls, level) {
   if (level < d.level) return `Needs level ${d.level}`;
   return null;
 }
-const CLASS_NAME = { warrior: 'Warrior', healer: 'Healer', rogue: 'Rogue', scientist: 'Scientist' };
+const CLASS_NAME = { warrior: 'Warrior', healer: 'Doctor', rogue: 'Rogue', scientist: 'Scientist' };
 
 // The slots an item can go in (two for earrings and rings; the off hand too for weapons held two at once).
 export function slotsFor(it, cls) {

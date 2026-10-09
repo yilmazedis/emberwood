@@ -220,7 +220,7 @@ class Monster {
     if (this.state === 'spawn') {
       if (this.stateT > (d.kind === 'slime' ? 0.5 : 1.0)) {
         this.state = 'idle';
-        if (this.slot.summoned) this.aggro(this.nearest(30, false), false); // raised by the Lich: straight into the fight
+        if (this.slot.summoned) this.aggro(this.nearest(30, false), false); // called by a boss: straight into the fight
       }
       return;
     }
@@ -395,7 +395,7 @@ class Monster {
           const at = isWalkable(x, z, 0.6) ? { x, z } : randomWalkablePoint(this.x, this.z, 3, 0.6);
           this.area.summon(i === 0 && this.raised.length > 1 ? elite : common, this.level - 1, at.x, at.z, this);
         }
-      } else if (a.circles && p) { // grave circles: under the hero and around them, on open floor
+      } else if (a.circles && p) { // bursting flasks: under the hero and around them, on open floor
         const spots = [r2(p.x), r2(p.z)];
         for (let i = 1, tries = 0; i < (this.enraged ? 5 : 3) && tries < 30; tries++) {
           const ang = rand(0, TAU), r = rand(2.5, 5);
@@ -417,7 +417,7 @@ class Monster {
   }
 
   // ---------------------------------------------------------------- bosses
-  // At 70% and 40% life a boss calls for help (raises the dead, calls its guards); below 30% it rages.
+  // At 70% and 40% life a boss calls for help (its robbers, its guards); below 30% it rages.
   // True when it starts a call (that's what it does this turn).
   bossPhase() {
     const frac = this.hp / this.maxHp;
@@ -438,7 +438,7 @@ class Monster {
     return false;
   }
 
-  // Morvain the Lich (and those like him): bolt volleys, grave circles, blinking away when crowded.
+  // Morvain the Poisoner (and those like him): flask volleys, bursting flasks, slipping away when crowded.
   lichChase(dt, p, dist, dx, dz) {
     const d = this.def;
     if (this.bossPhase()) return 0;
@@ -708,7 +708,7 @@ class Area {
     return m;
   }
 
-  // A monster raised mid-fight (by the Lich): no spawn slot, so it never comes back.
+  // A monster called mid-fight (by a boss): no spawn slot, so it never comes back.
   summon(type, lvl, x, z, master) {
     const m = this.spawn({ type, x, z, r: 1, n: 1, lvl, summoned: true });
     m.summoner = master;

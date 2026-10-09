@@ -14,9 +14,9 @@ export const ZONES = [
   { id: 'glade', name: 'Sunny Glade', sub: 'Level 1', x: 26, z: 12, r: 10 },
   { id: 'pond', name: 'Mirror Pond', sub: 'Level 2', x: -27, z: 20, r: 14 },
   { id: 'bandits', name: 'Bandit Hideout', sub: 'Level 3 – 4', x: 38, z: -46, r: 13 },
-  { id: 'stones', name: 'Whispering Stones', sub: 'Level 4 – 5', x: -38, z: -44, r: 13 },
+  { id: 'stones', name: 'Standing Stones', sub: 'Level 4 – 5', x: -38, z: -44, r: 13 },
   { id: 'lair', name: "Grok's Lair", sub: 'Boss · Level 6', x: 0, z: -70, r: 12 },
-  { id: 'graveyard', name: 'Forgotten Graveyard', sub: 'Undead · Level 5 – 7', x: 3, z: 46, r: 15 },
+  { id: 'graveyard', name: 'Forgotten Graveyard', sub: 'Grave robbers · Level 5 – 7', x: 3, z: 46, r: 15 },
 ];
 
 export const GRAVEYARD = { x: 3, z: 46, r: 13.5 };
@@ -295,7 +295,7 @@ function planProps(rng) {
       const z = gv.z + row * 3.2 + (rng() - 0.5) * 0.5;
       if (pathDist(x, z) < 1.8 || Math.hypot(x - CRYPT.x, z - CRYPT.z) < 4) continue;
       const k = rng();
-      put('headstone', x, z, { rotY: (rng() - 0.5) * 0.35, variant: k < 0.6 ? 'round' : k < 0.85 ? 'cross' : 'broken' }, 0.4);
+      put('headstone', x, z, { rotY: (rng() - 0.5) * 0.35, variant: k < 0.6 ? 'round' : k < 0.85 ? 'tall' : 'broken' }, 0.4);
     }
   }
   // the crypt, its door facing the graves (west)

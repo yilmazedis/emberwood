@@ -1,4 +1,4 @@
-// Projectiles (fireballs, bolts, arrows, flasks, meteors, cultist orbs) and ground loot. owner: 'player'
+// Projectiles (fireballs, bolts, arrows, flasks, meteors, alchemists' flasks) and ground loot. owner: 'player'
 // (ours: they deal damage), 'remote' (another hero's: for show, their game deals the damage) or 'enemy'
 // (they hurt our hero). Options: mult (× weapon damage; spell: false = weapon damage, else spell damage), aoe
 // (blast radius), small (a light touch: no smoke or ring), noLight, meteor (a bigger crash), glide

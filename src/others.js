@@ -8,7 +8,7 @@ import { Humanoid } from './character.js';
 import { heightAt, zoneAt } from './world.js';
 import { applyEquipmentVisuals, equipmentFromLook, boltAction, arrowAction } from './player.js';
 import { SKILLS, auraTick } from './skills.js';
-import { blessFx } from './skills/common.js';
+import { careFx } from './skills/common.js';
 import { CLASSES, lookOf } from './classes.js';
 import { lerp, angleDiff, clamp, yawTo, has } from './util.js';
 
@@ -264,7 +264,7 @@ export class RemotePlayers {
     const o = this.byId.get(id), g = this.game;
     if (!o) return;
     if (kind === 'heal') g.fx.heal(o.pos);
-    else if (kind === 'buff') blessFx(g, o.pos, 0x8fd8ff, 16);
+    else if (kind === 'buff') careFx(g, o.pos, 0x8fd8ff, 16);
     else if (kind === 'rez') g.fx.heal(o.pos);
   }
 

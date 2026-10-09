@@ -1,6 +1,6 @@
-// The four classes heroes can be: Warrior, Scientist, Rogue and Healer. Each picks its way of fighting by the
+// The four classes heroes can be: Warrior, Scientist, Rogue and Doctor. Each picks its way of fighting by the
 // weapons it holds (a warrior with sword and shield, two weapons, or one great one; a scientist with a long
-// staff, or a short one and a book; a rogue with daggers or a bow; a healer with mace and shield or a great
+// staff, or a short one and a book; a rogue with daggers or a bow; a doctor with mace and shield or a great
 // weapon) and by where it spends its skill points (skills.js). Shared by the game and the game server, so
 // plain data only.
 //   hp, mp, armor, dmg: multipliers; crit, atkSpd, moveSpd, spell: added
@@ -46,7 +46,7 @@ export const CLASSES = {
     start: ['dagger', 'dagger', 'leather_body'],
   },
   healer: {
-    name: 'Healer', role: 'Medicine, tonics and a steady hand',
+    name: 'Doctor', role: 'Medicine, tonics and a steady hand',
     desc: 'Emberwood\'s doctor. Keeps a party standing: treats wounds, gives tonics that last, and brings round heroes who faint. Fights alone with a mace, lancets and ether, slower than the others.',
     hp: 1.1, mp: 1.4, armor: 1.1, dmg: 0.85, crit: 0, atkSpd: 0, moveSpd: 0, spell: 0,
     attrs: { str: 18, agi: 10, int: 22 }, primary: 'int', suggest: { int: 3, str: 2 },

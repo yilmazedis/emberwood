@@ -11,15 +11,13 @@ export const Assets = { chars: {}, clips: {}, items: {}, icons: {} };
 const CHARACTERS = [
   'Knight', 'Barbarian', 'Mage', 'Rogue', // KayKit Adventurers: the playable classes
   'Rogue_Hooded', 'Ranger', // bandits, and Wren the merchant
-  'Skeleton_Minion', 'Skeleton_Warrior', 'Skeleton_Rogue', 'Skeleton_Mage', // KayKit Skeletons
 ];
 const ANIMATIONS = ['Rig_Medium_General', 'Rig_Medium_MovementBasic'];
 export const ITEM_MODELS = [
   'sword_1handed', 'sword_2handed', 'sword_2handed_color', 'axe_1handed', 'axe_2handed', 'dagger', 'staff', 'wand',
   'shield_round', 'shield_round_color', 'shield_square', 'shield_square_color', 'shield_spikes', 'shield_spikes_color',
   'shield_badge', 'shield_badge_color', 'spellbook_open', 'spellbook_closed', 'mug_full',
-  'Skeleton_Blade', 'Skeleton_Axe', 'Skeleton_Staff', 'Skeleton_Shield_Small_A', 'Skeleton_Shield_Large_A',
-  'Skeleton_Shield_Small_B', 'Skeleton_Shield_Large_B', 'shield_round_barbarian', 'bow_withString',
+  'Skeleton_Blade', 'shield_round_barbarian', 'bow_withString', // (the rusty blade: the Barrowblade's)
 ];
 
 // The game's files sit next to its code: on the live site that's jsDelivr's CDN (index.html loads the code
@@ -76,7 +74,7 @@ async function downloadFrom(url, onProgress) {
   }
 }
 
-// The mage's hat (the Scientist's looks, and the Healer's Physician) was nearly as wide as the hero and hid its
+// The mage's hat (the Scientist's looks, and the Doctor's Physician) was nearly as wide as the hero and hid its
 // weapon and clothes: its brim comes in toward the head and its bent tip comes down and in, while the part
 // around the head stays as it was (so the head doesn't show through). Done once, to the model every hero of
 // that look is cloned from (its vertices are where the hat sits on the head, in the head bone's space).
@@ -129,7 +127,7 @@ export async function loadAssets(onProgress) {
 // Other colours for a character, painted over its texture: the KayKit textures are grids of colour swatches
 // (128 x 256 px, each a top-to-bottom gradient), so a palette repaints chosen swatches: [x, y, w, h, top, bottom].
 const PALETTES = {
-  physician: [ // a doctor's white coat with green, for healers
+  physician: [ // a doctor's white coat with green, for doctors
     [0, 256, 256, 256, '#ffffff', '#c4ccd8'], [896, 256, 128, 256, '#a8d8bc', '#3a6a52'], [256, 256, 128, 256, '#6ac89a', '#2a6a4a'], [128, 512, 128, 256, '#6ac89a', '#2a6a4a'],
   ],
   alchemist: [ // a green coat with copper

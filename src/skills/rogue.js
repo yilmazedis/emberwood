@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { heightAt } from '../world.js';
 import { hdr } from '../fx.js';
 import { angleDiff, yawTo, rand, TAU } from '../util.js';
-import { UP, ahead, play, puff, aimedAt, handPos, pointOf, behind, blessFx } from './common.js';
+import { UP, ahead, play, puff, aimedAt, handPos, pointOf, behind, careFx } from './common.js';
 
 const pct = (v) => `${Math.round(v * 100)}%`;
 const arrow = (g, a, real, to, o) => {
@@ -214,7 +214,7 @@ export const ROGUE = {
       if (who !== a) a.faceToward(who.pos);
       a.h.anim.play('Use_Item', { timeScale: 2.2 });
       play(a, 'blink', 0.6);
-      blessFx(g, who.pos, 0xbfe8ff, 26);
+      careFx(g, who.pos, 0xbfe8ff, 26);
       if (real) g.buffAlly(who, 'swiftness', Math.min(0.3, 0.15 * ctx.pw));
       return { t: 0, dur: 0.35, canMove: true, end: () => a.h.anim.stopOne() };
     },
@@ -265,7 +265,7 @@ export const ROGUE = {
       g.fx.ring(a.pos, 0.5, 12, 0xa08aff, 0.8);
       const v = Math.min(0.2, 0.1 * ctx.pw);
       for (const who of g.alliesNear(a.pos, 12, a)) {
-        blessFx(g, who.pos, 0xa08aff, 18);
+        careFx(g, who.pos, 0xa08aff, 18);
         if (real) g.buffAlly(who, 'shadow_mantle', v);
       }
       return { t: 0, dur: 0.6, canMove: true, moveMult: 0.6, end: () => a.h.anim.stopOne() };

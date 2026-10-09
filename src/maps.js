@@ -102,8 +102,8 @@ export const MAPS = {
     look: { fog: 0x2a2238, near: 36, far: 112, hemiSky: 0xb4a6e0, hemiGround: 0x2e2638, hemi: 1.25, sun: 0xc8b8ff, sunI: 1.85, sky: [0x0c0818, 0x34264e, 0x54446e], motes: true },
   }),
   abyss: dungeon(abyss, {
-    id: 'abyss', name: 'The Abyssal Vault', levels: [56, 60], minLevel: 52, spawns: ABYSS_SPAWNS, deeper: 'abyss2',
-    look: { ...DUNGEON_LOOK, fog: 0x0a0610, hemiSky: 0xa898d0, hemiGround: 0x241a30, sun: 0xc0a8ff, flame: 0xb070ff, tint: 0xd8c8f0, circle: 0xff4ad8 },
+    id: 'abyss', name: 'The Sunken Vault', levels: [56, 60], minLevel: 52, spawns: ABYSS_SPAWNS, deeper: 'abyss2',
+    look: { ...DUNGEON_LOOK, fog: 0x0a0610, hemiSky: 0xa898d0, hemiGround: 0x241a30, sun: 0xc0a8ff, flame: 0xff8a3a, tint: 0xd8c8f0, circle: 0xffb060 },
     from: 'shadowmere', at: before(shadowmere.door, 3.6), respawn: { map: 'shadowmere', ...campSpot(shadowmere) },
   }),
 };
@@ -111,8 +111,8 @@ export const MAPS = {
 // the deeper floors: down from the boss's room above; falling there, you rise in the land's camp
 const below = (above) => ({ x: MAPS[above].down.x - 2.2, z: MAPS[above].down.z + 0.6, yaw: Math.PI });
 MAPS.crypt2 = dungeon(crypt2, {
-  id: 'crypt2', name: 'The Bone Pits', levels: [11, 14], minLevel: 9, spawns: CRYPT2_SPAWNS,
-  look: { ...DUNGEON_LOOK, fog: 0x0c0a08, hemiSky: 0xc0b8a0, sun: 0xd0c0a0, flame: 0x7dffb0, tint: 0xf0e8d8, circle: 0x6dffd8 },
+  id: 'crypt2', name: 'The Deep Pits', levels: [11, 14], minLevel: 9, spawns: CRYPT2_SPAWNS,
+  look: { ...DUNGEON_LOOK, fog: 0x0c0a08, hemiSky: 0xc0b8a0, sun: 0xd0c0a0, flame: 0xff9a4a, tint: 0xf0e8d8, circle: 0xffb060 },
   from: 'crypt', at: below('crypt'), respawn: MAPS.crypt.respawn,
 });
 MAPS.rimeheart2 = dungeon(rimeheart2, {
@@ -126,8 +126,8 @@ MAPS.forge2 = dungeon(forge2, {
   from: 'forge', at: below('forge'), respawn: MAPS.forge.respawn,
 });
 MAPS.abyss2 = dungeon(abyss2, {
-  id: 'abyss2', name: 'The Void Below', levels: [60, 62], minLevel: 58, spawns: ABYSS2_SPAWNS,
-  look: { ...DUNGEON_LOOK, fog: 0x08040e, hemiSky: 0x9888c8, hemiGround: 0x1a1028, sun: 0xb8a0ff, flame: 0xff4ad8, tint: 0xd0c0f0, circle: 0xff4ad8 },
+  id: 'abyss2', name: 'The Deep Mines', levels: [60, 62], minLevel: 58, spawns: ABYSS2_SPAWNS,
+  look: { ...DUNGEON_LOOK, fog: 0x08040e, hemiSky: 0x9888c8, hemiGround: 0x1a1028, sun: 0xb8a0ff, flame: 0xff9a4a, tint: 0xd0c0f0, circle: 0xffb060 },
   from: 'abyss', at: below('abyss'), respawn: MAPS.abyss.respawn,
 });
 for (const [above, deep] of [['crypt', 'crypt2'], ['rimeheart', 'rimeheart2'], ['forge', 'forge2'], ['abyss', 'abyss2']]) {

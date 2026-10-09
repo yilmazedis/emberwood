@@ -16,7 +16,7 @@ const REACH = 2.4; // how close the hero must stand to use something
 const EMBER_LOOK = { fog: 0xcfe2ea, near: 60, far: 150, hemiSky: 0xcfe6ff, hemiGround: 0x5d7a3a, hemi: 1.25, sun: 0xfff0d6, sunI: 2.6, sky: [0x3f8fe0, 0xa6d2f2, 0xd4e6ec] };
 const $ = (id) => document.getElementById(id);
 
-// Emberwood itself (world.js built it at startup): its campfires, torches, crystal and spirit fire.
+// Emberwood itself (world.js built it at startup): its campfires, torches, crystal and the fires by the crypt.
 class EmberwoodView {
   constructor(game) {
     const w = game.world;
@@ -28,7 +28,7 @@ class EmberwoodView {
     this.waystones = w.waystones;
     this.fires = [
       ...w.fires.map((f) => ({ pos: f, scale: f.y > heightAt(f.x, f.z) + 1 ? 0.55 : 1 })),
-      ...w.spiritFires.map((f) => ({ pos: f, scale: 0.6, spirit: true })),
+      ...w.cryptFires.map((f) => ({ pos: f, scale: 0.6 })),
     ];
     this.spots = [];
     this.ownLights = true; // its point lights stay put (game.js set them up)
@@ -51,7 +51,7 @@ class EmberwoodView {
   update(dt) {
     const g = this.game, t = g.time;
     g.fireLights.forEach((l, i) => { l.intensity = 11 + Math.sin(t * 13 + i) * 1.5 + Math.sin(t * 7.3 + i * 2) * 1.5; });
-    g.spiritLight.intensity = 9 + Math.sin(t * 3.1) * 2 + Math.sin(t * 8.7) * 0.8;
+    g.cryptLight.intensity = 9 + Math.sin(t * 3.1) * 2 + Math.sin(t * 8.7) * 0.8;
     const cr = g.world.crystal;
     cr.rotation.y += dt * 0.9;
     cr.position.y = heightAt(cr.position.x, cr.position.z) + 2.3 + Math.sin(t * 1.6) * 0.18;

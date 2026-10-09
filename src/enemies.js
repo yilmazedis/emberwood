@@ -1,6 +1,6 @@
 // Monsters as the shared world (sim/world.js) reports them: procedural slimes and KayKit humanoids
 // (bandits, cultists, skeletons, the bosses), drawn, animated and moved smoothly between updates, with
-// their attacks played out here. A blow, bolt, slam or grave circle that reaches our hero hurts it
+// their attacks played out here. A blow, bolt, slam or bursting flask that reaches our hero hurts it
 // here (we know best where our hero stands); the damage we deal goes to the world, which keeps score.
 import * as THREE from 'three';
 import { Humanoid } from './character.js';
@@ -92,11 +92,9 @@ export class Enemy {
       this.h.equip(d.archer ? 'l' : 'r', d.weapon, d.weaponGlow ?? null); // (a bow in the left hand)
       if (d.offhand) this.h.equip('l', d.offhand);
       else if (this.type === 'bandit' && this.id % 2) this.h.equip('l', 'shield_round'); // (the same for everyone)
-      if (d.eyes) this.h.setGlow('Glow', d.eyes, 2.6);
       this.obj = this.h.group;
       if (rising) {
-        this.h.anim.play('Spawn_Ground', { timeScale: d.undead ? 0.9 : 1.2 });
-        if (d.undead) game.fx.dust(new THREE.Vector3(this.pos.x, this.pos.y + 0.1, this.pos.z), 16);
+        this.h.anim.play('Spawn_Ground', { timeScale: 1.2 });
       }
     }
     this.obj.position.copy(this.pos);
@@ -208,10 +206,6 @@ export class Enemy {
     if (this.h) {
       this.h.swing = null;
       this.h.anim.play('Death_A', { hold: true, timeScale: 0.9 });
-      if (this.def.undead) {
-        this.h.setGlow('Glow', 0x000000, 0); // eyes go dark
-        g.fx.bones(this.center, this.def.eyes);
-      }
     } else {
       g.fx.goo(this.center, this.def.color, 34);
       g.fx.burst(this.center, this.def.color, 16, 3, 0.3, 0.5);
@@ -227,7 +221,6 @@ export class Enemy {
     this.plate = this.game.ui.createPlate(this);
     if (this.h) {
       this.h.anim.stopOne();
-      if (this.def.eyes) this.h.setGlow('Glow', this.def.eyes, 2.6);
     } else {
       this.obj.visible = true;
     }
@@ -257,14 +250,14 @@ export class Enemy {
         if (this.def.archer) this.h?.startSwing(1, 'bow');
         else this.h?.anim.play('Throw', { timeScale: 1.4 });
         break;
-      case 'u': // a boss calls for help: the Lich raises the dead, a jarl calls his raiders (the world spawns them)
+      case 'u': // a boss calls for help: Morvain his robbers, a jarl his raiders (the world spawns them)
         this.attack = { kind: 'summon', t: 0, dur: 1.5, hitAt: 0.8, hit: false };
         this.h?.anim.play(this.def.kind === 'caster' ? 'Use_Item' : 'Interact', { timeScale: 0.9 });
         g.places.pulse(1.6);
         g.sfx.play('summon', this.vol());
-        g.ui.log(`<b>${shortName(this.def)}</b> ${this.def.summons?.[0]?.includes('skeleton') || this.def.lich ? 'calls the dead to rise!' : 'calls for help!'}`, 'bad');
+        g.ui.log(`<b>${shortName(this.def)}</b> calls for help!`, 'bad');
         break;
-      case 'o': // the Lich draws grave circles…
+      case 'o': // Morvain (and those like him) throws flasks around a hero…
         this.attack = { kind: 'circles', t: 0, dur: 1.1, hitAt: 0.5, hit: false };
         this.h?.anim.play('Interact', { timeScale: 1.2 });
         g.places.pulse(0.8);
@@ -278,7 +271,7 @@ export class Enemy {
         g.sfx.play('cast', this.vol());
         break;
       }
-      case 'b': this.blinkFx(ev[2], ev[3]); break; // the Lich vanished from (x, z)
+      case 'b': this.blinkFx(ev[2], ev[3]); break; // Morvain slipped away from (x, z)
       case 'e': this.enrage(); break;
       case 'x': this.cancelAttack(); break; // someone interrupted it
       case 'h': // a hit: [h, id, damage, crit, by, effects] (by 0: poison or fire ticking)
@@ -332,19 +325,19 @@ export class Enemy {
     const aim = new THREE.Vector3(tp.x, tp.y + 1.1, tp.z).sub(hand);
     const n = Math.max(1, Math.min(7, a.n | 0));
     for (let i = 0; i < n; i++) {
-      const dir = aim.clone().applyAxisAngle(UP, (i - (n - 1) / 2) * 0.2); // the Lich fans out a volley
+      const dir = aim.clone().applyAxisAngle(UP, (i - (n - 1) / 2) * 0.2); // Morvain fans out a volley
       if (d.archer) g.projectiles.spawn({ from: hand.clone(), dir, owner: 'enemy', dmg: this.dmg, speed: 20, color: d.bolt || 0xfff0d0, feather: d.bolt, radius: 0.35, range: 16, small: true, noLight: true, arrow: true });
       else g.projectiles.spawn({ from: hand.clone(), dir, owner: 'enemy', dmg: this.dmg, speed: d.lich ? 12 : 11, color: d.bolt || 0xb070ff, radius: 0.35, range: d.lich ? 20 : 16, size: 0.3 });
     }
     if (d.archer && this.vol() > 0.01) g.sfx.play('bow', this.vol());
   }
 
-  // A grave circle bursts: bones and violet fire, and it hurts if our hero is still standing in it.
+  // A flask bursts: glass, fire of its colour and fumes, and it hurts if our hero is still standing in it.
   erupt(at) {
-    const g = this.game, p = g.player;
-    g.fx.ring(at, 0.4, 2.6, 0xb57dff, 0.5);
-    g.fx.burst(new THREE.Vector3(at.x, at.y + 0.3, at.z), 0xb57dff, 26, 5);
-    g.fx.soft.emit({ pos: { x: at.x, y: at.y + 0.3, z: at.z }, count: 10, spread: 0.8, velSpread: 1.5, vel: { x: 0, y: 3, z: 0 }, color: new THREE.Color(0xe8e0d0), size: 0.18, sizeEnd: 0.1, life: 0.8, gravity: 12, drag: 0.6 });
+    const g = this.game, p = g.player, hex = this.def.bolt || 0xff7a2a;
+    g.fx.ring(at, 0.4, 2.6, hex, 0.5);
+    g.fx.burst(new THREE.Vector3(at.x, at.y + 0.3, at.z), hex, 26, 5);
+    g.fx.soft.emit({ pos: { x: at.x, y: at.y + 0.3, z: at.z }, count: 10, spread: 0.8, velSpread: 1, vel: { x: 0, y: 1.2, z: 0 }, color: new THREE.Color(hex).lerp(new THREE.Color(0x8a8a80), 0.6), alpha: 0.45, size: 0.7, sizeEnd: 1.8, life: 1.2, drag: 1.2 });
     g.sfx.play('nova', 0.7 * this.vol());
     if (this.alive && p.alive && Math.hypot(p.pos.x - at.x, p.pos.z - at.z) < 2.2 + p.radius * 0.5) {
       g.damagePlayer(this.dmg * 1.3, this);
@@ -429,9 +422,9 @@ export class Enemy {
     if (this.attack) this.updateAttack(dt);
     this.statusLooks(dt);
     this.sync(dt);
-    if (d.lich && Math.random() < dt * 14) { // a cold violet haze around him
+    if (d.lich && Math.random() < dt * 14) { // fumes of his brews around him
       const ang = rand(0, TAU), r = rand(0.3, 1.1);
-      g.fx.add.emit({ pos: { x: this.pos.x + Math.cos(ang) * r, y: this.pos.y + rand(0.2, 2.6), z: this.pos.z + Math.sin(ang) * r }, count: 1, spread: 0.1, velSpread: 0.2, vel: { x: 0, y: 0.9, z: 0 }, color: new THREE.Color(this.enraged ? 0xff5ad8 : 0xb57dff).multiplyScalar(2.2), size: 0.2, sizeEnd: 0.02, life: 1.1, drag: 1 });
+      g.fx.add.emit({ pos: { x: this.pos.x + Math.cos(ang) * r, y: this.pos.y + rand(0.2, 2.6), z: this.pos.z + Math.sin(ang) * r }, count: 1, spread: 0.1, velSpread: 0.2, vel: { x: 0, y: 0.9, z: 0 }, color: new THREE.Color(this.enraged ? 0xff5a3a : d.bolt || 0xb57dff).multiplyScalar(2.2), size: 0.2, sizeEnd: 0.02, life: 1.1, drag: 1 });
     }
   }
 

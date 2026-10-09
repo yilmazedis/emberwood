@@ -1,17 +1,17 @@
-// Healer: Emberwood's doctor. Medicine (treating wounds, and bringing round heroes who faint), Tonics (tonics
-// and salves that last, painkillers, an aid station), Surgery (a doctor's sharp tools and ether, to fight alone).
-// Treatments and tonics go on the friendly hero picked, or on the healer.
+// The Doctor (the class's key is still 'healer', for saves): Medicine (treating wounds, and bringing round heroes
+// who faint), Tonics (tonics and salves that last, painkillers, an aid station), Surgery (a doctor's sharp tools and
+// ether, to fight alone). Treatments and tonics go on the friendly hero picked, or on the doctor.
 import * as THREE from 'three';
 import { heightAt } from '../world.js';
 import { hdr } from '../fx.js';
-import { play, aimedAt, handPos, pointOf, blessFx, lingering } from './common.js';
+import { play, aimedAt, handPos, pointOf, careFx, lingering } from './common.js';
 
 const pct = (v) => `${Math.round(v * 100)}%`;
 
 // A doctor's care on a hero (treatments, tonics): a ring at their feet, motes rising, and a plus sign floating up
 // over them.
 function treat(g, p, hex) {
-  blessFx(g, p, hex, 28);
+  careFx(g, p, hex, 28);
   plusSign(g, p, hex);
 }
 const PLUS = {};

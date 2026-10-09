@@ -290,6 +290,41 @@ function adminOrder(o) {
       const off = sendOff(ch.id, `${ch.name} was changed on the server (level ${level}): pick it again to play on.`);
       return `${ch.name} is level ${level} now (was ${was})${off ? '; its game was sent back to the hero list' : ''}.`;
     }
+    case 'gold': case 'items': {
+      if (!acc) return `No account called "${o.account}".`;
+      const ch = acc.characters.find((c) => c.name.toLowerCase() === String(o.hero || '').toLowerCase());
+      if (!ch) return `${acc.user} has no hero called "${o.hero}" (${acc.characters.map((c) => c.name).join(', ') || 'no heroes'}).`;
+      if (!ch.save) ch.save = o.blank && typeof o.blank === 'object' ? { ...o.blank, level: ch.level || 1 } : null; // (never played)
+      if (!ch.save) return `${ch.name} has never been played.`;
+      let what, toBank = 0;
+      if (o.op === 'gold') {
+        const gold = Math.round(Number(o.gold));
+        if (!(gold >= 1 && gold <= 1e9)) return 'The gold is a number from 1 to 1000000000.';
+        ch.save.gold = Math.max(0, Math.floor(Number(ch.save.gold) || 0)) + gold;
+        what = `${gold} gold (it has ${ch.save.gold} now)`;
+      } else {
+        const items = (Array.isArray(o.items) ? o.items : []).filter((it) => it && typeof it === 'object' && typeof it.k === 'string' && Object.hasOwn(ITEMS, it.k));
+        if (!items.length) return 'No items to give.';
+        const bag = Array.isArray(ch.save.bag) ? ch.save.bag : (ch.save.bag = new Array(30).fill(null));
+        const bank = acc.bank || (acc.bank = { items: [], gold: 0 });
+        const bagFree = bag.reduce((n, it) => n + (it ? 0 : 1), 0);
+        const bankFree = BANK_SIZE - bank.items.filter(Boolean).length;
+        if (items.length > bagFree + bankFree) return `Not enough room: ${items.length} items, ${bagFree} free in ${ch.name}'s bag and ${bankFree} in the bank. Nothing given.`;
+        for (const it of items) {
+          const i = bag.indexOf(null);
+          if (i >= 0) { bag[i] = it; continue; }
+          const j = bank.items.indexOf(null);
+          bank.items[j >= 0 ? j : bank.items.length] = it; // (an empty slot, or one more at the end)
+          toBank++;
+        }
+        what = `${items.length} items${toBank ? ` (${toBank} into the bank: the bag was full)` : ''}`;
+      }
+      ch.rev = (ch.rev || 0) + 1; // (a save from a game that hadn't these is refused)
+      store.markDirty(acc);
+      let off = sendOff(ch.id, `${ch.name} was given ${o.op === 'gold' ? 'gold' : 'items'} on the server: pick it again to play on.`);
+      if (toBank) for (const other of acc.characters) off = sendOff(other.id, 'Your bank was changed on the server: pick your hero again to play on.') || off; // (their bank is stale)
+      return `${ch.name} got ${what}${off ? '; its game was sent back to the hero list' : ''}.`;
+    }
     default: return `Unknown order "${o.op}".`;
   }
 }

@@ -1,9 +1,9 @@
 # Emberwood
 
-A small online 3D action RPG in the browser: make an account and a hero (Warrior, Scientist, Rogue or Healer),
+A small online 3D action RPG in the browser: make an account and a hero (Warrior, Scientist, Rogue or Doctor),
 then fight monsters alongside other players, gear up, upgrade your gear at the anvil, trade, and hunt the world
 bosses for unique items.
-It uses Three.js with the free **KayKit Adventurers**, **Skeletons** and **Dungeon** packs (CC0, by Kay Lousberg).
+It uses Three.js with the free **KayKit Adventurers**, **Dungeon** and (for one rusty blade) **Skeletons** packs (CC0, by Kay Lousberg).
 
 ## Run it
 
@@ -84,7 +84,11 @@ To back up, copy that folder.
 `node server/accounts.mjs` lists the accounts (their heroes, last sign-in); `password <name>` sets a new password
 (passwords are kept only as scrypt hashes: nobody can read one back); `create <name>` makes an account;
 `hero <account> <Name> <class> [level]` adds a hero at that level in its class's gear, with potions and gold, every
-point free (for testing); `level <account> <Hero> <level>` changes an existing hero's level, nothing else. The tool
+point free (for testing); `level <account> <Hero> <level>` changes an existing hero's level, nothing else;
+`gold <account> <Hero> <amount>` gives a hero gold; `gear <account> <Hero> [low|mid|high|rare] [+N]` gives it a full
+kit of its class's best items of that class of items (high and +5 if not said; clothes and accessories +7 at most):
+every weapon it may wield, a shield or book, its set of clothes and six accessories, into its bag (the bank when the
+bag is full). The tool
 never edits the files itself (the running server keeps accounts in memory and would write its own copy back): it
 leaves an order in `admin/` in the data folder, which the server carries out within a couple of seconds (no
 Restart) and answers. A hero being played when its account changes goes back to the hero list, with a note; its
@@ -128,12 +132,12 @@ skill trees.
 | Class | Ways to fight | Strengths |
 |---|---|---|
 | **Warrior** | Sword (or axe) and shield · two one-handed weapons · one great weapon (two-handed sword or axe, spear, maul) | Most Life and armor; taunts, shields, whirlwinds and huge two-handed blows |
-| **Scientist** | Long staff (15% faster attacks, more spell power; the big fire and frost spells) · short staff and a book (the book adds spell power; poisons, curses, party teleport) | Fire and frost from range, the best at many monsters at once; fragile |
+| **Scientist** | Long staff (15% faster attacks, more spell power; the big fire and frost spells) · short staff and a book (the book adds spell power; poisons, weakening brews, party teleport) | Fire and frost from range, the best at many monsters at once; fragile |
 | **Rogue** | Two daggers (assassin) · a bow (archer) | Critical hits, the fastest feet; Swiftness (+move speed for 10 minutes) on any friendly hero |
-| **Healer** | Mace and shield · a warrior's two-handed sword, spear or maul (not Raptor and the other warrior-only weapons) | Emberwood's doctor: treats wounds, tonics that last 10 minutes, brings round heroes who faint; fights alone with lancets and ether but kills slower than the rest |
+| **Doctor** | Mace and shield · a warrior's two-handed sword, spear or maul (not Raptor and the other warrior-only weapons) | Emberwood's doctor: treats wounds, tonics that last 10 minutes, brings round heroes who faint; fights alone with lancets and ether but kills slower than the rest |
 
 Basic attacks: melee weapons swing, bows shoot arrows, staves and short staves fire bolts. Intelligence raises the
-damage of spells (a Scientist's and a Healer's, staff bolts too), the class's primary attribute its weapon
+damage of spells (a Scientist's and a Doctor's, staff bolts too), the class's primary attribute its weapon
 blows (below). An archer (hero or monster) raises the bow
 upright with the string toward them, draws to the cheek and looses with a twang; the arrow flies head first and
 sticks a moment in whatever it hits.
@@ -141,18 +145,18 @@ sticks a moment in whatever it hits.
 ## Attributes
 
 Three attributes, as in Dota 2 (`src/attributes.js`). Every class has a **primary** one that powers its weapon
-blows (Warrior: Strength; Rogue: Agility; Scientist and Healer: Intelligence); besides, each does the same for
+blows (Warrior: Strength; Rogue: Agility; Scientist and Doctor: Intelligence); besides, each does the same for
 everyone:
 
 | Attribute | What each point gives | Primary for |
 |---|---|---|
 | **Strength** | +2 Life (times the class's Life multiplier), +0.03 Life a second | Warrior: +0.6% weapon damage |
 | **Agility** | +0.08% attack speed, +0.1 armor | Rogue: +0.6% weapon damage |
-| **Intelligence** | +1% spell damage (staff bolts too), +0.1% healing, +2 Mana | Scientist and Healer: +0.6% weapon damage |
+| **Intelligence** | +1% spell damage (staff bolts too), +0.1% healing, +2 Mana | Scientist and Doctor: +0.6% weapon damage |
 
-A hero starts with its class's (Warrior 24 / 14 / 10, Scientist 12 / 12 / 26, Rogue 14 / 24 / 10, Healer
+A hero starts with its class's (Warrior 24 / 14 / 10, Scientist 12 / 12 / 26, Rogue 14 / 24 / 10, Doctor
 18 / 10 / 22, in that order) and gets **5 points a level** to spend anywhere, in the character window (+1, +5, or
-**Suggested**: Warrior 3 STR 2 AGI, Scientist 4 INT 1 STR, Rogue 4 AGI 1 STR, Healer 3 INT 2 STR). **Take back
+**Suggested**: Warrior 3 STR 2 AGI, Scientist 4 INT 1 STR, Rogue 4 AGI 1 STR, Doctor 3 INT 2 STR). **Take back
 all** returns every point for the same fee as skill points. Every level also adds a little of its own (1.4%
 damage, Life, Mana and armor), so points are a choice, not a toll.
 
@@ -179,7 +183,7 @@ level 10). Click (or tap) an open skill to put it on one of the 8 action slots.
 | Warrior | **Arms:** Power Strike, Cleave, Charge, Execute · **Guard:** War Cry, Shield Bash, Shield Wall, Last Stand · **Fury:** Battle Rage, Whirlwind, Leap Slam, Earthshatter |
 | Scientist | **Pyrology:** Fireball, Flame Wave, Inferno, Meteor · **Cryology:** Ice Bolt, Frost Nova, Blizzard, Glacial Prison · **Alchemy:** Toxic Flask, Blink, Teleport Party, Plague |
 | Rogue | **Assassination:** Backstab, Poison Blade, Shadow Step, Eviscerate · **Marksmanship:** Power Shot, Multi-Shot, Crippling Arrow, Arrow Rain · **Shadow:** Swiftness, Smoke Bomb, Vanish, Shadow Mantle |
-| Healer | **Medicine:** Treat Wounds, Remedy, Revive, Triage · **Tonics:** Vitality Tonic, Toughening Salve, Painkiller, Aid Station · **Surgery:** Lancet, Vital Strike, Ether Flask, Healing Vapours |
+| Doctor | **Medicine:** Treat Wounds, Remedy, Revive, Triage · **Tonics:** Vitality Tonic, Toughening Salve, Painkiller, Aid Station · **Surgery:** Lancet, Vital Strike, Ether Flask, Healing Vapours |
 
 Some skills need a weapon: shield skills a shield, Earthshatter a two-handed weapon, the big staff spells a long
 staff, Teleport Party and Plague a book, dagger and bow skills their weapon. Skills cost mana as a share of the
@@ -194,7 +198,7 @@ only the caster's game deals its damage.
 
 **Balance:** with the same level and gear, the classes kill a monster of their level in a few seconds: sword
 and shield is the baseline; two weapons, great weapons and daggers are 15–40% faster; the long staff is fastest
-alone and on groups; the bow is a little faster and safe at range; a Healer is 10–20% slower with Retribution (and
+alone and on groups; the bow is a little faster and safe at range; a Doctor is 10–20% slower with Surgery (and
 much slower when built for healing). In the Arena the skills hit heroes at 45%.
 
 ## Fighting
@@ -225,16 +229,16 @@ damage and speed (weapons) or armor (clothes, shields), and attributes (above). 
 and every hero class has its own weapons and clothes in each. Above them, **rare** items (level 70) only drop in the
 Death Canyon (below). Clothes are four-piece sets per class and item class (the Warrior's are
 Plate, Chitin and Shell; the Scientist's Linen, Alchemist and Aether; the Rogue's Leather, Stalker and Nightshade;
-the Healer's Chain, Apothecary and Physician).
+the Doctor's Chain, Apothecary and Physician).
 
 | Class | Low | Middle | High |
 |---|---|---|---|
-| Warrior | Short Sword, Large Axe, Blade Axe, Giant Sword* | Mirage Sword, Glaive*, Sword of the Dead, Gigantic Axe | Raptor, Iron Impact*, Wyrmfang, Titan Greatsword* |
+| Warrior | Short Sword, Large Axe, Blade Axe, Giant Sword* | Mirage Sword, Glaive*, Barrowblade, Gigantic Axe | Raptor, Iron Impact*, Wyrmfang, Titan Greatsword* |
 | Scientist | Oak Staff, Copper Rod, Ember Staff, Galvanic Rod; Field Notes (book) | Frostwood Staff, Alchemist's Rod, Stormcaller, Catalyst Rod; Codex of Elements | Arcanum Staff, Aether Rod, Archmage's Spire, Philosopher's Rod; Tome of Ascension |
-| Rogue | Dagger, Short Bow, Kris, Hunter's Bow | Stiletto, Composite Bow, Viper Fang, Longbow | Nightfang, Elven Bow, Soul Reaper, Dragonbone Bow |
-| Healer | Iron Mace, Morning Star (and the * weapons) | Bonesetter, Flanged Mace | Lifewarden, Physician's Scepter |
+| Rogue | Dagger, Short Bow, Kris, Hunter's Bow | Stiletto, Composite Bow, Viper Fang, Longbow | Nightfang, Elven Bow, Swiftreaver, Dragonbone Bow |
+| Doctor | Iron Mace, Morning Star (and the * weapons) | Bonesetter, Flanged Mace | Lifewarden, Physician's Scepter |
 
-\* Warriors and Healers both can use these. Shields (Round, Kite, Tower) are for both too.
+\* Warriors and Doctors both can use these. Shields (Round, Kite, Tower) are for both too.
 
 - **Drops are rare:** a monster drops an item now and then (a slime about one time in forty, a knight one in
   fifteen), and the best ones for its level least often. **High class** items are rarer still (most of the times
@@ -280,10 +284,12 @@ a new quest or a reward waiting. Any board takes a finished quest back.
 
 ## Places
 
-**Emberwood** is where every hero starts: meadows of slimes, a bandit hideout, cultists at the standing stones,
-the graveyard and Grok's lair. The crypt door at the east end of the graveyard leads down to **the Forgotten Crypt**
-(levels 7–9) and **Morvain the Lich**: bolt volleys, violet grave circles that erupt a moment later (step out!),
-skeletons raised at 70% and 40% life, blinking away when you stand on him, enraged below 30%.
+**Emberwood** is where every hero starts: meadows of slimes, a bandit hideout, rogue alchemists at the standing
+stones, grave robbers in the graveyard, and Grok's lair. The robbers have dug into the old crypt: its door at the east
+end of the graveyard leads down to **the Forgotten Crypt** (levels 7–9) and **Morvain the Poisoner**: volleys of
+poison flasks, flasks that burst around you a moment after they land (step out!), his robbers called in at 70% and
+40% life, slipping away when you stand on him, enraged below 30%. The game has no spirits, demons or undead: its foes
+are people (bandits, robbers, raiders, alchemists, outlaws), beasts and slimes.
 
 The waystone in camp takes you (from level 8) to three more lands, each with five zones, its own monsters, weather,
 a camp, a boss who calls for help at 70% and 40% life and rages below 30%, and a dungeon. Every dungeon's boss
@@ -291,10 +297,10 @@ room has a **trapdoor down** to a deeper, harder floor with its own boss:
 
 | Land | Levels | Boss | Dungeon (levels, boss) | Deeper (levels, boss) |
 |---|---|---|---|---|
-| Emberwood | 1 – 10 | Grok the Brute | Forgotten Crypt (7 – 9, Morvain the Lich) | The Bone Pits (11 – 14, the Bone Colossus) |
-| Frostfang Highlands (snow) | 10 – 22 | Hrimgar the Frost Jarl | Rimeheart Caverns (20 – 24, Vorrak the Rime King) | The Frozen Deep (25 – 28, Ymira of the Deep) |
-| Cinderfall Wastes (ash and lava) | 22 – 40 | Vulkhar the Ashen King | The Molten Forge (38 – 42, Forgemaster Kaldur) | The Magma Core (43 – 46, the Magmaborn) |
-| Shadowmere (twilight marsh) | 40 – 58 | Malakar the Hollow King | The Abyssal Vault (56 – 60, Nyxara) | The Void Below (60 – 62, the Void Herald) |
+| Emberwood | 1 – 10 | Grok the Brute | Forgotten Crypt (7 – 9, Morvain the Poisoner) | The Deep Pits (11 – 14, the Pit Colossus) |
+| Frostfang Highlands (snow) | 10 – 22 | Hrimgar the Frost Jarl | Rimeheart Caverns (20 – 24, Vorrak the Rime King) | The Frozen Deep (25 – 28, Ylva of the Deep) |
+| Cinderfall Wastes (ash and lava) | 22 – 40 | Vulkhar the Ashen King | The Molten Forge (38 – 42, Forgemaster Kaldur) | The Magma Core (43 – 46, the Magma Brute) |
+| Shadowmere (twilight marsh) | 40 – 58 | Malakar the Marsh King | The Sunken Vault (56 – 60, Nyxara the Smuggler Queen) | The Deep Mines (60 – 62, the Black Envoy) |
 
 **Hidden caves** (`src/caves.js`, `src/maps/caves.js`, drawn by `src/cave-view.js`): every land hides one, its
 mouth in the bushes beside an easy zone. Its **key** drops now and then (one kill in 25) from the monsters within
@@ -333,7 +339,7 @@ minimap too).
 **The Death Canyon** (`src/maps/canyon.js`, drawn by `src/canyon-view.js`), through a gate of red rock west of
 Shadowmere's camp, from **level 70**: a narrow gorge winding north between layered red mountains, from its camp
 past five wider chambers (the Red Gorge, the Dragon's Spine, the Scar, the Bone Pass and the Maw) to **Grakhul, the
-Canyon Tyrant**. Its monsters, levels 70–78 (Rock Slimes, Dust Stalkers, Canyon Ravagers, Bone Shamans, Canyon
+Canyon Tyrant**. Its monsters, levels 70–78 (Rock Slimes, Dust Stalkers, Canyon Ravagers, Canyon Firebrewers, Canyon
 Archers, Scorched Knights), are all **elites**: 40% more Life, 25% harder blows, 40% more XP. Go in alone or with a
 party, whenever you like; make a party there too. It is meant to be survived in a party.
 
@@ -343,7 +349,7 @@ party, whenever you like; make a party there too. It is meant to be survived in 
   like anywhere; the canyon's fights aren't on the champions' board, but the canyon hears of each one.
 - **Rare items:** only its monsters carry them: **one kill in a thousand** (the Tyrant one in a hundred) drops a
   rare item (level 70, a tenth stronger than a normal item of its level: weapons, shields, books, a set of clothes
-  for each class (Warlord, Plaguewarden, Phantom, Stormweave) and Obsidian accessories), and apart from that, one in a
+  for each class (Warlord, Plaguewarden, Nightrunner, Stormweave) and Obsidian accessories), and apart from that, one in a
   thousand a **Rare Upgrade Recipe**, the only way to upgrade them (the anvil, as ever). Neither is sold anywhere;
   normal monsters never drop them. Rare items glow in their own colour.
 - **Calamities:** every minute to a minute and a half (sometimes after only 30–45 seconds) the canyon strikes the
@@ -358,8 +364,8 @@ party, whenever you like; make a party there too. It is meant to be survived in 
 
   The first strike of each falls right by every hero: keep moving.
 
-**World bosses** roam the lands: Gorehorn the Wanderer in Emberwood (low class uniques), Skadi the Frost Giant in
-Frostfang (low), Ignis, the Living Pyre in Cinderfall (middle) and Umbra the Devourer in Shadowmere (high). One rises
+**World bosses** roam the lands: Gorehorn the Wanderer in Emberwood (low class uniques), Brynja the Avalanche in
+Frostfang (low), Ignis the Firebrand in Cinderfall (middle) and Umbra the Bog Tyrant in Shadowmere (high). One rises
 a few minutes after heroes arrive in a land, and ten minutes after it falls. It walks from zone to zone and never
 attacks first, but once struck it fights everyone who hit it and calls for help. It has ten times the Life of the
 land's boss and armor that takes a tenth off every blow (its own blows are a boss's): bring a party. Bosses walk
@@ -453,9 +459,8 @@ Variants: `?size=192`, `?size=512&maskable` (Android adaptive icon), `?size=180&
 
 | What you see | Source |
 |---|---|
-| Heroes, bandits, cultists, bosses, the camp's people | KayKit Adventurers character models (`assets/characters`), recolored per class look and per land (`assets.js` repaints the swatch textures) |
-| Skeleton minions, warriors, rogues, mages | KayKit Skeletons character models (`assets/characters/Skeleton_*`); glowing eyes come from the pack's `Glow` material |
-| Bone weapons and shields (skeleton loot) | KayKit Skeletons item models (`assets/items/Skeleton_*`) |
+| Heroes, every monster that isn't a slime, the bosses, the camp's people | KayKit Adventurers character models (`assets/characters`), recolored per class look and per land (`assets.js` repaints the swatch textures) |
+| The Barrowblade's rusty blade | KayKit Skeletons item model (`assets/items/Skeleton_Blade`; the pack's characters and other items aren't used any more) |
 | Walk / run / idle / hit / death / throw animations | KayKit shared rig animations (`assets/animations`) |
 | Swords, axes, daggers, bows, staves, shields, books | KayKit item models (`assets/items`, packed into `items.glb`), attached to the `handslot` bones; maces, spears and mauls are built in code (`gear.js`) |
 | Helmets and cape | Parts of the Knight model, shown or hidden when equipped |
@@ -466,7 +471,7 @@ Variants: `?size=192`, `?size=512&maskable` (Android adaptive icon), `?size=180&
 | Terrain, trees, rocks, grass, water, camps, graveyard | Generated in code (`terrain.js` places them, `world.js` draws them), flat-shaded to match KayKit |
 | Market stall, bank, anvil, notice board | Generated in code (`npcs.js`), with the pack's items as wares on the counter |
 | The crypt: walls, floors, pillars, stairs, torches, banners, chests, props | KayKit Dungeon models, packed into one file (`assets/dungeon/crypt.glb`), placed on a 4 m grid and merged into two meshes (`dungeon.js`); walls on the camera side are clipped low |
-| Morvain the Lich | The Skeleton Mage, scaled up and tinted violet, with a glowing staff; his rune circle is a shader (`dungeon.js`) |
+| Morvain the Poisoner | The Mage, scaled up and tinted, with a glowing staff; the plain ring in every boss's room is a shader (`dungeon.js`) |
 | Slimes | Generated in code (`enemies.js`) |
 | Inventory icons and portrait | Rendered at startup from the same 3D models (`assets.js`) |
 | Fire, sparks, slash arcs, glow | Particles, shaders and bloom (`fx.js`) |
@@ -513,9 +518,9 @@ Variants: `?size=192`, `?size=512&maskable` (Android adaptive icon), `?size=180&
 
 ## Adding more art
 
-KayKit's other free packs (Forest, Halloween…) use the same rig and style. The Skeletons pack was added this way:
+KayKit's other free packs (Forest…) use the same rig and style. New art is added this way:
 
-- **New monster:** copy the `.glb` into `assets/characters/`, add its name to `CHARACTERS` in `assets.js`, and add an entry to `ENEMY_TYPES` and `SPAWNS` in `monsters.js` (then restart the game server). The skeleton entries show the options: `offhand` (shield), `style: 'chop'`, `eyes` (glow color), `bolt` (caster projectile color), `loot: 'bone'` (loot table).
+- **New monster:** copy the `.glb` into `assets/characters/`, add its name to `CHARACTERS` in `assets.js`, and add an entry to `ENEMY_TYPES` and `SPAWNS` in `monsters.js` (then restart the game server). The existing entries show the options: `offhand` (shield), `style: 'chop'`, `tint`, `weaponGlow`, `bolt` (caster projectile color), `summons` (a boss's helpers).
 - **New weapon or shield:** copy the `.gltf`, `.bin` and texture into `assets/items/`, add the model name to `ITEM_MODELS` in `assets.js`, add an item to `items.js`, then repack: `node tools/pack-items.mjs` (it packs every `ITEM_MODELS` model into `assets/items/items.glb`, which the game loads instead of the ~50 separate files).
 - **More crypt pieces:** name any Dungeon pack model in `crypt-map.js` (e.g. `put('barrel_large', x, z)`), then repack:
   `node tools/pack-dungeon.mjs "<KayKit_Dungeon_Pack_1.1_FREE>/Assets/gltf"`. It writes every model `dungeon.js`
