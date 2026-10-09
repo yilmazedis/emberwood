@@ -45,9 +45,14 @@ automated tests; `&cls=scientist`, `rogue` or `healer` picks the class of a new 
   on, so a new land costs nothing while it's empty. Dungeons are a private **copy per party** (or lone hero), kept
   for five minutes once empty. The server decides travel: you must stand at the waystone, door or stairs, and be
   of the place's level; updates carry a stay number (`ep`) so nothing from the place you left leaks in.
+- **XP by level:** a monster of your level or above gives a fifth more; two levels below you, all of it; then a fifth
+  less a level down to a fifth at six below, and less still to nothing at ten below (a monster that weak gives
+  1 XP: `xpFactor` in `monsters.js`).
 - **Kills are shared:** the heroes who hurt a monster form teams (a party, or a lone hero). The XP is split between
   teams by damage dealt; a party's part goes to its members within 60 m by level, plus 20% per extra member, so
-  grouping pays. The team that dealt the most gets the loot; party members take turns. A world boss is fairer:
+  grouping pays, but only to the members it can still teach: one ten levels above the monster gets 1 XP and takes
+  nothing from the others, so a strong friend carrying a weaker one leaves them the full XP of each kill (as if
+  they had killed it alone, only faster). The team that dealt the most gets the loot; party members take turns. A world boss is fairer:
   everyone who dealt at least a tenth of its damage gets loot of their own too. Everyone credited counts the
   kill for their quests.
 - **Parties:** up to 8. Tap a hero's name (or `/invite Name`) to invite; the party frame shows each member's level,
@@ -151,8 +156,13 @@ everyone:
 | Attribute | What each point gives | Primary for |
 |---|---|---|
 | **Strength** | +2 Life (times the class's Life multiplier), +0.03 Life a second | Warrior: +0.6% weapon damage |
-| **Agility** | +0.08% attack speed, +0.1 armor | Rogue: +0.6% weapon damage |
+| **Agility** | +0.08% attack speed, +0.3 armor | Rogue: +0.6% weapon damage |
 | **Intelligence** | +1% spell damage (staff bolts too), +0.1% healing, +2 Mana | Scientist and Doctor: +0.6% weapon damage |
+
+**Armor** (clothes, shields, Agility; the character window shows it with its share): a monster's blow loses armor /
+(armor + 60 + 8 a level from 10 to 50 + 3 a level past 50), at most 85%. A Warrior in its class's gear at +5 has
+about 60% at level 40 and 55% at 70; a Scientist about 30% and 27%; going from +1 to +10 takes a sixth off every
+blow.
 
 A hero starts with its class's (Warrior 24 / 14 / 10, Scientist 12 / 12 / 26, Rogue 14 / 24 / 10, Doctor
 18 / 10 / 22, in that order) and gets **5 points a level** to spend anywhere, in the character window (+1, +5, or
@@ -220,6 +230,12 @@ much slower when built for healing). In the Arena the skills hit heroes at 45%.
   tenth of its mana for heals and walls, never blinks, opens doors or vanishes, and never starts a fight with a
   hero. It picks up gold and items between fights and drinks a potion when hurt. Moving stops it. With a full bag
   (a red "!" on the bag button) it leaves items where they lie and keeps hunting.
+- **Auto-support (the Doctor in a party):** a Doctor's AUTO, with a party member near, follows the party (the nearest
+  member, about 5 m behind) and keeps everyone standing with every care it has learned, on the action bar or not:
+  it brings round a fainted member, treats the most hurt (Triage when several are), gives a Painkiller to one very
+  low, sets up the Aid Station when several are low, a Remedy to anyone hurt, and keeps both tonics on everyone
+  (its Mana allowing). When nobody needs anything it helps fight what's near the one it follows (its strikes keep
+  a third of its Mana back for care). Alone, a Doctor's AUTO hunts like anyone's.
 
 ## Items
 

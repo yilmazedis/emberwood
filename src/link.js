@@ -169,11 +169,13 @@ export class WorldLink {
   }
 
   // [x, z, yaw, move (0 still, 1 walk, 2 run), speed, alive, life 0..1, away, armor's share of a blow,
-  // chance to dodge] (the last two: the world works out other heroes' blows with them, in the arena)
+  // chance to dodge, Life, most Life] (armor and dodging: the world works out other heroes' blows with them, in
+  // the arena; Life in numbers: for the others' target frames)
   state() {
     const p = this.game.player;
     return [r2(p.pos.x), r2(p.pos.z), r2(p.yaw), p.moveMode || 0, r2(p.moveSpeed || 0), p.alive ? 1 : 0,
-      r2(Math.min(1, Math.max(0, p.hp / p.stats.maxHp))), document.hidden && !this.game.huntsInBackground() ? 1 : 0, r2(1 - (1 - p.stats.dr) * p.stats.taken), r2(p.stats.evade || 0)];
+      r2(Math.min(1, Math.max(0, p.hp / p.stats.maxHp))), document.hidden && !this.game.huntsInBackground() ? 1 : 0, r2(1 - (1 - p.stats.dr) * p.stats.taken), r2(p.stats.evade || 0),
+      Math.max(0, Math.ceil(p.hp)), Math.round(p.stats.maxHp)];
   }
 
   // Our hero hit monster e (the world applies it). eff: { stun, slow: [factor, s], taunt } from skills

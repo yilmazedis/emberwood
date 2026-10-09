@@ -11,6 +11,16 @@
 export const monsterHp = (d, lvl) => Math.round(d.hp * (1 + 0.32 * (lvl - 1)) * (1 + 0.04 * Math.max(0, lvl - 10)));
 export const monsterDmg = (d, lvl) => d.dmg * (1 + 0.22 * (lvl - 1)) * (1 + 0.02 * Math.max(0, lvl - 10));
 export const monsterXp = (d, lvl) => d.xp * (1 + 0.25 * (lvl - 1));
+// How much of a monster's XP a hero gets by their levels: a fifth more for a monster of the hero's level or above,
+// all of it at two levels below the hero, a fifth less for each level further down to a fifth at six below, then
+// less still to nothing at ten below: a monster that weak teaches a hero nothing (1 XP, the least a kill gives),
+// and in a party it takes no share from those it still teaches.
+export function xpFactor(heroLevel, monLevel) {
+  const gap = heroLevel - monLevel;
+  if (gap >= 10) return 0;
+  if (gap > 6) return 0.05 * (10 - gap);
+  return Math.min(1.2, Math.max(0.2, 1 - (gap - 2) * 0.2));
+}
 
 export const ENEMY_TYPES = {
   slime: { name: 'Slime', kind: 'slime', color: 0x7ed957, size: 0.9, hp: 26, dmg: 5, speed: 3.0, range: 1.35, atkCd: 1.4, aggro: 8.5, xp: 12, radius: 0.55, gold: [1, 4], drop: 0.12 },

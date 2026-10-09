@@ -63,9 +63,9 @@ export class RemotePlayer {
 
   sample(ts, u) {
     if (!Array.isArray(u)) return;
-    const [, x, z, yaw, m, sp, a, hp, w] = u.map(Number);
+    const [, x, z, yaw, m, sp, a, hp, w, life, most] = u.map(Number);
     if (!Number.isFinite(x) || !Number.isFinite(z) || !Number.isFinite(yaw)) return;
-    this.samples.push({ t: ts, x, z, yaw, m, sp: clamp(sp || 0, 0, 20), a, hp: clamp(hp || 0, 0, 1), w });
+    this.samples.push({ t: ts, x, z, yaw, m, sp: clamp(sp || 0, 0, 20), a, hp: clamp(hp || 0, 0, 1), w, life: Math.max(0, life || 0), most: Math.max(0, most || 0) });
   }
 
   get headPos() {
@@ -141,6 +141,8 @@ export class RemotePlayer {
     this.yaw = yaw;
     this.group.rotation.y = yaw;
     this.hp = cur.hp;
+    this.life = cur.life; // (in numbers: 0 when its game doesn't say)
+    this.maxLife = cur.most;
     this.away = cur.w === 1;
     if (!cur.a && this.alive) this.fall();
     else if (cur.a && !this.alive) this.rise();

@@ -2,7 +2,10 @@
 // friend, Z for the nearest foe, Esc lets go), where a click on the ground sends it, walking into range of what
 // it was told to attack or cast at, holding the attack, and hunting on its own (auto, T): it picks the
 // nearest monster around the spot it was switched on, fights it the way a player would (combos, and the skills
-// on the action bar, each when it makes sense), picks up the loot and drinks when hurt.
+// on the action bar, each when it makes sense), picks up the loot and drinks when hurt. A Doctor in a party
+// supports instead: it follows the party, keeps everyone standing with every care it has learned (wakes the
+// fainted, treats the most hurt, painkillers, an aid station, remedies, tonics kept up) and helps fight the
+// party's foes when nobody needs it.
 import * as THREE from 'three';
 import { heightAt } from './world.js';
 import { SKILLS, manaCost } from './skills.js';
@@ -10,6 +13,9 @@ import { SKILLS, manaCost } from './skills.js';
 const AUTO_RANGE = 15; // m from where auto was switched on that it hunts
 const AUTO_LEASH = 26; // …and it walks back if it ends up farther than this
 const LOOT_RANGE = AUTO_RANGE + 3; // (what falls where its monster fell)
+const SUPPORT_FOLLOW = 5; // m: a supporting Doctor keeps this close to the party member it follows…
+const SUPPORT_REACH = 12; // …fights only foes this near them…
+const SUPPORT_PARTY = 45; // …and looks after party members this near it
 
 // How auto-hunt uses each skill on the action bar, in this order: guard (hurt: a wall, a smoke, a shield),
 // heal (us, or a party member, hurt), bless (a long boost, such as a tonic, that isn't on), buff (in a fight, not on yet),
@@ -155,10 +161,17 @@ export class Control {
   toggleAuto() {
     if (this.auto) { this.stopAuto(); return; }
     if (!this.p.alive) return;
-    if (this.game.currentZone?.safe) { this.game.ui.centerMsg('Hunt outside the camp'); return; }
-    this.auto = { anchor: this.p.pos.clone() };
+    const support = this.p.cls === 'healer' && this.partyNear().length > 0;
+    if (!support && this.game.currentZone?.safe) { this.game.ui.centerMsg('Hunt outside the camp'); return; }
+    this.auto = { anchor: this.p.pos.clone(), support, cared: new Map() };
     this.game.ui.setAuto(true);
-    this.game.ui.centerMsg('Auto-hunting here · T or any move to stop');
+    this.game.ui.centerMsg(support ? 'Auto-support: following and caring for your party · T or any move to stop' : 'Auto-hunting here · T or any move to stop');
+  }
+
+  // Our party members around (their heroes in our place, fainted ones too).
+  partyNear(range = SUPPORT_PARTY) {
+    const g = this.game;
+    return g.others.list.filter((o) => g.party.has(o.id) && !o.hostile && this.dist(o) < range);
   }
 
   stopAuto(quietly = false) {
@@ -245,6 +258,9 @@ export class Control {
     } else if (this.moveTo) {
       goal = this.moveTo;
       if (Math.hypot(goal.x - p.pos.x, goal.z - p.pos.z) < 0.35) { this.moveTo = null; goal = null; }
+    } else if (this.auto?.support && !this.isFoe(t)) { // supporting: stay near the one we follow
+      const lead = this.auto.lead;
+      if (lead && this.dist(lead) > SUPPORT_FOLLOW) { goal = lead.pos; stopAt = SUPPORT_FOLLOW - 1.5; }
     } else if (this.auto && !t) { // between fights: what fell, else back to the hunting ground
       goal = this.lootSpot() || (Math.hypot(this.auto.anchor.x - p.pos.x, this.auto.anchor.z - p.pos.z) > 3 ? this.auto.anchor : null);
     }
@@ -278,7 +294,7 @@ export class Control {
         const id = this.pending.id;
         if (this.dist(t) <= this.skillRange(id, t) + 0.2) {
           this.pending = null;
-          p.castSkill(id, { queued: true });
+          if (p.castSkill(id, { queued: true }) && this.auto?.support) this.cared(t, id);
         }
       }
     }
@@ -309,8 +325,10 @@ export class Control {
     const big = (e) => !!e && (e.def?.boss || e.elite);
     const on = (id) => !!p.buffs[BUFF_OF[id] || id];
     const hurtFriend = (range) => g.others.list.find((o) => o.alive && !o.hostile && g.party.has(o.id) && o.hp < 0.5 && this.dist(o) < range) || null;
+    const support = !!this.auto?.support; // (care is support's own business: here only its blows, Mana kept for care)
     const ready = p.sk.bar.filter((id) => id && AUTO_SKILL[id] && p.skillOpen(id) && !p.skillBlocked(id) && !((p.cd[id] || 0) > 0))
-      .filter((id) => { const k = AUTO_SKILL[id], cost = manaCost(SKILLS[id], p.level); return p.mp >= cost + (k === 'guard' || k === 'heal' ? 0 : s.maxMp * 0.1); });
+      .filter((id) => !support || !['guard', 'heal', 'bless'].includes(AUTO_SKILL[id]))
+      .filter((id) => { const k = AUTO_SKILL[id], cost = manaCost(SKILLS[id], p.level); return p.mp >= cost + (k === 'guard' || k === 'heal' ? 0 : s.maxMp * (support ? 0.35 : 0.1)); });
     if (!ready.length) return false;
     const want = (id) => {
       const sk = SKILLS[id], range = sk.range || 0, d = foe ? this.dist(foe) : Infinity;
@@ -344,6 +362,7 @@ export class Control {
   // Auto: a target around the hunting ground, skills and potions, loot after a kill.
   hunt(dt) {
     const g = this.game, p = this.p, a = this.auto;
+    if (a.support) { this.support(dt); return; }
     if (g.currentZone?.safe) { this.stopAuto(); return; }
     if (p.hp < p.stats.maxHp * 0.35) p.drink('hp');
     if (p.mp < p.stats.maxMp * 0.15) p.drink('mp');
@@ -358,6 +377,75 @@ export class Control {
     if (next && next.isHero) return; // (auto never starts a fight with another hero)
     if (next) this.setTarget(next);
     else if (this.target && !this.isFoe(this.target)) this.setTarget(null);
+  }
+
+  // ---------------------------------------------------------------- a Doctor supporting its party
+  // Follow a party member, care for everyone (care), and between cares help fight what's near them.
+  support(dt) {
+    const g = this.game, p = this.p, a = this.auto;
+    const party = this.partyNear();
+    if (!party.length) { this.stopAuto(true); g.ui.centerMsg('Auto-support off: no party member near'); return; }
+    if (!a.lead || !party.includes(a.lead)) a.lead = party.slice().sort((x, y) => this.dist(x) - this.dist(y))[0];
+    if (p.hp < p.stats.maxHp * 0.35) p.drink('hp');
+    if (p.mp < p.stats.maxMp * 0.2) p.drink('mp');
+    if ((a.careT = (a.careT || 0) - dt) <= 0) { a.careT = 0.25; if (this.care(party)) return; }
+    if (this.pending || (this.isFriend(this.target) && this.target !== a.lead)) return; // (on its way to care for someone)
+    // help fight: what's near the one we follow (or already on us), never another hero
+    const lead = a.lead, near = (e) => Math.hypot(e.pos.x - lead.pos.x, e.pos.z - lead.pos.z) < SUPPORT_REACH;
+    let foe = this.isFoe(this.target) && !this.target.isHero && (near(this.target) || (this.target.state === 'chase' && this.dist(this.target) < 6)) ? this.target : null;
+    if (!foe) { foe = this.nearestFoe(SUPPORT_REACH, lead.pos); if (foe?.isHero) foe = null; }
+    if (foe !== this.target) this.setTarget(foe);
+  }
+
+  // One care, if anyone needs one (true if it's cast, or we're on our way to cast it): bring round a fainted
+  // member, treat the most hurt (Triage when several are), a painkiller for one very low, the aid station when
+  // several are low, a remedy, and the tonics kept up on everyone.
+  care(party) {
+    const g = this.game, p = this.p, s = p.stats, now = g.time;
+    if (this.pending) return true;
+    if (p.stunT > 0 || p.channel || (p.action && !(p.action.swing && now >= p.combo.open))) return false;
+    const can = (id) => p.skillOpen(id) && !p.skillBlocked(id) && !((p.cd[id] || 0) > 0) && p.mp >= manaCost(SKILLS[id], p.level);
+    const life = (h) => (h === p ? p.hp / s.maxHp : h.hp);
+    const folks = [p, ...party.filter((o) => o.alive)];
+    const down = party.find((o) => !o.alive);
+    if (down && can('resurrection')) return this.castOn(down, 'resurrection');
+    const hurt = folks.filter((h) => life(h) < 0.95).sort((x, y) => life(x) - life(y)), worst = hurt[0];
+    const low = (f) => folks.filter((h) => life(h) < f && (h === p || this.dist(h) < 10)).length;
+    if (low(0.7) >= 2 && can('circle_healing')) return this.castOn(null, 'circle_healing');
+    if (worst && life(worst) < 0.6 && can('heal')) return this.castOn(worst, 'heal');
+    if (worst && life(worst) < 0.45 && can('divine_shield') && !this.caredLately(worst, 'divine_shield', 10)) return this.castOn(worst, 'divine_shield');
+    if (low(0.55) >= 2 && can('sanctuary')) return this.castOn(null, 'sanctuary');
+    const remedy = hurt.find((h) => life(h) < 0.85 && (h === p ? !p.buffs.renew : !this.caredLately(h, 'renew', 10)));
+    if (remedy && can('renew')) return this.castOn(remedy, 'renew');
+    if (worst && life(worst) < 0.8 && can('heal')) return this.castOn(worst, 'heal');
+    if (p.mp < s.maxMp * 0.4) return false; // (tonics only with Mana to spare)
+    for (const id of ['blessing', 'holy_armor']) {
+      if (!can(id)) continue;
+      const who = folks.find((h) => (h === p ? !p.buffs[id] : !this.caredLately(h, id, 590)));
+      if (who) return this.castOn(who, id);
+    }
+    return false;
+  }
+
+  // Cast a care on a friend (walking to them first if they're too far), on us, or around us (who: null).
+  castOn(who, id) {
+    const p = this.p, back = this.target, friend = who && who !== p;
+    if (friend) this.setTarget(who);
+    else if (this.isFriend(back)) this.setTarget(null); // (on us: not on whoever we last cared for)
+    const ok = p.castSkill(id);
+    if (this.pending?.kind === 'skill') return true; // (walking there: act() casts it when in range)
+    if (ok) this.cared(who || p, id);
+    if (friend) this.setTarget(back && back !== who && this.valid(back) && this.isFoe(back) ? back : null);
+    return ok;
+  }
+
+  cared(who, id) {
+    this.auto?.cared.set(`${who === this.p ? 'me' : who.id}:${id}`, this.game.time);
+  }
+
+  caredLately(who, id, secs) {
+    const t = this.auto?.cared.get(`${who.id}:${id}`);
+    return t !== undefined && this.game.time - t < secs;
   }
 
   // The nearest loot on the ground around the hunting ground (within `near` of us), that we can take: with

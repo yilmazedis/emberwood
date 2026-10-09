@@ -246,7 +246,7 @@ export class CaveView {
       this.group.add(m);
     }
 
-    // ---- the gates: fallen rock across the passage, a rune glowing in it
+    // ---- the gates: fallen rock across the passage, the crystal light showing through its cracks
     for (const gt of this.gates) {
       const grp = new THREE.Group(), parts = [];
       const across = gt.vertical ? 'x' : 'z'; // (a north–south passage is closed across x)
@@ -260,13 +260,13 @@ export class CaveView {
       const m = new THREE.Mesh(mergeGeometries(parts.map((g) => (g.index ? g.toNonIndexed() : g))), mat);
       m.castShadow = true;
       grp.add(m);
-      const rune = glowSprite(L.crystal, 0.55);
-      rune.scale.setScalar(2.4);
-      rune.position.y = 1.3;
-      grp.add(rune);
+      const shine = glowSprite(L.crystal, 0.55);
+      shine.scale.setScalar(2.4);
+      shine.position.y = 1.3;
+      grp.add(shine);
       grp.position.set(gt.x, 0, gt.z);
       gt.mesh = grp;
-      gt.rune = rune;
+      gt.shine = shine;
       this.group.add(grp);
     }
 
@@ -405,7 +405,7 @@ export class CaveView {
       const k = gt.open ? gt.t : 0;
       gt.mesh.visible = !(gt.open && gt.t >= 1);
       gt.mesh.position.y = -2.4 * k * k;
-      gt.rune.material.opacity = 0.55 * (1 - k);
+      gt.shine.material.opacity = 0.55 * (1 - k);
     }
   }
 
@@ -459,7 +459,7 @@ export class CaveView {
     c.lidT += ((c.opened ? 1 : 0) - c.lidT) * (1 - Math.exp(-6 * dt));
     if (c.lid) c.lid.rotation.x = -1.9 * c.lidT;
     const g = this.game, t = g.time;
-    for (const gt of this.gates) if (!gt.open && gt.rune) gt.rune.material.opacity = 0.42 + Math.sin(t * 2.4 + gt.stage) * 0.14;
+    for (const gt of this.gates) if (!gt.open && gt.shine) gt.shine.material.opacity = 0.42 + Math.sin(t * 2.4 + gt.stage) * 0.14;
     if (this.state.done && Math.random() < dt * 14) { // motes in the daylight
       const o = this.out;
       g.fx.add.emit({ pos: { x: o.x + (Math.random() - 0.5) * 2, y: 0.3, z: o.z + (Math.random() - 0.5) * 2 }, count: 1, spread: 0.2, velSpread: 0.2, vel: { x: 0, y: 1.4, z: 0 }, color: hdr(0xfff0c0, 2), size: 0.1, sizeEnd: 0.02, life: 1.6, drag: 0.5 });

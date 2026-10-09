@@ -10,7 +10,7 @@
 // really stands, so dodging works). A kill's XP and loot are shared out here (see credits: parties
 // share theirs) and each hero's game rolls what it was given.
 // Plain numbers only (no three.js), so Node runs it as is.
-import { ENEMY_TYPES, monsterHp, WORLD_BOSSES, WORLD_BOSS_FIRST, WORLD_BOSS_RETURN } from '../monsters.js';
+import { ENEMY_TYPES, monsterHp, xpFactor, WORLD_BOSSES, WORLD_BOSS_FIRST, WORLD_BOSS_RETURN } from '../monsters.js';
 import { planWorld, zoneAt, resolveCollision, isWalkable, randomWalkablePoint } from '../terrain.js';
 import { MAPS, START, portalTo, arrival } from '../maps.js';
 import { CAVES, STAGES, STAGE_ROOMS, MOUTH_REACH, stageSlots, caveLandFor, untilTomorrow } from '../caves.js';
@@ -529,7 +529,8 @@ class Monster {
   // Who gets what for this kill: [[hero, XP share, loot 0/1], …]. The heroes who hurt it form teams: a
   // party (with its members nearby, hit or not) or a lone hero. The XP is split between teams by the
   // damage each dealt; a party's part goes to its members by their level, plus a bonus for each extra
-  // member (grouping pays). The team that dealt the most gets the loot; a party's members take turns. A
+  // member (grouping pays), but only to those it can still teach (xpFactor): a hero ten levels above it gets
+  // 1 XP and takes nothing from the others, so a strong friend can carry a weaker one at full pace. The team that dealt the most gets the loot; a party's members take turns. A
   // world boss is fairer: everyone who dealt a tenth of its damage gets loot of their own too (each game
   // rolls its own: the unique one time in five). Everyone credited counts the kill for their quests.
   credits() {
@@ -554,10 +555,14 @@ class Monster {
     }
     const out = [], fair = this.def.worldBoss ? total * 0.1 : Infinity;
     for (const t of teams.values()) {
-      const n = t.heroes.length, pool = (t.dmg / total) * (1 + PARTY_BONUS * (n - 1));
-      const levels = t.heroes.reduce((sum, h) => sum + h.level, 0);
+      const n = t.heroes.length, taught = t.heroes.filter((h) => xpFactor(h.level, this.level) > 0);
+      const pool = (t.dmg / total) * (1 + PARTY_BONUS * Math.max(0, taught.length - 1));
+      const levels = taught.reduce((sum, h) => sum + h.level, 0);
       const looter = t !== best ? null : t.party ? t.heroes[sim.turn(t.party) % n] : t.heroes[0];
-      for (const h of t.heroes) out.push([h.pid, r3((pool * h.level * this.xpMul) / levels), h === looter || (this.hitters.get(h.pid) || 0) >= fair ? 1 : 0]);
+      for (const h of t.heroes) {
+        const share = taught.includes(h) ? r3((pool * h.level * this.xpMul) / levels) : 0;
+        out.push([h.pid, share, h === looter || (this.hitters.get(h.pid) || 0) >= fair ? 1 : 0]);
+      }
     }
     return out;
   }
@@ -930,7 +935,7 @@ export class WorldSim {
     if (!p || !m || typeof m !== 'object') return;
     const wasAlive = p.alive;
     if (Array.isArray(m.p) && m.p.length >= 3) {
-      const [x, z, yaw, mode, sp, alive, hp, away, dr, ev] = m.p.map(Number);
+      const [x, z, yaw, mode, sp, alive, hp, away, dr, ev, life, most] = m.p.map(Number);
       // (only where it is: a position from before a journey is left behind)
       if (Number.isFinite(x) && Number.isFinite(z) && Number.isFinite(yaw) && p.area?.map.contains(x, z)) {
         p.x = x;
@@ -943,6 +948,8 @@ export class WorldSim {
         p.away = away === 1;
         p.dr = clamp(dr || 0, 0, MAX_DR); // how much of a blow its armor takes, and its chance to dodge one
         p.ev = clamp(ev || 0, 0, MAX_EVADE);
+        p.mhp = clamp(Math.round(most) || 0, 0, 1e6); // (Life in numbers, for the others to see)
+        p.life = clamp(Math.round(life) || 0, 0, p.mhp);
       }
     }
     if (m.k && typeof m.k === 'object' && JSON.stringify(m.k).length < 500) {
@@ -1081,7 +1088,7 @@ export class WorldSim {
     for (const o of area.players) {
       if (o === me || Math.abs(o.x - me.x) > SEE_PLAYERS || Math.abs(o.z - me.z) > SEE_PLAYERS) continue;
       seenP.add(o.pid);
-      const u = [o.pid, r2(o.x), r2(o.z), r2(o.yaw), o.mode, r1(o.sp), o.alive ? 1 : 0, r2(o.hp), o.away ? 1 : 0];
+      const u = [o.pid, r2(o.x), r2(o.z), r2(o.yaw), o.mode, r1(o.sp), o.alive ? 1 : 0, r2(o.hp), o.away ? 1 : 0, o.life || 0, o.mhp || 0];
       const key = u.join(), k = me.knownP.get(o.pid);
       if (!k || k.ver !== o.lookVer) {
         pl.push({ i: o.pid, n: o.name, c: o.cls, l: o.level, k: o.look, u });

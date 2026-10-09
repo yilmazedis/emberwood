@@ -352,7 +352,9 @@ export class Player {
     s.spellLo = Math.max(1, Math.round(s.baseLo * s.spellMul));
     s.spellHi = Math.max(s.spellLo + 1, Math.round(s.baseHi * s.spellMul));
     s.heal = (1 + s.healPct) * (1 + A.int * AK.intHeal); // heals and tonics
-    s.dr = Math.min(0.85, s.armor / (s.armor + 60 + 8 * Math.max(0, L - 10))); // (armor grows with level: so does what it takes)
+    // a blow's share the armor takes: armor / (armor + what the level asks), the ask growing with the level as gear
+    // does, slower past 50 (the best normal gear's level), so the same armor counts nearly as much up there
+    s.dr = Math.min(0.85, s.armor / (s.armor + 60 + 8 * (clamp(L, 10, 50) - 10) + 3 * Math.max(0, L - 50)));
     s.style = this.styleName();
     this.stats = s;
     if (this.hp !== undefined) {

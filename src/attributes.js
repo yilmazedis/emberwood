@@ -14,7 +14,7 @@ export const K = {
   auto: 0.014, // weapon and spell damage per level, for everyone
   prim: 0.006, // weapon damage per point of the class's primary attribute
   strHp: 2, strRegen: 0.03,
-  agiSpd: 0.0008, agiArmor: 0.1,
+  agiSpd: 0.0008, agiArmor: 0.3,
   int: 0.01, intHeal: 0.001, intMp: 2,
 };
 

@@ -18,7 +18,7 @@ import { Doll } from './doll.js';
 import { Sfx } from './audio.js';
 import { ITEMS, rollDrop, rollPotion, rollUnique, rollRare, makeItem, itemName, itemColor, tierAt } from './items.js';
 import { CAVES, CAVE_LANDS, KEY_RANGE, KEY_CHANCE, caveLandFor, caveRules, dayNumber, untilTomorrow } from './caves.js';
-import { monsterXp } from './monsters.js';
+import { monsterXp, xpFactor } from './monsters.js';
 import { Input } from './input.js';
 import { Npcs } from './npcs.js';
 import { Bank } from './bank.js';
@@ -842,8 +842,7 @@ export class Game {
   // whole), quest progress, and, if it's our turn (loot), the loot, which only we see.
   rewardKill({ type, level, def: d, pos, height, share = 1, loot = true }) {
     const p = this.player;
-    const levelGap = p.level - level;
-    const xp = Math.max(1, Math.round(monsterXp(d, level) * clamp(1 - (levelGap - 2) * 0.2, 0.2, 1.2) * share));
+    const xp = Math.max(1, Math.round(monsterXp(d, level) * xpFactor(p.level, level) * share));
     p.gainXp(xp);
     this.ui.floater(new THREE.Vector3(pos.x, pos.y + height + 0.6, pos.z), `+${xp} XP`, 'xp');
     this.quests.onEvent('kill', { type, pos: new THREE.Vector3(pos.x, pos.y + height + 1.2, pos.z) });
