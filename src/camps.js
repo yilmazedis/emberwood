@@ -28,7 +28,7 @@ export const CAMPS = {
     { role: 'goods', x: -7.8, z: 1.4, name: 'Pip', title: 'Provisioner', model: 'Mage', palette: 'alchemist' },
     { role: 'anvil', x: -6.0, z: -2.5, name: 'Brom', title: 'Blacksmith · upgrades', model: 'Barbarian', tint: 0xd8b8a0 },
   ].map((n) => ({ ...n, yaw: n.yaw ?? toward(n.x, n.z, 0, 1.5) })),
-  frostfang: at(1000, 66, LAND(['Sigrun', 'Ulf', 'Elka', 'Torvald'], [{ model: 'Barbarian', tint: 0xd0e0f0 }, { model: 'Knight', tint: 0xc8d8e8 }, { model: 'Mage', palette: 'cleric' }, { model: 'Rogue_Hooded', tint: 0xb8c8d8 }])),
+  frostfang: at(1000, 66, LAND(['Sigrun', 'Ulf', 'Elka', 'Torvald'], [{ model: 'Barbarian', tint: 0xd0e0f0 }, { model: 'Knight', tint: 0xc8d8e8 }, { model: 'Mage', palette: 'physician' }, { model: 'Rogue_Hooded', tint: 0xb8c8d8 }])),
   cinderfall: at(2000, 70, LAND(['Kael', 'Brann', 'Mira', 'Dorn'], [{ model: 'Knight', tint: 0xa89890 }, { model: 'Barbarian', tint: 0xc8a090 }, { model: 'Mage', tint: 0xffc0a0 }, { model: 'Rogue_Hooded', tint: 0x9a8a80 }])),
   shadowmere: at(3000, 70, LAND(['Vesna', 'Morrow', 'Lyra', 'Silas'], [{ model: 'Rogue', tint: 0xb8a8d8 }, { model: 'Knight', tint: 0x9890b0 }, { model: 'Mage', palette: 'alchemist' }, { model: 'Rogue_Hooded', tint: 0x8a80a0 }])),
   // the Death Canyon's camp: only potions and a bank (its rare gear is never sold)

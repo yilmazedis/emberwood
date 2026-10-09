@@ -39,7 +39,7 @@ const hitCap = (lvl) => 100 + 150 * lvl; // the most one blow can do (a check on
 const r2 = (v) => Math.round(v * 100) / 100;
 const r1 = (v) => Math.round(v * 10) / 10;
 const zonesOf = (map) => map.outdoor?.zones || map.zones || [];
-const HELP_RANGE = 35; // m: how far a heal or blessing may reach another hero
+const HELP_RANGE = 35; // m: how far a heal or tonic may reach another hero
 const HELPS = { heal: [0, 1], rez: [0.1, 0.8] }; // what a hero's game may give another (buffs: skills.js checks)
 const r3 = (v) => Math.round(v * 1000) / 1000;
 
@@ -590,7 +590,7 @@ class Area {
     this.wb = wb ? { ...wb, timer: WORLD_BOSS_FIRST, monster: null } : null;
     // a hidden cave (caves.js): its chambers one by one; cleared: how many have fallen silent
     this.cave = map.cave ? { def: map.cave, stage: 0, cleared: 0, done: false, nextAt: 3, entered: new Set(), t: 0 } : null;
-    this.calamity = map.calamities ? { next: rand(20, 35), last: null } : null;
+    this.calamity = map.calamities ? { next: rand(30, 60), last: null } : null;
   }
 
   // The Death Canyon's calamities: every quarter of a minute or so one strikes around the heroes out in the canyon
@@ -600,9 +600,12 @@ class Area {
   calamityTick(dt, heroes) {
     const c = this.calamity;
     if ((c.next -= dt) > 0) return;
-    c.next = Math.random() < 0.35 ? rand(3, 5) : rand(14, 22); // (sometimes the next one right after)
+    // the next: a minute or a minute and a half later, sometimes only 30-45 s; and often one more right after this
+    // one, ten seconds or so later (never two in a row like that)
+    c.chained = !c.chained && Math.random() < 0.35;
+    c.next = c.chained ? rand(8, 12) : Math.random() < 0.25 ? rand(30, 45) : rand(60, 90);
     const out = heroes.filter((p) => p.alive && !p.away && !zoneAt(p.x, p.z)?.safe).slice(0, 10);
-    if (!out.length) { c.next = 8; return; }
+    if (!out.length) { c.next = rand(20, 40); c.chained = false; return; } // (all in camp: a while after one steps out)
     const kinds = Object.keys(CALAMITIES).filter((k) => k !== c.last);
     const kind = kinds[Math.floor(Math.random() * kinds.length)], [dur, n, far] = CALAMITIES[kind];
     c.last = kind;
@@ -758,7 +761,7 @@ export class WorldSim {
   caveEntry(pid, land, { join = false, today = 0, lastDay = 0, hasKey = false } = {}) {
     const p = this.players.get(pid), c = CAVES[land], L = MAPS[land];
     if (!p?.area || !c) return { error: 'There is no such cave.' };
-    if (!p.alive) return { error: 'You have fallen.' };
+    if (!p.alive) return { error: 'You have fainted.' };
     const mine = caveLandFor(p.level);
     if (mine !== land) return { error: `${c.name} is for heroes of level ${c.heroes[0]} – ${c.heroes[1]}: yours is ${CAVES[mine].name} in ${MAPS[mine].name}.` };
     if (join) {
@@ -777,7 +780,7 @@ export class WorldSim {
   enterCave(pid, area) {
     const p = this.players.get(pid);
     if (!p?.area || !area) return { error: 'The cave has closed.' };
-    if (!p.alive) return { error: 'You have fallen.' };
+    if (!p.alive) return { error: 'You have fainted.' };
     area.cave.entered.add(p.key);
     this.place(p, area);
     const at = area.map.arrive;
@@ -885,10 +888,10 @@ export class WorldSim {
     if (respawn || camp) {
       if (respawn && p.alive) return { error: 'You are still standing.' };
       if (camp && (!p.alive || from.kind === 'arena')) return { error: 'The scroll does not work here.' };
-      if (from.respawn.map !== to) return { error: 'You rise elsewhere.' };
+      if (from.respawn.map !== to) return { error: 'You wake up elsewhere.' };
       at = from.respawn;
     } else {
-      if (!p.alive) return { error: 'You have fallen.' };
+      if (!p.alive) return { error: 'You have fainted.' };
       const portal = portalTo(from, to, p.x, p.z);
       if (!portal) return { error: 'The way there is not here.' };
       if (portal.needs === 'cleared' && !p.area.cave?.done) return { error: 'The way out opens when the keeper falls.' };
@@ -985,7 +988,7 @@ export class WorldSim {
     if (m.hp <= 0) m.die(p);
   }
 
-  // Hero p heals, blesses or raises hero h[0] (a friend: not a foe in the arena's pit). Its game worked out
+  // Hero p heals, boosts or brings round hero h[0] (a friend: not a foe in the arena's pit). Its game worked out
   // how much; the world keeps it within reason and passes it to the friend's game.
   help(p, h) {
     if (!Array.isArray(h) || p.budget < 1 || !p.alive) return;

@@ -59,7 +59,7 @@ export function handPos(a, left = false) {
 // The point a skill went to: the foe it was aimed at, the spot, or a few metres ahead.
 export const pointOf = (a, ctx, d = 6) => (ctx.target ? ctx.target.pos.clone() : ctx.at ? ctx.at.clone() : ahead(a, d));
 
-// A glowing ring of motes rising from the ground (heals, blessings, buffs landing on a hero).
+// A glowing ring of motes rising from the ground (heals, tonics, buffs landing on a hero).
 export function blessFx(g, p, hex, count = 30) {
   g.fx.add.emit({ pos: { x: p.x, y: p.y + 0.2, z: p.z }, count, spread: 0.6, velSpread: 0.4, vel: { x: 0, y: 2.2, z: 0 }, color: hdr(hex, 2.2), colorEnd: hdr(hex, 0.25), size: 0.2, sizeEnd: 0.04, life: 1.0, drag: 1.2, flat: true });
   g.fx.ring(p, 0.3, 1.6, hex, 0.5);

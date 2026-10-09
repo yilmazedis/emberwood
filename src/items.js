@@ -151,18 +151,19 @@ for (const [p, n, lv] of [['plate', 'Plate', 1], ['chitin', 'Chitin', 20], ['she
   });
 }
 
-// ---- Healer: maces of their own (and warriors' great weapons and shields); Chain, Blessed and Seraph
+// ---- Healer (Emberwood's doctor): maces of their own (and warriors' great weapons and shields); Chain, Apothecary
+// and Physician
 weapon('iron_mace', 'Iron Mace', 'mace1h', 1);
 weapon('morning_star', 'Morning Star', 'mace1h', 10, { tint: 0xd0d6de });
-weapon('holy_mace', 'Holy Mace', 'mace1h', 20, { tint: 0xffefc0, glow: 0x6a5a10 });
+weapon('holy_mace', 'Bonesetter', 'mace1h', 20, { tint: 0xe0f0e8, glow: 0x2a6a4a });
 weapon('flanged_mace', 'Flanged Mace', 'mace1h', 30, { tint: 0xc0c8d8 });
-weapon('lightbringer', 'Lightbringer', 'mace1h', 40, { tint: 0xfff6d0, glow: 0xa88a20 });
-weapon('seraph_scepter', "Seraph's Scepter", 'mace1h', 50, { model: 'proc_scepter', tint: 0xffffff, glow: 0xa8a0ff });
-for (const [p, n, lv] of [['chain', 'Chain', 1], ['blessed', 'Blessed', 20], ['seraph', 'Seraph', 40]]) {
+weapon('lightbringer', 'Lifewarden', 'mace1h', 40, { tint: 0xe8fff0, glow: 0x2aa86a });
+weapon('seraph_scepter', "Physician's Scepter", 'mace1h', 50, { model: 'proc_scepter', tint: 0xffffff, glow: 0x6affb0 });
+for (const [p, n, lv] of [['chain', 'Chain', 1], ['blessed', 'Apothecary', 20], ['seraph', 'Physician', 40]]) { // (keys kept for saves)
   set(p, n, 'healer', lv, {
     share: 0.85, mix: { int: 1, str: 1 },
-    look: { body: { chain: 0xb8c0cc, blessed: 0xfff4d8, seraph: 0xf0e0ff }[p], helm: 1, metal: 0.25 },
-    pieces: { head: 'Coif', body: 'Vestment', hands: 'Gloves', feet: 'Sandals' },
+    look: { body: { chain: 0xb8c0cc, blessed: 0xd8ecdc, seraph: 0xf4f8fa }[p], helm: 1, metal: 0.25 },
+    pieces: { head: 'Coif', body: 'Coat', hands: 'Gloves', feet: 'Boots' },
   });
 }
 
@@ -247,7 +248,7 @@ for (const [tier, level] of Object.entries(ACC_LEVEL)) {
   weapon('titans_wrath', "Titan's Wrath", 'sword2h', L, { ...R, model: 'sword_2handed_color', tint: 0xffd0b0, glow: 0xff4a1a });
   weapon('earthsplitter', 'Earthsplitter', 'axe2h', L, { ...R, tint: 0xc89070, glow: 0xffa040 });
   weapon('dawnbreaker', 'Dawnbreaker', 'mace1h', L, { ...R, model: 'proc_scepter', tint: 0xfff4d0, glow: 0xffd060 });
-  weapon('judgement_maul', 'Maul of Judgement', 'maul', L, { ...R, tint: 0xf0e0c0, glow: 0xffc040 });
+  weapon('judgement_maul', 'Maul of Reckoning', 'maul', L, { ...R, tint: 0xf0e0c0, glow: 0xffc040 });
   weapon('viper_queen', 'Viper Queen', 'dagger', L, { ...R, tint: 0xc0ffb0, glow: 0x3aff6a });
   weapon('stormstring', 'Stormstring', 'bow', L, { ...R, tint: 0xd0e8ff, glow: 0x4ab0ff });
   weapon('cataclysm_staff', 'Staff of Cataclysm', 'staff', L, { ...R, model: 'Skeleton_Staff', tint: 0xffc0a0, glow: 0xff3a10 });
@@ -256,7 +257,7 @@ for (const [tier, level] of Object.entries(ACC_LEVEL)) {
   book('tome_calamity', 'Tome of Calamity', L, { ...R, tint: 0xffb090, glow: 0xff4a10 });
   const sets = [
     ['warlord', 'Warlord', 'warrior', 1, { str: 4, agi: 1 }, 0x8a3a2a, 1, 0.35, ['Helm', 'Plate', 'Gauntlets', 'Greaves']],
-    ['sanctified', 'Sanctified', 'healer', 0.85, { int: 1, str: 1 }, 0xfff0c0, 1, 0.25, ['Coif', 'Vestment', 'Gloves', 'Sandals']],
+    ['sanctified', 'Plaguewarden', 'healer', 0.85, { int: 1, str: 1 }, 0x4a3e36, 1, 0.25, ['Mask', 'Coat', 'Gloves', 'Boots']], // (key kept for saves)
     ['phantom', 'Phantom', 'rogue', 0.7, { agi: 3, str: 1 }, 0x2a2a3a, 0, 0.05, ['Hood', 'Jerkin', 'Gloves', 'Boots']],
     ['stormweave', 'Stormweave', 'scientist', 0.55, { int: 3, str: 2 }, 0x3a5aa8, 1, 0, ['Cap', 'Coat', 'Gloves', 'Shoes']],
   ];
@@ -304,7 +305,7 @@ function uniqueAcc(key, name, tier, kind, mix, gem, extra = {}) {
   // high: Umbra the Devourer (Shadowmere)
   weapon('nightbane', 'Nightbane', 'sword1h', 46, { ...U, tint: 0xc0a8ff, glow: 0x6a2aff, flavour: 'agi' });
   weapon('abyssal_reaver', 'Abyssal Reaver', 'axe2h', 46, { ...U, tint: 0xa898d0, glow: 0x8a2aff, flavour: 'agi' });
-  weapon('halo_mercy', 'Halo of Mercy', 'mace1h', 46, { ...U, model: 'proc_scepter', tint: 0xffffff, glow: 0xd0b0ff, flavour: 'int' });
+  weapon('halo_mercy', 'Scepter of Mercy', 'mace1h', 46, { ...U, model: 'proc_scepter', tint: 0xffffff, glow: 0xd0b0ff, flavour: 'int' });
   weapon('voidstep', 'Voidstep', 'dagger', 46, { ...U, tint: 0xd0b8ff, glow: 0x7a3aff, flavour: 'agi' });
   weapon('starfall_bow', 'Starfall Bow', 'bow', 46, { ...U, tint: 0xe8e0ff, glow: 0x9a6aff, flavour: 'agi' });
   weapon('staff_eternity', 'Staff of Eternity', 'staff', 46, { ...U, tint: 0xf0e0ff, glow: 0xb06aff, flavour: 'int' });

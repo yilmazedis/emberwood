@@ -12,10 +12,10 @@ const AUTO_LEASH = 26; // …and it walks back if it ends up farther than this
 const LOOT_RANGE = AUTO_RANGE + 3; // (what falls where its monster fell)
 
 // How auto-hunt uses each skill on the action bar, in this order: guard (hurt: a wall, a smoke, a shield),
-// heal (us, or a party member, hurt), bless (a long blessing that isn't on), buff (in a fight, not on yet),
+// heal (us, or a party member, hurt), bless (a long boost, such as a tonic, that isn't on), buff (in a fight, not on yet),
 // around (foes around us), area (at the target, with foes around it, or a boss), finisher (a foe low on
 // Life), opener (a foe still some way off), strike (at the target). Not used: blinks, doors, vanishing,
-// raising the dead (those are a player's calls).
+// bringing round a fainted hero (those are a player's calls).
 const AUTO_SKILL = {
   shield_wall: 'guard', last_stand: 'guard', smoke_bomb: 'guard', divine_shield: 'guard', sanctuary: 'guard',
   heal: 'heal', renew: 'heal', circle_healing: 'heal',
@@ -57,7 +57,7 @@ export class Control {
     return !!e && e.isHero && !e.hostile;
   }
 
-  // Still there to aim at? (a fallen friend stays targeted: healers raise them)
+  // Still there to aim at? (a fainted friend stays targeted: healers bring them round)
   valid(e) {
     if (!e) return false;
     if (e.isHero) return this.game.others.byId.get(e.id) === e;
@@ -218,7 +218,7 @@ export class Control {
     if (sk.target === 'dead') {
       let t = this.isFriend(this.target) && !this.target.alive ? this.target : null;
       if (!t) t = g.others.list.filter((o) => !o.hostile && !o.alive && !o.away && this.dist(o) < range + 6).sort((a, b) => this.dist(a) - this.dist(b))[0] || null;
-      if (!t) { g.ui.centerMsg('No fallen hero nearby'); return null; }
+      if (!t) { g.ui.centerMsg('No fainted hero nearby'); return null; }
       if (this.dist(t) > range) {
         this.setTarget(t);
         if (!opts.queued) this.pending = { kind: 'skill', id: sk.id };

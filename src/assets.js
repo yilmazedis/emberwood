@@ -76,7 +76,7 @@ async function downloadFrom(url, onProgress) {
   }
 }
 
-// The mage's hat (the Scientist's looks, and the Healer's Cleric) was nearly as wide as the hero and hid its
+// The mage's hat (the Scientist's looks, and the Healer's Physician) was nearly as wide as the hero and hid its
 // weapon and clothes: its brim comes in toward the head and its bent tip comes down and in, while the part
 // around the head stays as it was (so the head doesn't show through). Done once, to the model every hero of
 // that look is cloned from (its vertices are where the hat sits on the head, in the head bone's space).
@@ -129,14 +129,14 @@ export async function loadAssets(onProgress) {
 // Other colours for a character, painted over its texture: the KayKit textures are grids of colour swatches
 // (128 x 256 px, each a top-to-bottom gradient), so a palette repaints chosen swatches: [x, y, w, h, top, bottom].
 const PALETTES = {
-  cleric: [ // a white robe with gold, for healers
-    [0, 256, 256, 256, '#ffffff', '#c4ccd8'], [896, 256, 128, 256, '#f2e2b0', '#a8884a'], [256, 256, 128, 256, '#ffe08a', '#b8862a'], [128, 512, 128, 256, '#ffe08a', '#b8862a'],
+  physician: [ // a doctor's white coat with green, for healers
+    [0, 256, 256, 256, '#ffffff', '#c4ccd8'], [896, 256, 128, 256, '#a8d8bc', '#3a6a52'], [256, 256, 128, 256, '#6ac89a', '#2a6a4a'], [128, 512, 128, 256, '#6ac89a', '#2a6a4a'],
   ],
   alchemist: [ // a green coat with copper
     [0, 256, 256, 256, '#7ab06a', '#244a22'], [896, 256, 128, 256, '#4a6a3a', '#162616'], [256, 256, 128, 256, '#e09a4a', '#7a3a10'], [128, 512, 128, 256, '#e09a4a', '#7a3a10'],
   ],
-  paladin: [ // a knight in white and gold
-    [0, 256, 128, 256, '#ffe9a0', '#b8862a'], [256, 512, 128, 256, '#ffe9a0', '#b8862a'],
+  medic: [ // a field medic in steel, white and green
+    [0, 256, 128, 256, '#e8f4ee', '#7aa890'], [256, 512, 128, 256, '#6ac89a', '#2a6a4a'],
   ],
 };
 const paletteCache = new Map();

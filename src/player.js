@@ -322,7 +322,7 @@ export class Player {
         else s[k] = (s[k] || 0) + v * n;
       }
     }
-    // timed boosts (skills, blessings, elixirs)
+    // timed boosts (skills, tonics, elixirs)
     for (const [id, b] of Object.entries(this.buffs || {})) {
       const def = BUFFS[id];
       if (!def) continue;
@@ -351,7 +351,7 @@ export class Player {
     s.dmgHi = Math.max(s.dmgLo + 1, Math.round(s.baseHi * s.physMul));
     s.spellLo = Math.max(1, Math.round(s.baseLo * s.spellMul));
     s.spellHi = Math.max(s.spellLo + 1, Math.round(s.baseHi * s.spellMul));
-    s.heal = (1 + s.healPct) * (1 + A.int * AK.intHeal); // heals and blessings
+    s.heal = (1 + s.healPct) * (1 + A.int * AK.intHeal); // heals and tonics
     s.dr = Math.min(0.85, s.armor / (s.armor + 60 + 8 * Math.max(0, L - 10))); // (armor grows with level: so does what it takes)
     s.style = this.styleName();
     this.stats = s;
@@ -1033,7 +1033,7 @@ export class Player {
     g.save();
   }
 
-  // "Rise again" on the death screen: the game takes us where heroes who fall here rise (game.rise),
+  // "Wake up" on the faint screen: the game takes us where heroes who faint here wake (game.rise),
   // then revive() stands us up.
   respawn() {
     this.game.rise();

@@ -29,7 +29,7 @@ const ATTACK_SVG = {
   arrow: `<svg viewBox="0 0 32 32"><path d="M7 3c9 5 9 21 0 26" fill="none" stroke="#c8a070" stroke-width="2.4"/><path d="M7 3v26" stroke="#e8e0d0" stroke-width="1"/><path d="M9 16h19" stroke="#e8e0d0" stroke-width="2"/><path d="M29 16l-5-3v6z" fill="#fff"/></svg>`,
   auto: `<svg viewBox="0 0 32 32"><circle cx="16" cy="16" r="11" fill="none" stroke="#9be06a" stroke-width="2.4" stroke-dasharray="5 3"/><path d="M13 10l9 6-9 6z" fill="#d8ffc0"/></svg>`,
 };
-const BUFF_COLOR = { war_cry: '#ffd060', shield_wall: '#8fc0ff', last_stand: '#ff5a4a', battle_rage: '#ff4a2a', poison_blade: '#7dff4a', smoke: '#9a96a8', vanish: '#9a6dff', swiftness: '#bfe8ff', shadow_mantle: '#a08aff', blessing: '#ffe08a', holy_armor: '#fff0c0', divine_shield: '#ffe7a0', sanctuary: '#ffe08a', renew: '#7dff9a', elixir_might: '#ff6a2a', elixir_iron: '#a8b4c4', elixir_vigor: '#4ad46a' };
+const BUFF_COLOR = { war_cry: '#ffd060', shield_wall: '#8fc0ff', last_stand: '#ff5a4a', battle_rage: '#ff4a2a', poison_blade: '#7dff4a', smoke: '#9a96a8', vanish: '#9a6dff', swiftness: '#bfe8ff', shadow_mantle: '#a08aff', blessing: '#ff8a7a', holy_armor: '#a8d0ff', divine_shield: '#bfe8ff', sanctuary: '#9affc8', renew: '#7dff9a', elixir_might: '#ff6a2a', elixir_iron: '#a8b4c4', elixir_vigor: '#4ad46a' };
 
 export class UI {
   constructor(game) {
@@ -880,11 +880,11 @@ export class UI {
   }
 
   showDeath(show) {
-    if (show) { // what falling costs here, and where you rise
+    if (show) { // what fainting costs here, and where you wake up
       const map = this.game.places.map, arena = map.kind === 'arena';
-      $('death-title').textContent = arena ? 'Defeated' : 'You have fallen';
+      $('death-title').textContent = arena ? 'Defeated' : 'You fainted';
       $('death-text').textContent = this.game.deathNote || (arena ? 'No gold is lost in the arena.' : 'Your gold pouch feels lighter…');
-      $('respawn').textContent = arena ? 'Back to the yard' : map.kind === 'dungeon' ? 'Rise again outside' : 'Rise again at camp';
+      $('respawn').textContent = arena ? 'Back to the yard' : map.kind === 'dungeon' ? 'Wake up outside' : 'Wake up at camp';
       this.game.deathNote = null;
     }
     this.el.death.classList.toggle('hidden', !show);

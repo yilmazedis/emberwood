@@ -46,14 +46,14 @@ export const CLASSES = {
     start: ['dagger', 'dagger', 'leather_body'],
   },
   healer: {
-    name: 'Healer', role: 'Heals, blessings and holy wrath',
-    desc: 'Keeps a party standing: heals, blessings that last, and raises the fallen. Fights alone with mace and holy fire, slower than the others.',
+    name: 'Healer', role: 'Medicine, tonics and a steady hand',
+    desc: 'Emberwood\'s doctor. Keeps a party standing: treats wounds, gives tonics that last, and brings round heroes who faint. Fights alone with a mace, lancets and ether, slower than the others.',
     hp: 1.1, mp: 1.4, armor: 1.1, dmg: 0.85, crit: 0, atkSpd: 0, moveSpd: 0, spell: 0,
     attrs: { str: 18, agi: 10, int: 22 }, primary: 'int', suggest: { int: 3, str: 2 },
     styles: { guard: 'Mace and shield', heavy: 'Great weapon' },
     looks: [
-      { model: 'Mage', name: 'Cleric', palette: 'cleric', hats: ['Mage_Hat'], capes: ['Mage_Cape'], portrait: ['Mage_Head', 'Mage_Hat'] },
-      { model: 'Knight', name: 'Paladin', palette: 'paladin', hats: ['Knight_Helmet', 'Knight_HelmetVisor'], capes: ['Knight_Cape'], portrait: ['Knight_Head', 'Knight_Helmet'] },
+      { model: 'Mage', name: 'Physician', palette: 'physician', hats: ['Mage_Hat'], capes: ['Mage_Cape'], portrait: ['Mage_Head', 'Mage_Hat'] },
+      { model: 'Knight', name: 'Field Medic', palette: 'medic', hats: ['Knight_Helmet', 'Knight_HelmetVisor'], capes: ['Knight_Cape'], portrait: ['Knight_Head', 'Knight_Helmet'] },
     ],
     start: ['iron_mace', 'round_shield', 'chain_body'],
   },

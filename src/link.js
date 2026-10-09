@@ -132,7 +132,7 @@ export class WorldLink {
     else if (ev[0] === 'L') g.places.bossDown(ev[1]);
     else if (ev[0] === 'H') g.heroHit(ev); // (a blow in the arena: ours to take even if late)
     else if (ev[0] === 'K') g.heroDown(ev);
-    else if (ev[0] === 'B') { if (ev[1] === this.pid) g.helped(ev); else g.others.helped(ev); } // (a friend's heal or blessing)
+    else if (ev[0] === 'B') { if (ev[1] === this.pid) g.helped(ev); else g.others.helped(ev); } // (a friend's heal or tonic)
     else if (stale) return;
     else if (ev[0] === 'p') g.others.act(ev[1], ev[2]);
     else if (ev[0] === 'Z') g.places.view.calamity?.(ev); // (the Death Canyon's calamities)

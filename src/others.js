@@ -264,8 +264,8 @@ export class RemotePlayers {
     const o = this.byId.get(id), g = this.game;
     if (!o) return;
     if (kind === 'heal') g.fx.heal(o.pos);
-    else if (kind === 'buff') blessFx(g, o.pos, 0xffe08a, 16);
-    else if (kind === 'rez') g.fx.levelUp(o.pos);
+    else if (kind === 'buff') blessFx(g, o.pos, 0x8fd8ff, 16);
+    else if (kind === 'rez') g.fx.heal(o.pos);
   }
 
   constructor(game) {

@@ -14,7 +14,7 @@
 // cast() returns the action that runs while the skill plays: { t, dur, canMove, moveMult, lockFacing,
 // tick(dt, action), end() } (see Player.update), plus dest: a place to tell the others instead of `at`.
 //   target: 'enemy' (a foe: the one selected, else the nearest), 'ground' (a spot), 'self', 'ally' (a friendly
-//   hero, ourselves if none is picked), 'dead' (a fallen friendly hero)
+//   hero, ourselves if none is picked), 'dead' (a fainted friendly hero)
 //   needs: the weapon it takes: 'shield', 'twohand', 'dagger', 'bow', 'staff' (a long one), 'book', 'melee'
 //   mp: mana, as a share of the hero's level's base pool (so it costs the same at any level)
 import * as THREE from 'three';
@@ -47,9 +47,9 @@ export const TREES = {
     { id: 'shadow', name: 'Shadow', color: '#8fa0b8', about: 'Speed, smoke and vanishing (for the party too).', passive: { moveSpd: 0.003, evade: 0.002 }, skills: ['swiftness', 'smoke_bomb', 'vanish', 'shadow_mantle'] },
   ],
   healer: [
-    { id: 'restore', name: 'Restoration', color: '#7dff9a', about: 'Heals, and raising the fallen.', passive: { healPct: 0.008 }, skills: ['heal', 'renew', 'resurrection', 'circle_healing'] },
-    { id: 'blessing', name: 'Blessing', color: '#ffe08a', about: 'Lasting blessings, shields and sanctuary.', passive: { armorPct: 0.004, hpPct: 0.004 }, skills: ['blessing', 'holy_armor', 'divine_shield', 'sanctuary'] },
-    { id: 'wrath', name: 'Retribution', color: '#ffb85a', about: 'Holy fire to fight alone.', passive: { dmgPct: 0.005 }, skills: ['smite', 'holy_strike', 'judgement', 'consecration'] },
+    { id: 'restore', name: 'Medicine', color: '#7dff9a', about: 'Treating wounds, and bringing round heroes who faint.', passive: { healPct: 0.008 }, skills: ['heal', 'renew', 'resurrection', 'circle_healing'] },
+    { id: 'blessing', name: 'Tonics', color: '#8fd8ff', about: 'Tonics and salves that last, painkillers and an aid station.', passive: { armorPct: 0.004, hpPct: 0.004 }, skills: ['blessing', 'holy_armor', 'divine_shield', 'sanctuary'] },
+    { id: 'wrath', name: 'Surgery', color: '#c8dcf0', about: 'A doctor\'s sharp tools and ether, to fight alone.', passive: { dmgPct: 0.005 }, skills: ['smite', 'holy_strike', 'judgement', 'consecration'] },
   ],
 };
 
@@ -75,7 +75,7 @@ export const MANA_COST = 1.6; // (skills cost this many times their share, so ma
 export const manaCost = (sk, level) => Math.round(sk.mp * MANA_COST * (40 + 6 * level));
 
 // Timed effects on a hero (Player.recompute applies them): { dur (s), and what they change }. A buff's
-// value (v) is its strength when cast (some grow with the caster's points). Long ones (blessings, elixirs)
+// value (v) is its strength when cast (some grow with the caster's points). Long ones (tonics, elixirs)
 // last through travel and saving.
 //   armorPct, hpPct, dmgPct, atkSpd, moveSpd, crit, evade: added; taken: damage taken × this; absorb: a shield
 export const BUFFS = {
@@ -88,11 +88,11 @@ export const BUFFS = {
   vanish: { dur: 4, name: 'Vanished', look: 'smoke' },
   swiftness: { dur: 600, name: 'Swiftness', moveSpd: (v) => v, look: 'swift', long: true, ally: true },
   shadow_mantle: { dur: 60, name: 'Shadow Mantle', crit: (v) => v, atkSpd: () => 0.1, look: 'mantle', ally: true },
-  blessing: { dur: 600, name: 'Blessing of Vitality', hpPct: (v) => v, long: true, ally: true },
-  holy_armor: { dur: 600, name: 'Holy Armor', armorPct: (v) => v, long: true, ally: true },
-  divine_shield: { dur: 10, name: 'Divine Shield', look: 'shield', ally: true }, // v: Life it soaks up
-  sanctuary: { dur: 10, name: 'Sanctuary', taken: () => 0.75, look: 'shield', ally: true },
-  renew: { dur: 10, name: 'Renew', look: 'renew', ally: true }, // v: share of max Life healed a second
+  blessing: { dur: 600, name: 'Vitality Tonic', hpPct: (v) => v, long: true, ally: true },
+  holy_armor: { dur: 600, name: 'Toughening Salve', armorPct: (v) => v, long: true, ally: true },
+  divine_shield: { dur: 10, name: 'Painkiller', look: 'shield', ally: true }, // v: Life it soaks up
+  sanctuary: { dur: 10, name: 'Aid Station', taken: () => 0.75, look: 'shield', ally: true },
+  renew: { dur: 10, name: 'Remedy', look: 'renew', ally: true }, // v: share of max Life healed a second
   frost_armor: { dur: 6, name: 'Frozen', look: 'frost' },
   elixir_might: { dur: 600, name: 'Elixir of Might', dmgPct: () => 0.1, long: true },
   elixir_iron: { dur: 600, name: 'Elixir of Iron', armorPct: () => 0.2, long: true },
@@ -120,7 +120,7 @@ export function auraTick(a, dt) {
       g.fx.add.emit({ pos: { x: p.x + Math.sin(ang) * 0.8, y: p.y + rand(0.3, 1.9), z: p.z + Math.cos(ang) * 0.8 }, count: 1, spread: 0.05, velSpread: 0.1, vel: { x: 0, y: 0.4, z: 0 }, color: hdr(0x8fc0ff, 2), colorEnd: hdr(0x3a6aff, 0.2), size: 0.16, sizeEnd: 0.03, life: 0.6, drag: 1 });
     } else if (id === 'shield' && r < dt * 18) {
       const ang = rand(0, Math.PI * 2), up = rand(0.2, 2.1);
-      g.fx.add.emit({ pos: { x: p.x + Math.sin(ang) * 0.85, y: p.y + up, z: p.z + Math.cos(ang) * 0.85 }, count: 1, spread: 0.03, velSpread: 0.05, color: hdr(0xffe7a0, 2.2), colorEnd: hdr(0xffc040, 0.2), size: 0.15, sizeEnd: 0.03, life: 0.5, drag: 1 });
+      g.fx.add.emit({ pos: { x: p.x + Math.sin(ang) * 0.85, y: p.y + up, z: p.z + Math.cos(ang) * 0.85 }, count: 1, spread: 0.03, velSpread: 0.05, color: hdr(0xd8f0ff, 2.2), colorEnd: hdr(0x6ab0ff, 0.2), size: 0.15, sizeEnd: 0.03, life: 0.5, drag: 1 });
     } else if (id === 'poison' && r < dt * 8) {
       const hand = new THREE.Vector3();
       a.h.bones.handslotr.getWorldPosition(hand);

@@ -60,7 +60,7 @@ automated tests; `&cls=scientist`, `rogue` or `healer` picks the class of a new 
 - **The Arena:** by waystone, from level 5. In its pit every hero but your party is a foe: a blow goes through the
   server (both in the pit, within reach, not party) to the victim's game. The server scales it to 45% of what it
   would do to a monster and takes the victim's armor (and dodge) off it, so both heroes see the same number. A stun
-  on a hero is halved (1.5 s at most). Falling there costs no gold (elsewhere you lose a tenth of your gold). Wins
+  on a hero is halved (1.5 s at most). Fainting there costs no gold (elsewhere you lose a tenth of your gold). Wins
   and losses are kept per hero (`arena.json` in the data folder) for the champions' board in the arena's yard.
 - **Chat:** one world channel (Enter, or the Chat button on phones); nearby heroes also show it in a bubble.
   Last 20 lines are shown to heroes who arrive.
@@ -130,7 +130,7 @@ skill trees.
 | **Warrior** | Sword (or axe) and shield · two one-handed weapons · one great weapon (two-handed sword or axe, spear, maul) | Most Life and armor; taunts, shields, whirlwinds and huge two-handed blows |
 | **Scientist** | Long staff (15% faster attacks, more spell power; the big fire and frost spells) · short staff and a book (the book adds spell power; poisons, curses, party teleport) | Fire and frost from range, the best at many monsters at once; fragile |
 | **Rogue** | Two daggers (assassin) · a bow (archer) | Critical hits, the fastest feet; Swiftness (+move speed for 10 minutes) on any friendly hero |
-| **Healer** | Mace and shield · a warrior's two-handed sword, spear or maul (not Raptor and the other warrior-only weapons) | Heals, blessings that last 10 minutes, resurrection; fights alone with holy fire but kills slower than the rest |
+| **Healer** | Mace and shield · a warrior's two-handed sword, spear or maul (not Raptor and the other warrior-only weapons) | Emberwood's doctor: treats wounds, tonics that last 10 minutes, brings round heroes who faint; fights alone with lancets and ether but kills slower than the rest |
 
 Basic attacks: melee weapons swing, bows shoot arrows, staves and short staves fire bolts. Intelligence raises the
 damage of spells (a Scientist's and a Healer's, staff bolts too), the class's primary attribute its weapon
@@ -179,13 +179,13 @@ level 10). Click (or tap) an open skill to put it on one of the 8 action slots.
 | Warrior | **Arms:** Power Strike, Cleave, Charge, Execute · **Guard:** War Cry, Shield Bash, Shield Wall, Last Stand · **Fury:** Battle Rage, Whirlwind, Leap Slam, Earthshatter |
 | Scientist | **Pyrology:** Fireball, Flame Wave, Inferno, Meteor · **Cryology:** Ice Bolt, Frost Nova, Blizzard, Glacial Prison · **Alchemy:** Toxic Flask, Blink, Teleport Party, Plague |
 | Rogue | **Assassination:** Backstab, Poison Blade, Shadow Step, Eviscerate · **Marksmanship:** Power Shot, Multi-Shot, Crippling Arrow, Arrow Rain · **Shadow:** Swiftness, Smoke Bomb, Vanish, Shadow Mantle |
-| Healer | **Restoration:** Heal, Renew, Resurrection, Circle of Healing · **Blessing:** Blessing of Vitality, Holy Armor, Divine Shield, Sanctuary · **Retribution:** Smite, Holy Strike, Judgement, Consecration |
+| Healer | **Medicine:** Treat Wounds, Remedy, Revive, Triage · **Tonics:** Vitality Tonic, Toughening Salve, Painkiller, Aid Station · **Surgery:** Lancet, Vital Strike, Ether Flask, Healing Vapours |
 
 Some skills need a weapon: shield skills a shield, Earthshatter a two-handed weapon, the big staff spells a long
 staff, Teleport Party and Plague a book, dagger and bow skills their weapon. Skills cost mana as a share of the
 level's mana pool, so they cost the same at every level, and enough that a long fight needs mana potions (mana
-comes back slowly, four times faster in a camp). Heals and blessings go on the friendly hero you picked
-(or you); the 10-minute blessings (Swiftness, Blessing of Vitality, Holy Armor) are kept when you log out.
+comes back slowly, four times faster in a camp). Treatments and tonics go on the friendly hero you picked
+(or you); the 10-minute boosts (Swiftness, Vitality Tonic, Toughening Salve) are kept when you log out.
 Teleport Party opens a door: every party member, anywhere, is asked whether to step through to the caster.
 
 Stuns, slows, poisons, weakening and the like are applied by the game server, so everyone sees them; bosses shrug
@@ -210,7 +210,7 @@ much slower when built for healing). In the Arena the skills hit heroes at 45%.
   away, so it lands.
 - **Auto-hunt:** T (or AUTO) fights the monsters around where you switched it on the way a player would: it chains
   combos (each press as a blow's window opens) and uses the skills on the action bar, each when it makes sense
-  (in this order: walls and smokes when hurt, heals for itself or a hurt party member, long blessings that ran out,
+  (in this order: walls and smokes when hurt, heals for itself or a hurt party member, long boosts that ran out,
   buffs in a fight, skills around it when foes crowd it, area skills on groups or a boss, Execute on a weak foe,
   Charge and Shadow Step to close in, then strikes), in a blow's combo window when it can (stronger). It keeps a
   tenth of its mana for heals and walls, never blinks, opens doors or vanishes, and never starts a fight with a
@@ -225,14 +225,14 @@ damage and speed (weapons) or armor (clothes, shields), and attributes (above). 
 and every hero class has its own weapons and clothes in each. Above them, **rare** items (level 70) only drop in the
 Death Canyon (below). Clothes are four-piece sets per class and item class (the Warrior's are
 Plate, Chitin and Shell; the Scientist's Linen, Alchemist and Aether; the Rogue's Leather, Stalker and Nightshade;
-the Healer's Chain, Blessed and Seraph).
+the Healer's Chain, Apothecary and Physician).
 
 | Class | Low | Middle | High |
 |---|---|---|---|
 | Warrior | Short Sword, Large Axe, Blade Axe, Giant Sword* | Mirage Sword, Glaive*, Sword of the Dead, Gigantic Axe | Raptor, Iron Impact*, Wyrmfang, Titan Greatsword* |
 | Scientist | Oak Staff, Copper Rod, Ember Staff, Galvanic Rod; Field Notes (book) | Frostwood Staff, Alchemist's Rod, Stormcaller, Catalyst Rod; Codex of Elements | Arcanum Staff, Aether Rod, Archmage's Spire, Philosopher's Rod; Tome of Ascension |
 | Rogue | Dagger, Short Bow, Kris, Hunter's Bow | Stiletto, Composite Bow, Viper Fang, Longbow | Nightfang, Elven Bow, Soul Reaper, Dragonbone Bow |
-| Healer | Iron Mace, Morning Star (and the * weapons) | Holy Mace, Flanged Mace | Lightbringer, Seraph's Scepter |
+| Healer | Iron Mace, Morning Star (and the * weapons) | Bonesetter, Flanged Mace | Lifewarden, Physician's Scepter |
 
 \* Warriors and Healers both can use these. Shields (Round, Kite, Tower) are for both too.
 
@@ -317,7 +317,7 @@ minimap too).
   may use that cave is called and can step in from wherever they are (or walk in by the glowing mouth while it's
   open). Alone is allowed, and hard.
 - **One a day:** a hero who has been in a cave today (Turkey's day: midnight there) stays out of every other, even if
-  its party opens one, and once out (stepped out, or fallen and risen in camp) it doesn't go back in, not even into
+  its party opens one, and once out (stepped out, or fainted and woken in camp) it doesn't go back in, not even into
   the copy it left. The server keeps the day. Each copy is its party's (or its lone hero's) alone: no other party or
   hero ever comes in. The cave's rules show before going in (at the mouth, with a party's call, and from the key).
 - **Ten chambers:** the monsters of each chamber rise as the one before falls silent (its gate of fallen rock
@@ -339,15 +339,15 @@ party, whenever you like; make a party there too. It is meant to be survived in 
 
 - **Heroes fight heroes:** out of its camp, Last Rest (safe: a provisioner, a banker and the gate back to
   Shadowmere; no waystone), every hero not in your party is your foe, as in the arena's pit (blows a little under
-  half as hard as on a monster, armor and dodging counted by the server). Falling there costs a tenth of your gold,
+  half as hard as on a monster, armor and dodging counted by the server). Fainting there costs a tenth of your gold,
   like anywhere; the canyon's fights aren't on the champions' board, but the canyon hears of each one.
 - **Rare items:** only its monsters carry them: **one kill in a thousand** (the Tyrant one in a hundred) drops a
   rare item (level 70, a tenth stronger than a normal item of its level: weapons, shields, books, a set of clothes
-  for each class (Warlord, Sanctified, Phantom, Stormweave) and Obsidian accessories), and apart from that, one in a
+  for each class (Warlord, Plaguewarden, Phantom, Stormweave) and Obsidian accessories), and apart from that, one in a
   thousand a **Rare Upgrade Recipe**, the only way to upgrade them (the anvil, as ever). Neither is sold anywhere;
   normal monsters never drop them. Rare items glow in their own colour.
-- **Calamities:** every 14–22 seconds the canyon strikes the heroes out in it (never the camp), and often another
-  follows a few seconds later. The world picks them, so everyone sees the same; their blows are fixed, not a share of
+- **Calamities:** every minute to a minute and a half (sometimes after only 30–45 seconds) the canyon strikes the
+  heroes out in it (never the camp), and often another follows about ten seconds later. The world picks them, so everyone sees the same; their blows are fixed, not a share of
   Life, so stronger heroes (and parties, healing each other) stand longer:
   - an **earthquake**: the whole canyon shakes for seconds, wearing 45 Life a second off everyone out in it, while
     rocks fall from the walls and fissures burst where red rings show (700 and a stagger)

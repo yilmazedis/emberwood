@@ -529,7 +529,7 @@ export class Game {
     this.places.closeTravel();
     p.control.stopAuto(true);
     const from = this.places.map;
-    ui.fade(true, respawn ? 'You rise again…' : camp ? 'Back to camp…' : summon ? 'Through the door in space…' : map.kind === 'dungeon' ? `Descending into ${map.name}…`
+    ui.fade(true, respawn ? 'You come round…' : camp ? 'Back to camp…' : summon ? 'Through the door in space…' : map.kind === 'dungeon' ? `Descending into ${map.name}…`
       : from.kind === 'dungeon' ? 'Climbing back up…' : `Traveling to ${map.name}…`);
     if (!respawn) this.sfx.play('portal');
     let r;
@@ -570,12 +570,12 @@ export class Game {
     } catch { /* they compile on first draw instead */ }
   }
 
-  // "Rise again": where heroes who fall here rise (the camp, or outside the dungeon), full of life.
+  // "Wake up": where heroes who faint here wake (the camp, or outside the dungeon), full of life.
   async rise() {
     const p = this.player, to = this.places.map.respawn;
     if (!(await this.travel(to.map, { respawn: true }))) {
       if (to.map !== this.places.id) return; // (can't reach the world: stay down and try again)
-      p.pos.set(to.x, heightAt(to.x, to.z), to.z); // the same place: rise here anyway
+      p.pos.set(to.x, heightAt(to.x, to.z), to.z); // the same place: wake here anyway
       p.yaw = p.targetYaw = to.yaw;
       this.camFocus.copy(p.pos);
     }
@@ -832,9 +832,9 @@ export class Game {
       if (BUFFS[id].long) this.ui.log(`${name} gave you <b>${BUFFS[id].name}</b>.`, 'xp');
     } else if (kind === 'rez' && !p.alive) {
       const share = Math.min(0.8, Math.max(0.1, Number(value) || 0.4));
-      this.ui.log(`${name} raised you!`, 'lvl');
+      this.ui.log(`${name} brought you round!`, 'lvl');
       p.revive(share);
-      this.fx.levelUp(p.pos);
+      this.fx.heal(p.pos);
     }
   }
 
@@ -1026,7 +1026,7 @@ export class Game {
       this.fx.levelUp(this.player.pos);
     } else if (loser === this.link.pid) {
       const o = this.others.byId.get(winner);
-      if (o) this.deathNote = this.places.map.kind === 'arena' ? `${o.name} won this one. No gold is lost in the arena.` : `${o.name} cut you down. The canyon takes a tenth of your gold.`;
+      if (o) this.deathNote = this.places.map.kind === 'arena' ? `${o.name} won this one. No gold is lost in the arena.` : `${o.name} knocked you out. The canyon takes a tenth of your gold.`;
     }
   }
 
