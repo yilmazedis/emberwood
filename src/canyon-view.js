@@ -13,12 +13,13 @@ import { heightAt, zoneAt } from './world.js';
 import { hdr } from './fx.js';
 import { rand } from './util.js';
 
-// what each does to a hero caught in it: damage, radius (m), stun (s); tremor / burn / scour: damage a second
+// what each does to a hero caught in it: damage, radius (m), stun (s); tremor / burn / scour: damage a second. Light
+// for now (players wanted to see them, not be worn down by them): a strike takes about a tenth of a level-70 hero.
 export const CALAMITY = {
-  quake: { dmg: 700, r: 4.5, stun: 0.8, tremor: 45, color: 0xff6a1a, warn: 1.5, say: 'Earthquake! The canyon shakes: keep out of the red rings.' },
-  meteors: { dmg: 1000, r: 5.5, stun: 0.3, burn: 140, burnR: 3.5, color: 0xff3a10, warn: 1.6, say: 'Meteors! Fire falls on the canyon: keep out of the red rings.' },
-  storm: { dmg: 750, r: 3.5, stun: 0.6, color: 0x7ab8ff, warn: 1.1, say: 'A storm breaks! Lightning strikes where the blue rings are.' },
-  sandstorm: { scour: 75, slow: 0.65, say: 'Sandstorm! You can hardly see, it slows you and scours you. Shelter in Last Rest.' },
+  quake: { dmg: 120, r: 4.5, stun: 0.8, tremor: 8, color: 0xff6a1a, warn: 1.5, say: 'Earthquake! The canyon shakes: keep out of the red rings.' },
+  meteors: { dmg: 160, r: 5.5, stun: 0.3, burn: 20, burnR: 3.5, color: 0xff3a10, warn: 1.6, say: 'Meteors! Fire falls on the canyon: keep out of the red rings.' },
+  storm: { dmg: 130, r: 3.5, stun: 0.6, color: 0x7ab8ff, warn: 1.1, say: 'A storm breaks! Lightning strikes where the blue rings are.' },
+  sandstorm: { scour: 10, slow: 0.65, say: 'Sandstorm! You can hardly see, it slows you and scours you. Shelter in Last Rest.' },
 };
 
 // The scars' pictures, drawn once each: a crater (black at its heart, scorched around, a few embers) and a

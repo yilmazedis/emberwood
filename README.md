@@ -374,11 +374,11 @@ party, whenever you like; make a party there too. It is meant to be survived in 
 - **Calamities:** every minute to a minute and a half (sometimes after only 30–45 seconds) the canyon strikes the
   heroes out in it (never the camp), and often another follows about ten seconds later. The world picks them, so everyone sees the same; their blows are fixed, not a share of
   Life, so stronger heroes (and parties, healing each other) stand longer:
-  - an **earthquake**: the whole canyon shakes for seconds, wearing 45 Life a second off everyone out in it, while
-    rocks fall from the walls and fissures burst where red rings show (700 and a stagger)
-  - **meteors**: fire falls where red rings show (1000, wide) and the crater burns a while (140 a second)
-  - a **lightning storm**: the sky darkens, rain, bolts where blue rings show (750 and a stagger)
-  - a **sandstorm**: the sand closes in, hard to see and slow to walk, scouring 75 Life a second until it passes or
+  - an **earthquake**: the whole canyon shakes for seconds, wearing 8 Life a second off everyone out in it, while
+    rocks fall from the walls and fissures burst where red rings show (120 and a stagger)
+  - **meteors**: fire falls where red rings show (160, wide) and the crater burns a while (20 a second)
+  - a **lightning storm**: the sky darkens, rain, bolts where blue rings show (130 and a stagger)
+  - a **sandstorm**: the sand closes in, hard to see and slow to walk, scouring 10 Life a second until it passes or
     you reach the camp
 
   The first strike of each falls right by every hero: keep moving.
