@@ -152,15 +152,13 @@ MAPS.arena = {
 {
   const sm = MAPS.shadowmere, gate = { x: shadowmere.cx + CANYON_GATE.x, z: shadowmere.cz + CANYON_GATE.z };
   const back = { x: canyon.cx + CANYON_BACK.x, z: canyon.cz + CANYON_BACK.z };
-  const stone = canyon.plan.props.find((p) => p.kind === 'waystone');
-  MAPS.canyon = {
+  MAPS.canyon = { // (no waystone: the gate is the way out)
     id: 'canyon', name: 'Death Canyon', sub: 'Level 70 – 78 · heroes fight heroes', kind: 'outdoor', pvp: true, calamities: true, levels: [70, 78], minLevel: 70, music: 'world',
     spawns: CANYON_SPAWNS, outdoor: canyon, contains: (x, z) => canyon.contains(x, z),
-    camp: canyon.camp, waystone: { x: stone.x, z: stone.z },
+    camp: canyon.camp, waystone: null,
     arrive: { x: back.x, z: back.z + 2.6, yaw: 0 }, respawn: { map: 'canyon', x: canyon.camp.x - 2.5, z: canyon.camp.z - 3, yaw: Math.PI },
     look: { fog: 0x5a3020, near: 40, far: 120, hemiSky: 0xffc8a0, hemiGround: 0x4a2418, hemi: 1.15, sun: 0xffb080, sunI: 2.2, sky: [0x2a120c, 0x7a3a22, 0xb86a3e], embers: true },
     portals: [
-      { id: 'waystone', x: stone.x, z: stone.z, to: LANDS, name: 'Waystone', title: 'Travel to another land', action: 'Travel' },
       { id: 'gate', x: back.x, z: back.z + 2.2, to: 'shadowmere', at: { x: gate.x, z: gate.z + 2.6, yaw: 0 }, name: 'Gate to Shadowmere', title: 'Out of the canyon', action: 'Leave' },
     ],
   };

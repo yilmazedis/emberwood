@@ -1343,7 +1343,7 @@ export class UI {
     ctx.drawImage(base.canvas, 0, 0, S, S);
     if (!inside && map.camp) { // the camp, its waystone and the dungeon doors
       diamond(m(map.camp.x, map.camp.z), 5, '#ffcf6a', '#3a2a14');
-      diamond(m(map.waystone.x, map.waystone.z), 3.5, '#7fe0ff', '#0a2a3a');
+      if (map.waystone) diamond(m(map.waystone.x, map.waystone.z), 3.5, '#7fe0ff', '#0a2a3a');
       for (const p of map.portals) if (p.id !== 'waystone') diamond(m(p.x, p.z), 3.5, '#c79aff', '#1a0a2a');
     }
     for (const p of map.portals || []) if (inside && p.id === 'down') diamond(m(p.x, p.z), 3.5, '#c79aff', '#1a0a2a');

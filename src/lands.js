@@ -25,7 +25,9 @@ const BIOMES = {
   canyon: {
     a: C(0x8a4e36), b: C(0x7a432e), dark: C(0x5a2c1e), rock: C(0x6a3a2a), path: C(0xa8784e), pathEdge: C(0x8a5e40), camp: C(0x6a4a3a),
     crack: C(0xff5a10), patches: { dc_scar: [C(0x2e2222), 0.65], dc_spine: [C(0xb89a7a), 0.45], dc_maw: [C(0x3a1e18), 0.65] },
-    pool: { lava: C(0x5a2414) }, rocks: [0x7a4a38, 0x5e3628],
+    pool: { lava: C(0x5a2414) }, rocks: [0x7a4a38, 0x5e3628], lavaHeat: 0.45,
+    // the walls in layers of rock, as in a real canyon: bands by height, a little wavy
+    strata: [C(0x9a5236), C(0xb8724a), C(0x7a3e2a), C(0xc8946a), C(0x8a4630), C(0x6a3424), C(0xa8603e)],
   },
   shadowmere: {
     a: C(0x3c3a4a), b: C(0x343a38), dark: C(0x2a2834), rock: C(0x56526a), path: C(0x5e5664), pathEdge: C(0x4a4452), camp: C(0x4e4452),
@@ -59,8 +61,14 @@ function groundColor(om, B, out, x, z, h, slope) {
     if (d < p.r + 2.5) out.lerp(B.pool[p.kind] || B.dark, 1 - smoothstep(p.r - 0.5, p.r + 2.5, d));
   }
   if (slope > 0.5) out.lerp(B.rock, smoothstep(0.5, 0.8, slope));
+  if (B.strata && h > 2.2) { // canyon walls: layered rock
+    const band = h * 0.42 + noise2(lx * 0.03, lz * 0.03) * 0.8, i = Math.floor(band), L = B.strata;
+    const a = L[((i % L.length) + L.length) % L.length], b = L[(((i + 1) % L.length) + L.length) % L.length];
+    out.lerp(tmpStrata.copy(a).lerp(b, smoothstep(0.75, 1, band - i)), smoothstep(2.2, 4.5, h) * 0.85);
+  }
   return out;
 }
+const tmpStrata = new THREE.Color();
 
 function buildTerrain(om, B, rng) {
   const SIZE = om.R * 2 + 60, SEG = Math.round(SIZE / 1.5);
@@ -95,18 +103,19 @@ function buildTerrain(om, B, rng) {
   return mesh;
 }
 
-// Lava flows (animated, glowing), black water (still and glossy), a frozen lake (pale ice).
-function buildPools(om, group, lights) {
+// Lava flows (animated, glowing), black water (still and glossy), a frozen lake (pale ice). heat: how bright
+// the lava (the canyon's, out in daylight, is a dark crust with glowing veins).
+function buildPools(om, group, lights, heat = 1) {
   const lava = new THREE.ShaderMaterial({
-    uniforms: { uTime: worldUniforms.uTime },
+    uniforms: { uTime: worldUniforms.uTime, uHeat: { value: heat } },
     vertexShader: 'varying vec2 vW; void main(){ vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xz; gl_Position = projectionMatrix * viewMatrix * w; }',
-    fragmentShader: `uniform float uTime; varying vec2 vW;
+    fragmentShader: `uniform float uTime; uniform float uHeat; varying vec2 vW;
       float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
       float n(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
         return mix(mix(h(i), h(i + vec2(1, 0)), f.x), mix(h(i + vec2(0, 1)), h(i + vec2(1, 1)), f.x), f.y); }
       void main(){ vec2 p = vW * 0.35; float v = n(p + vec2(uTime * 0.12, uTime * 0.07)) * 0.6 + n(p * 2.3 - vec2(uTime * 0.2, 0.0)) * 0.4;
         float veins = smoothstep(0.42, 0.62, v);
-        vec3 c = mix(vec3(0.55, 0.06, 0.01), vec3(3.2, 1.25, 0.25), veins) + vec3(0.6, 0.12, 0.0) * smoothstep(0.7, 0.9, v);
+        vec3 c = mix(vec3(0.55, 0.06, 0.01) * uHeat * uHeat, vec3(3.2, 1.25, 0.25) * uHeat, veins) + vec3(0.6, 0.12, 0.0) * smoothstep(0.7, 0.9, v) * uHeat;
         gl_FragColor = vec4(c, 1.0); }`,
   });
   const tar = new THREE.MeshStandardMaterial({ color: 0x0c0a12, roughness: 0.06, metalness: 0.35, emissive: 0x1a0c2a, emissiveIntensity: 0.6 });
@@ -416,7 +425,8 @@ function buildMinimap(om, B) {
       const h = om.heightAt(x, z);
       groundColor(om, B, col, x, z, h, 0);
       for (const p of om.pools) if (Math.hypot(x - p.x, z - p.z) < p.r) col.copy(POOL[p.kind]);
-      const shade = clamp(0.85 + (h - 1.2) * 0.06, 0.6, 1.2);
+      let shade = clamp(0.85 + (h - 1.2) * 0.06, 0.6, 1.2);
+      if (om.corridor && om.gorge(x, z).out > 0) shade *= 0.45; // (the mountains around a gorge: dark)
       const o = (py * S + px) * 4;
       col.convertLinearToSRGB();
       img.data[o] = clamp(col.r * 255 * shade, 0, 255);
@@ -459,7 +469,7 @@ export class LandView {
     this.built = true;
     const om = this.om, B = BIOMES[this.map.id], rng = mulberry32(om.def.seed * 7 + 1);
     this.group.add(buildTerrain(om, B, rng));
-    buildPools(om, this.group, this.lights);
+    buildPools(om, this.group, this.lights, B.lavaHeat);
     const mat = envMaterial();
     for (const [kind, items] of Object.entries(om.plan.trees)) {
       if (items.length) scatterInstanced(this.group, TREES[kind](rng), kind === 'glowcap' ? glowcapMaterial() : mat, items);

@@ -25,8 +25,9 @@ const SEE_PLAYERS = 80; // … and about other heroes
 const ACTIVE = 90; // monsters further than this from every hero rest
 const INSTANCE_TTL = 300; // seconds an empty dungeon copy is kept (come back for what you left)
 const STAGE_PAUSE = 2.5; // s between a cave chamber cleared (its gate crumbles) and the next one's monsters rising
-// The Death Canyon's calamities: how long each lasts (s), and how many strikes fall around each hero out there
-const CALAMITIES = { quake: [6, 3], meteors: [6, 4], storm: [9, 5], sandstorm: [12, 0] };
+// The Death Canyon's calamities: how long each lasts (s), how many strikes fall around each hero out there, and
+// how far from them (m)
+const CALAMITIES = { quake: [7, 5, 10], meteors: [7, 7, 10], storm: [10, 8, 8], sandstorm: [12, 0, 0] };
 const HERO_RADIUS = 0.5;
 const SHARE_RANGE = 60; // party members this near a kill share it
 const PARTY_BONUS = 0.2; // each extra member in range adds this much to the party's XP
@@ -592,24 +593,24 @@ class Area {
     this.calamity = map.calamities ? { next: rand(20, 35), last: null } : null;
   }
 
-  // The Death Canyon's calamities: every half a minute or so one strikes around the heroes out in the canyon
-  // (never in its camp). The world picks the kind and where (the first strike right by each hero: move!), so
-  // every game sees the same; each hero's game takes its own hurt (canyon-view.js).
-  // ['Z', kind, seconds, [x, z, delay, …]]
+  // The Death Canyon's calamities: every quarter of a minute or so one strikes around the heroes out in the canyon
+  // (never in its camp), and as often as not another hard on its heels. The world picks the kind and where (the
+  // first strike right by each hero: move!), so every game sees the same; each hero's game takes its own hurt
+  // (canyon-view.js). ['Z', kind, seconds, [x, z, delay, …]]
   calamityTick(dt, heroes) {
     const c = this.calamity;
     if ((c.next -= dt) > 0) return;
-    c.next = rand(30, 50);
+    c.next = Math.random() < 0.35 ? rand(3, 5) : rand(14, 22); // (sometimes the next one right after)
     const out = heroes.filter((p) => p.alive && !p.away && !zoneAt(p.x, p.z)?.safe).slice(0, 10);
-    if (!out.length) { c.next = 10; return; }
+    if (!out.length) { c.next = 8; return; }
     const kinds = Object.keys(CALAMITIES).filter((k) => k !== c.last);
-    const kind = kinds[Math.floor(Math.random() * kinds.length)], [dur, n] = CALAMITIES[kind];
+    const kind = kinds[Math.floor(Math.random() * kinds.length)], [dur, n, far] = CALAMITIES[kind];
     c.last = kind;
     const spots = [];
     for (const p of out) {
       for (let i = 0; i < n; i++) {
         for (let tries = 0; tries < 8; tries++) {
-          const a = rand(0, TAU), d = i === 0 ? rand(0, 1.5) : rand(2, 8), x = p.x + Math.cos(a) * d, z = p.z + Math.sin(a) * d;
+          const a = rand(0, TAU), d = i === 0 ? rand(0, 1.5) : rand(2, far), x = p.x + Math.cos(a) * d, z = p.z + Math.sin(a) * d;
           if (!isWalkable(x, z, 0.4) || zoneAt(x, z)?.safe) continue;
           spots.push(r2(x), r2(z), r2(i === 0 ? rand(1.6, 2.4) : rand(1.8, dur - 0.4)));
           break;

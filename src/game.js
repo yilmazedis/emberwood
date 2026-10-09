@@ -36,7 +36,7 @@ import { angleDiff, yawTo, randInt, rand, chance, clamp } from './util.js';
 
 const SAVE_KEY = 'emberwood-save-v1'; // the local save (offline play: ?autostart)
 const CAVE_OPEN_FOR = 45 * 60000; // ms a party's open cave shows its mouth to the members (the server decides)
-const RARE_CHANCE = 0.01; // a Death Canyon monster's chance of a rare item with each kill (and, apart, of a rare recipe)
+const RARE_CHANCE = 0.001; // a Death Canyon monster's chance of a rare item with each kill (and, apart, of a rare recipe)
 const escHtml = (t) => String(t).replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
 // Graphics, from Settings: how many of the screen's pixels to draw (a multiple of its size, never more than it
 // has), smoothed edges (MSAA samples), the sun's shadow map (0: no shadows; phones get half, at least 1024) and

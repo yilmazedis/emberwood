@@ -331,25 +331,32 @@ minimap too).
   in its hall.
 
 **The Death Canyon** (`src/maps/canyon.js`, drawn by `src/canyon-view.js`), through a gate of red rock west of
-Shadowmere's camp, from **level 70**: a red gorge of cliffs, lava cracks and old bones, its monsters of levels
-70–78 (Rock Slimes, Dust Stalkers, Canyon Ravagers, Bone Shamans, Canyon Archers, Scorched Knights, and in the Maw
-**Grakhul, the Canyon Tyrant**). Go in alone or with a party, whenever you like; make a party there too.
+Shadowmere's camp, from **level 70**: a narrow gorge winding north between layered red mountains, from its camp
+past five wider chambers (the Red Gorge, the Dragon's Spine, the Scar, the Bone Pass and the Maw) to **Grakhul, the
+Canyon Tyrant**. Its monsters, levels 70–78 (Rock Slimes, Dust Stalkers, Canyon Ravagers, Bone Shamans, Canyon
+Archers, Scorched Knights), are all **elites**: 40% more Life, 25% harder blows, 40% more XP. Go in alone or with a
+party, whenever you like; make a party there too. It is meant to be survived in a party.
 
-- **Heroes fight heroes:** out of its camp, Last Rest (safe: a provisioner, a banker, a waystone, the gate back),
-  every hero not in your party is your foe, as in the arena's pit (blows a little under half as hard as on a
-  monster, armor and dodging counted by the server). Falling there costs a tenth of your gold, like anywhere; the
-  canyon's fights aren't on the champions' board, but the canyon hears of each one.
-- **Rare items:** only its monsters carry them: **one kill in a hundred** (the Tyrant one in ten) drops a rare item
-  (level 70, a tenth stronger than a normal item of its level: weapons, shields, books, a set of clothes for each
-  class (Warlord, Sanctified, Phantom, Stormweave) and Obsidian accessories), and apart from that one in a hundred a
-  **Rare Upgrade Recipe**, the only way to upgrade them (the anvil, as ever). Neither is sold anywhere; normal
-  monsters never drop them. Rare items glow in their own colour.
-- **Calamities:** every half a minute or so the canyon strikes the heroes out in it (never the camp), picked by the
-  world so everyone sees the same: an **earthquake** (the ground shakes; fissures burst where red rings show: 18% of
-  Life and a stagger), **meteors** (fire falls where red rings show: 28%), a **lightning storm** (the sky darkens,
-  rain, bolts where blue rings show: 22% and a stagger) or a **sandstorm** (the sand closes in: hard to see, slow to
-  walk, 1% of Life a second until it passes or you reach the camp). The first strike of each falls right by every
-  hero: keep moving.
+- **Heroes fight heroes:** out of its camp, Last Rest (safe: a provisioner, a banker and the gate back to
+  Shadowmere; no waystone), every hero not in your party is your foe, as in the arena's pit (blows a little under
+  half as hard as on a monster, armor and dodging counted by the server). Falling there costs a tenth of your gold,
+  like anywhere; the canyon's fights aren't on the champions' board, but the canyon hears of each one.
+- **Rare items:** only its monsters carry them: **one kill in a thousand** (the Tyrant one in a hundred) drops a
+  rare item (level 70, a tenth stronger than a normal item of its level: weapons, shields, books, a set of clothes
+  for each class (Warlord, Sanctified, Phantom, Stormweave) and Obsidian accessories), and apart from that, one in a
+  thousand a **Rare Upgrade Recipe**, the only way to upgrade them (the anvil, as ever). Neither is sold anywhere;
+  normal monsters never drop them. Rare items glow in their own colour.
+- **Calamities:** every 14–22 seconds the canyon strikes the heroes out in it (never the camp), and often another
+  follows a few seconds later. The world picks them, so everyone sees the same; their blows are fixed, not a share of
+  Life, so stronger heroes (and parties, healing each other) stand longer:
+  - an **earthquake**: the whole canyon shakes for seconds, wearing 45 Life a second off everyone out in it, while
+    rocks fall from the walls and fissures burst where red rings show (700 and a stagger)
+  - **meteors**: fire falls where red rings show (1000, wide) and the crater burns a while (140 a second)
+  - a **lightning storm**: the sky darkens, rain, bolts where blue rings show (750 and a stagger)
+  - a **sandstorm**: the sand closes in, hard to see and slow to walk, scouring 75 Life a second until it passes or
+    you reach the camp
+
+  The first strike of each falls right by every hero: keep moving.
 
 **World bosses** roam the lands: Gorehorn the Wanderer in Emberwood (low class uniques), Skadi the Frost Giant in
 Frostfang (low), Ignis, the Living Pyre in Cinderfall (middle) and Umbra the Devourer in Shadowmere (high). One rises

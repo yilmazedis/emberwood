@@ -32,9 +32,9 @@ export const CAMPS = {
   cinderfall: at(2000, 70, LAND(['Kael', 'Brann', 'Mira', 'Dorn'], [{ model: 'Knight', tint: 0xa89890 }, { model: 'Barbarian', tint: 0xc8a090 }, { model: 'Mage', tint: 0xffc0a0 }, { model: 'Rogue_Hooded', tint: 0x9a8a80 }])),
   shadowmere: at(3000, 70, LAND(['Vesna', 'Morrow', 'Lyra', 'Silas'], [{ model: 'Rogue', tint: 0xb8a8d8 }, { model: 'Knight', tint: 0x9890b0 }, { model: 'Mage', palette: 'alchemist' }, { model: 'Rogue_Hooded', tint: 0x8a80a0 }])),
   // the Death Canyon's camp: only potions and a bank (its rare gear is never sold)
-  canyon: at(4000, 72, [
-    { role: 'goods', x: -7.4, z: 3.6, name: 'Hesk', title: 'Provisioner', model: 'Barbarian', tint: 0xc89070 },
-    { role: 'bank', x: 3.4, z: -8.2, name: 'Old Varro', title: 'Banker', model: 'Rogue_Hooded', tint: 0xa8806a },
+  canyon: at(4000, 80, [
+    { role: 'goods', x: -7.6, z: 2.4, name: 'Hesk', title: 'Provisioner', model: 'Barbarian', tint: 0xc89070 },
+    { role: 'bank', x: 7.2, z: -4.6, name: 'Old Varro', title: 'Banker', model: 'Rogue_Hooded', tint: 0xa8806a },
   ]),
 };
 
