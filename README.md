@@ -69,9 +69,9 @@ automated tests; `&cls=scientist`, `rogue` or `healer` picks the class of a new 
   and losses are kept per hero (`arena.json` in the data folder) for the champions' board in the arena's yard.
 - **Chat:** one world channel (Enter, or the Chat button on phones); nearby heroes also show it in a bubble.
   Last 20 lines are shown to heroes who arrive.
-- **Levels:** up to 80. Quick to 10; after that each level asks for more kills of your own level (about 50 at 20,
+- **Levels:** up to 100. Quick to 10; after that each level asks for more kills of your own level (about 50 at 20,
   130 at 40, 240 at 59; some 5 700 such kills from 1 to 60, plus what quests give). Monsters' life and damage, and what armor takes, grow faster past 10 with the gear.
-  No monsters outside the caves are above level 62: from 58 to 80 the **hidden caves** (below) are the way up, one a
+  No monsters outside the caves are above level 62 (but the Death Canyon's, 70–78): from 58 to 100 the **hidden caves** (below) are the way up, one a
   day, a good share of a level each.
 - **Away:** a browser stops a hidden tab's frames. With auto-hunt on, the hero keeps hunting there anyway
   (Settings, In the background: Keep hunting, the default; a small worker ticks the game ten times a second,
@@ -244,20 +244,27 @@ much slower when built for healing). In the Arena the skills hit heroes at 45%.
 
 Every item has a fixed name and fixed stats: a Giant Sword is always the same Giant Sword (`src/items.js`): its
 damage and speed (weapons) or armor (clothes, shields), and attributes (above). Items come in three classes, **low**
-(levels 1–19), **middle** (20–39) and **high** (40–80; the best are level 50, and monsters past that drop them),
-and every hero class has its own weapons and clothes in each. Above them, **rare** items (level 70) only drop in the
-Death Canyon (below). Clothes are four-piece sets per class and item class (the Warrior's are
-Plate, Chitin and Shell; the Scientist's Linen, Alchemist and Aether; the Rogue's Leather, Stalker and Nightshade;
-the Doctor's Chain, Apothecary and Physician).
+(levels 1–19), **middle** (20–39) and **high** (40–100: levels 40 and 50 drop from Shadowmere's monsters, and the
+best, levels 60 to 90, only from the hidden caves' and the Death Canyon's, for heroes past 50), and every hero class
+has its own weapons and clothes in each. Above them, **rare** items (level 70) only drop in the Death Canyon
+(below). Clothes are four-piece sets per class and item class (the Warrior's are Plate, Chitin, Shell, Steelclad
+and Warmaster; the Scientist's Linen, Alchemist, Aether, Laboratory and Professor; the Rogue's Leather, Stalker,
+Nightshade, Duskhide and Windwalker; the Doctor's Chain, Apothecary, Physician, Surgeon and Master Physician).
+Accessories are Copper, Silver, Gold (42) and Platinum (75).
+
+**Gear makes most of a hero:** a blow is mostly its weapon's (a little damage and armor come with each level, the
+rest is gear), and upgrades add a tenth of an item's stats each (armor three twentieths). A level-35 Warrior with
+a level-30 sword kills a monster of its level in about 22 s at +1, 16 s at +5 and 12 s at +10; with clothes at +1
+a blow takes 148 of its Life, at +7 119.
 
 | Class | Low | Middle | High |
 |---|---|---|---|
-| Warrior | Short Sword, Large Axe, Blade Axe, Giant Sword* | Mirage Sword, Glaive*, Barrowblade, Gigantic Axe | Raptor, Iron Impact*, Wyrmfang, Titan Greatsword* |
-| Scientist | Oak Staff, Copper Rod, Ember Staff, Galvanic Rod; Field Notes (book) | Frostwood Staff, Alchemist's Rod, Stormcaller, Catalyst Rod; Codex of Elements | Arcanum Staff, Aether Rod, Archmage's Spire, Philosopher's Rod; Tome of Ascension |
-| Rogue | Dagger, Short Bow, Kris, Hunter's Bow | Stiletto, Composite Bow, Viper Fang, Longbow | Nightfang, Elven Bow, Swiftreaver, Dragonbone Bow |
-| Doctor | Iron Mace, Morning Star (and the * weapons) | Bonesetter, Flanged Mace | Lifewarden, Physician's Scepter |
+| Warrior | Short Sword, Large Axe, Blade Axe, Giant Sword* | Mirage Sword, Glaive*, Barrowblade, Gigantic Axe | Raptor, Iron Impact*, Wyrmfang, Titan Greatsword*; past 50: Highland Sabre, Siegebreaker*, Ravager Axe, Dragoon Lance*, Kingsguard Blade, Mountain Cleaver, Juggernaut Maul*, Conqueror's Greatsword* |
+| Scientist | Oak Staff, Copper Rod, Ember Staff, Galvanic Rod; Field Notes (book) | Frostwood Staff, Alchemist's Rod, Stormcaller, Catalyst Rod; Codex of Elements | Arcanum Staff, Aether Rod, Archmage's Spire, Philosopher's Rod; Tome of Mastery; past 50: Tesla Staff, Coil Rod, Prism Staff, Quantum Rod, Observatory Staff, Rod of the Last Equation; Treatise of Forces, Grand Encyclopedia |
+| Rogue | Dagger, Short Bow, Kris, Hunter's Bow | Stiletto, Composite Bow, Viper Fang, Longbow | Nightfang, Elven Bow, Swiftreaver, Dragonbone Bow; past 50: Razorwind, Windpiercer, Silent Edge, Hawkeye Bow, Last Whisper, Skysplitter |
+| Doctor | Iron Mace, Morning Star (and the * weapons) | Bonesetter, Flanged Mace | Lifewarden, Physician's Scepter; past 50: Surgeon's Mace, Lifeline, Chief Physician's Scepter, Panacea |
 
-\* Warriors and Doctors both can use these. Shields (Round, Kite, Tower) are for both too.
+\* Warriors and Doctors both can use these. Shields (Round, Kite, Tower, Bastion, Rampart) are for both too.
 
 - **Drops are rare:** a monster drops an item now and then (a slime about one time in forty, a knight one in
   fifteen), and the best ones for its level least often. **High class** items are rarer still (most of the times
@@ -332,7 +339,7 @@ minimap too).
 | Emberwood | Bramble Hollow (by the Bandit Hideout) | 1 – 7 | 3 – 9 | Old Mossjaw |
 | Frostfang Highlands | the Rimewell (by the Snowdrift Fields) | 8 – 19 | 10 – 24 | Frostmaw, the Rimewell Warden |
 | Cinderfall Wastes | the Ember Vein (by the Ashen Flats) | 20 – 37 | 22 – 42 | the Scorchmother |
-| Shadowmere | the Gloamdeep (by the Gloom Marsh) | 38 – 80 | 40 – 80 | the Gloam Stalker |
+| Shadowmere | the Gloamdeep (by the Gloom Marsh) | 38 – 100 | 40 – 100 | the Gloam Stalker |
 
 - **Which cave:** a hero finds (and uses) only the key of the furthest land it may enter: once Cinderfall opens to a
   hero (level 20), Emberwood's and Frostfang's caves are behind it, and a key it still carries for one of them

@@ -16,10 +16,10 @@ import { aimedAt, handPos } from './skills/common.js';
 import { Control } from './control.js';
 import { hdr } from './fx.js';
 
-export const MAX_LEVEL = 80;
+export const MAX_LEVEL = 100;
 // XP to the next level. Quick up to level 10; after that each level asks for more kills of your own level:
 // about 16 at level 10, 50 at 20, 80 at 30, 130 at 40, 190 at 50 and 240 at 59. Past 58 there are no
-// monsters of your level outside the caves (sim/caves.js): a cave a day is the way up.
+// monsters of your level outside the caves (sim/caves.js) and the Death Canyon: a cave a day is the way up, to 100.
 export const xpForLevel = (lvl) => Math.round(55 * Math.pow(lvl, 1.55) * (1 + 0.1 * Math.max(0, lvl - 9)));
 export const BAG_SIZE = 30;
 export const BAR_SIZE = 8; // skill slots on the action bar (keys 1–8)
@@ -282,7 +282,8 @@ export class Player {
   recompute() {
     const L = this.level, c = CLASSES[this.cls], eq = this.equipment;
     const s = {
-      armor: L * 1.5, levelDmg: L * 0.9, dmgMin: 2, dmgMax: 4, speed: 1.3,
+      // (a little armor and damage of the hero's own for each level: the rest is its gear's, items.js)
+      armor: L * 0.5, levelDmg: L * 0.3, dmgMin: 2, dmgMax: 4, speed: 1.3,
       dmgPct: 0, dmgMult: c.dmg, atkSpd: c.atkSpd, moveSpd: c.moveSpd, crit: 0.05 + c.crit,
       regen: 1 + L * 0.15, mpRegen: 0.75 * (1 + L * 0.12) * Math.sqrt(c.mp), evade: 0, reach: 0, ranged: null, weapon: null,
       hpPct: 0, armorPct: 0, mpRegenPct: 0, spellPct: 0, dotPct: 0, healPct: 0, typePct: 0, taken: 1,

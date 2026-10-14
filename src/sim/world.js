@@ -954,7 +954,7 @@ export class WorldSim {
     }
     if (m.k && typeof m.k === 'object' && JSON.stringify(m.k).length < 500) {
       p.look = m.k;
-      p.level = clamp(Math.round(Number(m.k.lv) || 1), 1, 99);
+      p.level = clamp(Math.round(Number(m.k.lv) || 1), 1, 100);
       p.lookVer++;
     }
     if (Array.isArray(m.h)) for (const h of m.h.slice(0, 40)) this.hit(p, h);

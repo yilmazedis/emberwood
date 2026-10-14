@@ -4,10 +4,10 @@
 //   node server/accounts.mjs create <name>      a new account (its password typed twice, not shown)
 //   node server/accounts.mjs hero <account> <Name> <class> [level]
 //                                               a new hero there (warrior, scientist, rogue or doctor) at that
-//                                               level (1–80), in its class's best gear for it, upgraded, with
+//                                               level (1–100), in its class's best gear for it, upgraded, with
 //                                               potions, scrolls and gold; its points all free to spend
 //   node server/accounts.mjs level <account> <Hero> <level>
-//                                               an existing hero's level (1–80), nothing else (its new points
+//                                               an existing hero's level (1–100), nothing else (its new points
 //                                               are free to spend; fewer levels than points spent: all back)
 //   node server/accounts.mjs gold <account> <Hero> <amount>
 //                                               gold for a hero (added to what it has)
@@ -111,6 +111,11 @@ async function create(name) {
   if (h) await order({ op: 'create', user, ...h });
 }
 
+// The best accessory of a kind (ring, ear, neck, belt) and variant (0 or 1) of a class of items, up to a level.
+const bestAcc = (tier, kind, i, level = Infinity) => Object.values(ITEMS)
+  .filter((d) => d.kind === 'acc' && !d.unique && d.tier === tier && d.type === kind && d.key.endsWith(`_${i}`) && d.level <= level)
+  .sort((a, b) => b.level - a.level)[0];
+
 // A hero ready to play at `level`: the best weapon(s) and clothes of its class for it (+5, the weapon +7),
 // accessories of its class of items, potions, camp scrolls and gold. Skill and attribute points all free.
 function heroSave(cls, level) {
@@ -125,8 +130,8 @@ function heroSave(cls, level) {
   if (level >= 6) {
     const t = tierAt(level), want = { warrior: [0, 0, 0, 0, 0], scientist: [1, 1, 1, 1, 1], rogue: [1, 1, 0, 0, 1], healer: [0, 1, 1, 1, 0] }[cls];
     [['ring1', 'ring'], ['ring2', 'ring'], ['ear1', 'ear'], ['ear2', 'ear'], ['neck', 'neck'], ['belt', 'belt']].forEach(([slot, kind], i) => {
-      const key = `${t}_${kind}_${want[Math.min(i, 4)]}`;
-      if (ITEMS[key]?.level <= level) eq[slot] = makeItem(key, { p: 5 });
+      const d = bestAcc(t, kind, want[Math.min(i, 4)], level);
+      if (d) eq[slot] = makeItem(d.key, { p: 5 });
     });
   }
   const g = level >= 35 ? 3 : level >= 15 ? 2 : 1, bag = new Array(30).fill(null);
@@ -145,7 +150,7 @@ async function hero(account, name, cls, lvl) {
   name = String(name || '').trim();
   if (!NAME_RULE.test(name)) return fail('Hero names are 3–14 letters, no spaces or numbers.');
   if (!Object.hasOwn(CLASSES, cls)) return fail(`The class is one of: ${Object.keys(CLASSES).map(className).join(', ')}.`);
-  const level = Math.max(1, Math.min(80, Math.round(Number(lvl) || 1)));
+  const level = Math.max(1, Math.min(100, Math.round(Number(lvl) || 1)));
   await order({ op: 'hero', account: acc.lower, name, cls, save: heroSave(cls, level) });
 }
 
@@ -171,7 +176,7 @@ async function setLevel(account, name, lvl) {
   const f = findHero(account, name);
   if (!f) return;
   const level = Math.round(Number(lvl));
-  if (!(level >= 1 && level <= 80)) return fail('The level is a number from 1 to 80.');
+  if (!(level >= 1 && level <= 100)) return fail('The level is a number from 1 to 100.');
   await order({ op: 'level', account: f.acc.lower, hero: f.ch.name, level, blank: blankSave(f.ch.cls, level) });
 }
 
@@ -201,7 +206,7 @@ function gearKit(cls, tier, plus) {
   const set = best([...armor])?.set;
   for (const slot of ['head', 'body', 'hands', 'feet']) { const d = armor.find((x) => x.set === set && x.slot === slot); if (d) kit.push(d); }
   const want = { warrior: [0, 0, 0, 0, 0], scientist: [1, 1, 1, 1, 1], rogue: [1, 1, 0, 0, 1], healer: [0, 1, 1, 1, 0] }[cls];
-  ['ring', 'ring', 'ear', 'ear', 'neck', 'belt'].forEach((kind, i) => { const d = ITEMS[`${tier}_${kind}_${want[Math.min(i, 4)]}`]; if (d) kit.push(d); });
+  ['ring', 'ring', 'ear', 'ear', 'neck', 'belt'].forEach((kind, i) => { const d = bestAcc(tier, kind, want[Math.min(i, 4)]); if (d) kit.push(d); });
   return kit.map((d) => makeItem(d.key, { p: Math.min(plus, maxPlus(d)) }));
 }
 

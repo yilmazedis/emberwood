@@ -216,7 +216,7 @@ function needAccount(c) {
 function checkSave(save) {
   if (!save || typeof save !== 'object' || Array.isArray(save)) throw new Oops('Bad save data.');
   if (JSON.stringify(save).length > MAX_SAVE) throw new Oops('Save data too large.');
-  if (!Number.isInteger(save.level) || save.level < 1 || save.level > 99) throw new Oops('Bad save data.');
+  if (!Number.isInteger(save.level) || save.level < 1 || save.level > 100) throw new Oops('Bad save data.');
   return save;
 }
 
@@ -281,7 +281,7 @@ function adminOrder(o) {
       const ch = acc.characters.find((c) => c.name.toLowerCase() === String(o.hero || '').toLowerCase());
       if (!ch) return `${acc.user} has no hero called "${o.hero}" (${acc.characters.map((c) => c.name).join(', ') || 'no heroes'}).`;
       const level = Math.round(Number(o.level));
-      if (!(level >= 1 && level <= 80)) return 'The level is a number from 1 to 80.';
+      if (!(level >= 1 && level <= 100)) return 'The level is a number from 1 to 100.';
       const was = ch.save?.level ?? ch.level ?? 1;
       if (ch.save) { ch.save.level = level; ch.save.xp = 0; } else ch.save = o.blank ? { ...o.blank, level } : null;
       ch.level = level;

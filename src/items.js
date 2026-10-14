@@ -19,16 +19,17 @@ import { clamp, weightedPick, pick } from './util.js';
 export const MAX_PLUS = 10; // upgrades: normal items start at +1, unique ones at +0; weapons, shields and books
 // go up to +10 (and glow from +8: enchant.js), clothes and accessories to +7
 export const maxPlus = (d) => (d && (d.slot === 'weapon' || d.slot === 'offhand') ? MAX_PLUS : 7);
-export const UPGRADE_GAIN = 0.1; // each + adds a tenth of the item's main stats
+export const UPGRADE_GAIN = 0.1; // each + adds a tenth of the item's main stats…
+export const ARMOR_GAIN = 0.15; // …and of its armor a bit more (a share of a blow, armor counts for less as it grows)
 export const UNIQUE_POWER = 1.25; // a unique item is this much stronger than a normal one of its level
 export const RARE_POWER = 1.1; // and a rare one (the Death Canyon's) this much
 
 export const TIERS = {
   low: { id: 'low', name: 'Low class', short: 'Low', from: 1, to: 19, color: '#e8e4da', recipe: 'recipe_low' },
   mid: { id: 'mid', name: 'Middle class', short: 'Middle', from: 20, to: 39, color: '#6aa9ff', recipe: 'recipe_mid' },
-  high: { id: 'high', name: 'High class', short: 'High', from: 40, to: 80, color: '#ffd84a', recipe: 'recipe_high' },
+  high: { id: 'high', name: 'High class', short: 'High', from: 40, to: 100, color: '#ffd84a', recipe: 'recipe_high' },
   // only the Death Canyon's monsters carry these (rollRare), and only its monsters the recipes to upgrade them
-  rare: { id: 'rare', name: 'Rare', short: 'Rare', from: 70, to: 80, color: '#e05cff', recipe: 'recipe_rare' },
+  rare: { id: 'rare', name: 'Rare', short: 'Rare', from: 70, to: 100, color: '#e05cff', recipe: 'recipe_rare' },
 };
 export const UNIQUE_COLOR = '#ff8a2b';
 export const tierAt = (level) => (level >= 40 ? 'high' : level >= 20 ? 'mid' : 'low');
@@ -82,14 +83,14 @@ export const DUAL = { warrior: ['sword1h', 'axe1h'], rogue: ['dagger'] };
 
 // A one-handed sword's average blow at +1 for each item level (other levels in between are interpolated).
 // The hero's level adds its own share on top (see Player.recompute), so items needn't do it all.
-const SWORD = [[1, 7], [10, 12], [20, 20], [30, 28], [40, 37], [50, 46], [60, 56], [70, 66], [80, 76]];
+const SWORD = [[1, 7], [10, 12], [20, 20], [30, 28], [40, 37], [50, 46], [60, 56], [70, 66], [80, 76], [90, 86], [100, 96]];
 const lerpTable = (t, x) => {
   if (x <= t[0][0]) return t[0][1];
   for (let i = 0; i < t.length - 1; i++) if (x <= t[i + 1][0]) return t[i][1] + ((t[i + 1][1] - t[i][1]) * (x - t[i][0])) / (t[i + 1][0] - t[i][0]);
   return t[t.length - 1][1];
 };
 // Armor of a whole set of clothes (helmet, armor, gloves, boots) at +1, by item level; a shield adds 45% more.
-const SET_ARMOR = [[1, 22], [20, 70], [40, 130], [60, 190], [80, 250]];
+const SET_ARMOR = [[1, 22], [20, 70], [40, 130], [60, 190], [80, 250], [100, 310]];
 const PIECE = { head: 0.22, body: 0.4, hands: 0.18, feet: 0.2 };
 
 // ---------------------------------------------------------------- the catalog
@@ -97,10 +98,12 @@ export const ITEMS = {};
 const add = (key, def) => { ITEMS[key] = { key, ...def }; };
 
 // weapon(key, name, type, level, extra): its damage from the table, its kind's speed and attributes (a
-// unique: more of everything, and more of its own attribute, extra.flavour)
+// unique: more of everything, and more of its own attribute, extra.flavour). GEAR_DMG: what each blow gets for
+// the weapon's level besides (most of a hero's blow is its weapon's, so a better or upgraded one shows).
+const GEAR_DMG = 0.43;
 function weapon(key, name, type, level, extra = {}) {
   const t = WEAPON_TYPES[type], unique = !!extra.unique, power = unique ? UNIQUE_POWER : extra.tier === 'rare' ? RARE_POWER : 1;
-  const avg = (lerpTable(SWORD, level) * 1.25 * t.dps) / t.speed * power;
+  const avg = ((lerpTable(SWORD, level) * 1.25 * t.dps) / t.speed + GEAR_DMG * level) * power;
   const spread = type === 'axe2h' || type === 'maul' ? 0.25 : type === 'dagger' ? 0.15 : 0.2;
   const stats = { dmgMin: Math.max(1, Math.round(avg * (1 - spread))), dmgMax: Math.round(avg * (1 + spread)), speed: t.speed, ...attrs(level, t.weight, flavour(t.mix, extra.flavour), power) };
   add(key, { name, kind: 'weapon', type, slot: 'weapon', classes: WIELD[type], level, tier: tierAt(level), hands: t.hands, model: t.model, ...extra, stats });
@@ -118,9 +121,11 @@ function book(key, name, level, extra = {}) {
 }
 
 // A set of clothes: four pieces for one class. look: what it does to the hero's model (helmet shown, the
-// body's colour, gloves and boots); share: how much of a warrior's armor it gives; mix: its attributes.
+// body's colour, gloves and boots); share: how much of a warrior's armor it gives; mix: its attributes. GEAR_ARMOR:
+// armor for the set's level besides, the same for every class (most of a hero's armor is its clothes').
+const GEAR_ARMOR = 0.7;
 function set(prefix, name, cls, level, { share, mix, look, pieces, tier = tierAt(level) }) {
-  const power = tier === 'rare' ? RARE_POWER : 1, total = lerpTable(SET_ARMOR, level) * share * power;
+  const power = tier === 'rare' ? RARE_POWER : 1, total = (lerpTable(SET_ARMOR, level) * share + GEAR_ARMOR * level) * power;
   for (const [slot, piece] of Object.entries(pieces)) {
     const stats = { armor: Math.max(1, Math.round(total * PIECE[slot])), ...attrs(level, WEIGHT[slot], mix, power) };
     add(`${prefix}_${slot}`, { name: `${name} ${piece}`, kind: 'armor', type: slot, slot, classes: [cls], level, tier, set: prefix, look, stats });
@@ -151,6 +156,25 @@ for (const [p, n, lv] of [['plate', 'Plate', 1], ['chitin', 'Chitin', 20], ['she
   });
 }
 
+// the best of it, for heroes past 50 (dropped in the hidden caves and the Death Canyon, never sold)
+weapon('highland_sabre', 'Highland Sabre', 'sword1h', 60, { tint: 0xe8eef8, glow: 0x3a6aa8 });
+weapon('siegebreaker', 'Siegebreaker', 'sword2h', 60, { model: 'sword_2handed_color', tint: 0xd8dce8, glow: 0x4a5a7a });
+weapon('ravager_axe', 'Ravager Axe', 'axe1h', 70, { tint: 0xffc8a0, glow: 0x8a3a10 });
+weapon('dragoon_lance', 'Dragoon Lance', 'spear', 70, { tint: 0xe8e0c8, glow: 0x6a5a20 });
+weapon('kingsguard_blade', 'Kingsguard Blade', 'sword1h', 80, { tint: 0xfff0c0, glow: 0x9a7a20 });
+weapon('mountain_cleaver', 'Mountain Cleaver', 'axe2h', 80, { tint: 0xc8d0d8, glow: 0x3a4a6a });
+weapon('juggernaut_maul', 'Juggernaut Maul', 'maul', 90, { tint: 0xb8c0d0, glow: 0x5a3a8a });
+weapon('conquerors_greatsword', "Conqueror's Greatsword", 'sword2h', 90, { model: 'sword_2handed_color', tint: 0xfff4e0, glow: 0xa86a10 });
+shield('bastion_shield', 'Bastion Shield', 60, { model: 'shield_badge', tint: 0xd8e0f0 });
+shield('rampart_shield', 'Rampart Shield', 80, { model: 'shield_spikes', tint: 0xe8d8b0, glow: 0x6a5a20 });
+for (const [p, n, lv] of [['steelclad', 'Steelclad', 60], ['warmaster', 'Warmaster', 80]]) {
+  set(p, n, 'warrior', lv, {
+    share: 1, mix: { str: 4, agi: 1 },
+    look: { body: { steelclad: 0xa8b4c4, warmaster: 0x7a2a24 }[p], helm: 1, metal: 0.45 },
+    pieces: { head: 'Helmet', body: 'Armor', hands: 'Gauntlets', feet: 'Boots' },
+  });
+}
+
 // ---- Doctor (Emberwood's doctor): maces of their own (and warriors' great weapons and shields); Chain, Apothecary
 // and Physician
 weapon('iron_mace', 'Iron Mace', 'mace1h', 1);
@@ -163,6 +187,19 @@ for (const [p, n, lv] of [['chain', 'Chain', 1], ['blessed', 'Apothecary', 20], 
   set(p, n, 'healer', lv, {
     share: 0.85, mix: { int: 1, str: 1 },
     look: { body: { chain: 0xb8c0cc, blessed: 0xd8ecdc, seraph: 0xf4f8fa }[p], helm: 1, metal: 0.25 },
+    pieces: { head: 'Coif', body: 'Coat', hands: 'Gloves', feet: 'Boots' },
+  });
+}
+
+// the best of it, past 50
+weapon('surgeons_mace', "Surgeon's Mace", 'mace1h', 60, { tint: 0xe8f8f0, glow: 0x2a8a5a });
+weapon('lifeline', 'Lifeline', 'mace1h', 70, { model: 'proc_scepter', tint: 0xd8fff0, glow: 0x3ac88a });
+weapon('chief_scepter', "Chief Physician's Scepter", 'mace1h', 80, { model: 'proc_scepter', tint: 0xffffff, glow: 0x5affc0 });
+weapon('panacea', 'Panacea', 'mace1h', 90, { model: 'proc_scepter', tint: 0xf0fff8, glow: 0x8affd8 });
+for (const [p, n, lv] of [['surgeon', 'Surgeon', 60], ['master_physician', 'Master Physician', 80]]) {
+  set(p, n, 'healer', lv, {
+    share: 0.85, mix: { int: 1, str: 1 },
+    look: { body: { surgeon: 0xc8e8f0, master_physician: 0xffffff }[p], helm: 1, metal: 0.3 },
     pieces: { head: 'Coif', body: 'Coat', hands: 'Gloves', feet: 'Boots' },
   });
 }
@@ -188,6 +225,21 @@ for (const [p, n, lv] of [['leather', 'Leather', 1], ['stalker', 'Stalker', 20],
   });
 }
 
+// the best of it, past 50
+weapon('razorwind', 'Razorwind', 'dagger', 60, { tint: 0xd0e8ff, glow: 0x2a5a9a });
+weapon('windpiercer', 'Windpiercer', 'bow', 60, { tint: 0xd8e8d0, glow: 0x3a6a3a });
+weapon('silent_edge', 'Silent Edge', 'dagger', 75, { tint: 0xb0b8c8, glow: 0x4a4a6a });
+weapon('hawkeye_bow', 'Hawkeye Bow', 'bow', 75, { tint: 0xe8d0a0, glow: 0x7a5a20 });
+weapon('last_whisper', 'Last Whisper', 'dagger', 90, { tint: 0xe0d0ff, glow: 0x6a3aaa });
+weapon('skysplitter', 'Skysplitter', 'bow', 90, { tint: 0xf0f8ff, glow: 0x4a8acc });
+for (const [p, n, lv] of [['duskhide', 'Duskhide', 60], ['windwalker', 'Windwalker', 80]]) {
+  set(p, n, 'rogue', lv, {
+    share: 0.7, mix: { agi: 3, str: 1 },
+    look: { body: { duskhide: 0x3a3a48, windwalker: 0x5a7a8a }[p], helm: 0, metal: 0.1 },
+    pieces: { head: 'Hood', body: 'Jerkin', hands: 'Gloves', feet: 'Boots' },
+  });
+}
+
 // ---- Scientist: long staves (faster), or a short staff with a book (stronger spells); Linen, Alchemist and Aether
 weapon('oak_staff', 'Oak Staff', 'staff', 1);
 weapon('copper_rod', 'Copper Rod', 'rod', 1, { tint: 0xe8a070 });
@@ -203,7 +255,7 @@ weapon('archmage_spire', "Archmage's Spire", 'staff', 50, { tint: 0xfff0ff, glow
 weapon('philosophers_rod', "Philosopher's Rod", 'rod', 50, { tint: 0xffd0e0, glow: 0x8a2a4a });
 book('field_notes', 'Field Notes', 1, { model: 'spellbook_closed' });
 book('codex_elements', 'Codex of Elements', 20, { tint: 0xc0e0ff });
-book('tome_ascension', 'Tome of Ascension', 40, { tint: 0xffe8b0, glow: 0x6a4a10 });
+book('tome_ascension', 'Tome of Mastery', 40, { tint: 0xffe8b0, glow: 0x6a4a10 });
 for (const [p, n, lv] of [['linen', 'Linen', 1], ['alchemist', 'Alchemist', 20], ['aether', 'Aether', 40]]) {
   set(p, n, 'scientist', lv, {
     share: 0.55, mix: { int: 3, str: 2 },
@@ -212,11 +264,28 @@ for (const [p, n, lv] of [['linen', 'Linen', 1], ['alchemist', 'Alchemist', 20],
   });
 }
 
+// the best of it, past 50
+weapon('tesla_staff', 'Tesla Staff', 'staff', 60, { tint: 0xc8e0ff, glow: 0x3a7aff });
+weapon('coil_rod', 'Coil Rod', 'rod', 60, { tint: 0xffd0a0, glow: 0xaa6a20 });
+weapon('prism_staff', 'Prism Staff', 'staff', 75, { tint: 0xf0f0ff, glow: 0xaa6aff });
+weapon('quantum_rod', 'Quantum Rod', 'rod', 75, { tint: 0xc0fff0, glow: 0x2aaa9a });
+weapon('observatory_staff', 'Observatory Staff', 'staff', 90, { tint: 0xfff8e0, glow: 0x5a8aff });
+weapon('equation_rod', 'Rod of the Last Equation', 'rod', 90, { tint: 0xffe0f0, glow: 0xaa3a8a });
+book('treatise_forces', 'Treatise of Forces', 60, { tint: 0xd8e8ff, glow: 0x3a5a9a });
+book('grand_encyclopedia', 'Grand Encyclopedia', 80, { tint: 0xfff0d0, glow: 0x8a6a20 });
+for (const [p, n, lv] of [['laboratory', 'Laboratory', 60], ['professor', 'Professor', 80]]) {
+  set(p, n, 'scientist', lv, {
+    share: 0.55, mix: { int: 3, str: 2 },
+    look: { body: { laboratory: 0xe8ecf0, professor: 0x3a4a6a }[p], helm: 1, metal: 0 },
+    pieces: { head: 'Cap', body: 'Coat', hands: 'Gloves', feet: 'Shoes' },
+  });
+}
+
 // ---------------------------------------------------------------- accessories (everyone; dropped only)
 // Two of each kind per class of items; their attributes by item level.
-const ACC_LEVEL = { low: 6, mid: 22, high: 42, rare: 72 };
-const ACC_METAL = { low: 'Copper', mid: 'Silver', high: 'Gold', rare: 'Obsidian' };
-const ACC_COLOR = { low: 0xd08a50, mid: 0xd8dde4, high: 0xf0c040, rare: 0x4a3a4a };
+const ACC_LEVEL = { low: 6, mid: 22, high: 42, top: 75, rare: 72 };
+const ACC_METAL = { low: 'Copper', mid: 'Silver', high: 'Gold', top: 'Platinum', rare: 'Obsidian' };
+const ACC_COLOR = { low: 0xd08a50, mid: 0xd8dde4, high: 0xf0c040, top: 0xe8eef8, rare: 0x4a3a4a };
 const ACCESSORIES = [
   ['ring', 'Ring of Strength', { str: 1 }, 0xe0304a],
   ['ring', 'Ring of Agility', { agi: 1 }, 0x2fd07a],
@@ -229,12 +298,14 @@ const ACCESSORIES = [
 ];
 const ACC_SLOT = { ring: 'ring', ear: 'ear', neck: 'neck', belt: 'belt' };
 const ACC_LABEL = { ring: 'Ring', ear: 'Earring', neck: 'Necklace', belt: 'Belt' };
-for (const [tier, level] of Object.entries(ACC_LEVEL)) {
+// (grade: the key's start; top: Platinum ones, high class, for heroes past 70)
+for (const [grade, level] of Object.entries(ACC_LEVEL)) {
+  const tier = grade === 'top' ? 'high' : grade;
   ACCESSORIES.forEach(([kind, name, mix, gem], i) => {
-    const key = `${tier}_${kind}_${i % 2}`;
+    const key = `${grade}_${kind}_${i % 2}`;
     add(key, {
-      name: `${ACC_METAL[tier]} ${name}`, kind: 'acc', type: kind, slot: ACC_SLOT[kind], classes: null, level, tier,
-      gear: { kind, color: ACC_COLOR[tier], gem, glow: tier === 'rare' ? 1 : 0 }, stats: attrs(level, WEIGHT[kind], mix, tier === 'rare' ? RARE_POWER : 1), drop: true,
+      name: `${ACC_METAL[grade]} ${name}`, kind: 'acc', type: kind, slot: ACC_SLOT[kind], classes: null, level, tier,
+      gear: { kind, color: ACC_COLOR[grade], gem, glow: tier === 'rare' ? 1 : 0 }, stats: attrs(level, WEIGHT[kind], mix, tier === 'rare' ? RARE_POWER : 1), drop: true,
     });
   });
 }
@@ -359,7 +430,7 @@ export const ELIXIRS = {
 
 // ---------------------------------------------------------------- prices
 // What merchants ask for an item (selling one brings a quarter, more for upgrades).
-const PRICE = [[1, 40], [10, 450], [20, 1800], [30, 4500], [40, 9500], [50, 18000], [60, 30000], [70, 45000], [80, 60000]];
+const PRICE = [[1, 40], [10, 450], [20, 1800], [30, 4500], [40, 9500], [50, 18000], [60, 30000], [70, 45000], [80, 60000], [90, 75000], [100, 90000]];
 for (const d of Object.values(ITEMS)) {
   if (d.price !== undefined) continue;
   const base = lerpTable(PRICE, d.level);
@@ -381,14 +452,14 @@ export function makeItem(key, opts = {}) {
 }
 
 // How strong an item is at its plus: 1 at +1 (normal) or +0 (unique), a tenth more for each step.
-export const plusMult = (it) => { const d = itemDef(it); return 1 + UPGRADE_GAIN * ((it.p ?? 0) - (d?.unique ? 0 : 1)); };
+export const plusMult = (it, gain = UPGRADE_GAIN) => { const d = itemDef(it); return 1 + gain * ((it.p ?? 0) - (d?.unique ? 0 : 1)); };
 
 // The item's stats at its plus: damage, armor and attributes all grow (its speed doesn't).
 export function itemStats(it) {
   const d = itemDef(it);
   if (!d?.stats) return {};
-  const m = plusMult(it), out = {};
-  for (const [k, v] of Object.entries(d.stats)) out[k] = k === 'speed' ? v : Math.round(v * m);
+  const m = plusMult(it), ma = plusMult(it, ARMOR_GAIN), out = {};
+  for (const [k, v] of Object.entries(d.stats)) out[k] = k === 'speed' ? v : Math.round(v * (k === 'armor' ? ma : m));
   return out;
 }
 

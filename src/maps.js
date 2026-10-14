@@ -138,7 +138,7 @@ for (const [above, deep] of [['crypt', 'crypt2'], ['rimeheart', 'rimeheart2'], [
 for (const [id, list] of Object.entries(CAMPS)) if (MAPS[id]) MAPS[id].npcs = list; // (the canyon's: below)
 
 MAPS.arena = {
-  id: 'arena', name: 'The Arena', sub: 'Hero against hero · from level 5', kind: 'arena', pvp: true, levels: [5, 80], minLevel: 5, music: 'world',
+  id: 'arena', name: 'The Arena', sub: 'Hero against hero · from level 5', kind: 'arena', pvp: true, levels: [5, 100], minLevel: 5, music: 'world',
   spawns: [], contains: arena.contains,
   camp: { x: ARENA.cx, z: ARENA.cz + 35, r: 8 }, waystone: arena.waystone, board: arena.board,
   arrive: arena.arrive, respawn: { map: 'arena', ...arena.arrive },

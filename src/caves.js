@@ -4,7 +4,7 @@
 // chamber each; every monster in a chamber must fall before the way to the next opens, and the tenth holds the
 // cave's keeper. When it falls the way out opens, with a treasure, and everyone in the cave gets a good share
 // of a level's XP. Past level 58 there are no monsters of a hero's level outside the caves: they are the way
-// up to 80.
+// up to 100.
 //   One cave a day (a day by Turkey's clock) for each hero: entering is what counts, and once out (stepped out,
 //   or fallen and risen in camp) a hero can't go back in. Any party member's key opens it for the whole party,
 //   but a member who has been in a cave today stays out. Each copy is its party's (or its lone hero's) alone.
@@ -62,7 +62,7 @@ export const CAVES = {
     look: { floor: [0x46383a, 0x54443c, 0x3c3030], rock: [0x5a4e48, 0x4c423e, 0x6a5c54], mouth: 0x4c4542, crystal: 0xff7a2a, fog: 0x120604, hemiSky: 0xe0a080, hemiGround: 0x3a1a0c, sun: 0xffa070 },
   },
   shadowmere: {
-    id: 'cave_shadowmere', land: 'shadowmere', name: 'The Gloamdeep', heroes: [38, 80], levels: [40, 80],
+    id: 'cave_shadowmere', land: 'shadowmere', name: 'The Gloamdeep', heroes: [38, 100], levels: [40, 100],
     mouth: { x: 53, z: 49, yaw: -0.35 }, near: 'the Gloom Marsh', key: 'cave_key_shadowmere',
     packs: [['slime_void', 'bog_lurker', 'dread_minion'], ['wraith', 'death_knight', 'night_stalker', 'dread_minion'], ['dread_skeleton', 'death_knight', 'shadow_archer', 'wraith', 'night_stalker']],
     boss: 'gloam_stalker', bushes: 0x3e4a3a,
