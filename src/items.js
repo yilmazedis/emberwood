@@ -16,9 +16,9 @@
 // from its definition here (itemDef), so a change of balance reaches every item already found.
 import { clamp, weightedPick, pick } from './util.js';
 
-export const MAX_PLUS = 10; // upgrades: normal items start at +1, unique ones at +0; weapons, shields and books
-// go up to +10 (and glow from +8: enchant.js), clothes and accessories to +7
-export const maxPlus = (d) => (d && (d.slot === 'weapon' || d.slot === 'offhand') ? MAX_PLUS : 7);
+export const MAX_PLUS = 10; // upgrades: normal items start at +1, unique ones at +0; everything goes up to +10
+// (weapons, shields and books glow from +8: enchant.js)
+export const maxPlus = () => MAX_PLUS;
 export const UPGRADE_GAIN = 0.1; // each + adds a tenth of the item's main stats…
 export const ARMOR_GAIN = 0.15; // …and of its armor a bit more (a share of a blow, armor counts for less as it grows)
 export const UNIQUE_POWER = 1.25; // a unique item is this much stronger than a normal one of its level

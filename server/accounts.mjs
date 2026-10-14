@@ -13,10 +13,10 @@
 //                                               gold for a hero (added to what it has)
 //   node server/accounts.mjs gear <account> <Hero> [low|mid|high|rare] [+N]
 //                                               a full kit of its class's best items of that class of items (high
-//                                               if not said), upgraded to +N (+5 if not said; clothes and
-//                                               accessories go to +7 at most): every weapon it can wield (and a
-//                                               shield or book), its set of clothes and six accessories, into its
-//                                               bag (what doesn't fit: the account's bank)
+//                                               if not said), upgraded to +N (+5 if not said; +10 at most):
+//                                               every weapon it can wield (and a shield or book), its set of
+//                                               clothes and six accessories, into its bag (what doesn't fit: the
+//                                               account's bank)
 // The game server keeps accounts in memory and writes them back, so changes don't go into its files from here:
 // they go to it, as an order in <data>/admin/, which it carries out within a couple of seconds (no Restart; a
 // hero being played goes back to its hero list) and answers here. If it isn't running, the order waits for it.

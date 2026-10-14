@@ -91,7 +91,7 @@ To back up, copy that folder.
 `hero <account> <Name> <class> [level]` adds a hero at that level in its class's gear, with potions and gold, every
 point free (for testing); `level <account> <Hero> <level>` changes an existing hero's level, nothing else;
 `gold <account> <Hero> <amount>` gives a hero gold; `gear <account> <Hero> [low|mid|high|rare] [+N]` gives it a full
-kit of its class's best items of that class of items (high and +5 if not said; clothes and accessories +7 at most):
+kit of its class's best items of that class of items (high and +5 if not said; +10 at most):
 every weapon it may wield, a shield or book, its set of clothes and six accessories, into its bag (the bank when the
 bag is full). The tool
 never edits the files itself (the running server keeps accounts in memory and would write its own copy back): it
@@ -276,9 +276,8 @@ a blow takes 148 of its Life, at +7 119.
 - **Unique items:** only the world bosses (below) drop them, one in five kills, every unique of the boss's item
   class equally likely: weapons, shields, books and accessories, never clothes. They are a quarter stronger
   than normal items of their level.
-- **Upgrades:** Brom the blacksmith in Emberwood's camp upgrades items: weapons, shields and books up to **+10**,
-  clothes and accessories up to **+7** (normal items start at +1, uniques at +0). Each + adds a tenth of the item's
-  main stats. It never fails; each step costs recipes of the item's class (one up to +4, two for +5 and +6, three
+- **Upgrades:** Brom the blacksmith in Emberwood's camp upgrades every item up to **+10** (normal items start at
+  +1, uniques at +0). Each + adds a tenth of the item's main stats (of its armor three twentieths). It never fails; each step costs recipes of the item's class (one up to +4, two for +5 and +6, three
   for +7 and +8, four for +9, five for +10) and a small fee. Brom sells the recipes (for now cheaply, while
   upgrading is tried out: low 50, middle 200, high 600 gold); quests, bosses and world bosses give some.
 - **Upgrade glow** (`src/enchant.js`), on what a hero holds, for everyone to see: nothing up to +7; at +8 a pink

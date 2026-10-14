@@ -107,7 +107,7 @@ export const QUESTS = [
     { id: 'sm_below', level: 60, min: 58, after: ['sm_nyxara'], w: 0.8, title: 'The Deep Mines', text: 'Nyxara was not the bottom of everything. The stairs go further down, into old mines.', goal: { kind: 'visit', map: 'abyss2', count: 1 }, zone: 'abyss_deep' },
     { id: 'sm_herald', level: 60, after: ['sm_below'], w: 3, title: 'The Black Envoy', text: 'Nyxara answered to someone, and his envoy waits deep in the mines. Stop him, for now.', goal: { kind: 'kill', type: 'void_herald', count: 1 }, zone: 'abyss_deep', reward: { recipes: [['recipe_high', 3]] } },
     { id: 'sm_umbra', level: 58, min: 54, after: ['sm_hollow'], w: 3, title: 'The Bog Tyrant', text: 'Umbra the Bog Tyrant walks through Shadowmere now and then. Only the strongest parties stand against him; the unique things he carries are the best there are.', goal: { kind: 'kill', type: 'umbra', count: 1 }, reward: { recipes: [['recipe_high', 3]] } },
-    { id: 'sm_perfect', level: 58, after: ['sm_upgrade'], w: 1, title: 'Perfection', text: 'Seven steps is as far as any anvil goes. Bring something of yours to +7.', goal: { kind: 'upgrade', plus: 7, count: 1 } },
+    { id: 'sm_perfect', level: 58, after: ['sm_upgrade'], w: 1, title: 'Perfection', text: 'Seven steps up, and three still above that. Bring something of yours to +7.', goal: { kind: 'upgrade', plus: 7, count: 1 } },
   ]),
 ];
 
