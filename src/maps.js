@@ -153,7 +153,7 @@ MAPS.arena = {
   const sm = MAPS.shadowmere, gate = { x: shadowmere.cx + CANYON_GATE.x, z: shadowmere.cz + CANYON_GATE.z };
   const back = { x: canyon.cx + CANYON_BACK.x, z: canyon.cz + CANYON_BACK.z };
   MAPS.canyon = { // (no waystone: the gate is the way out)
-    id: 'canyon', name: 'Death Canyon', sub: 'Level 70 – 78 · heroes fight heroes', kind: 'outdoor', pvp: true, calamities: true, levels: [70, 78], minLevel: 70, music: 'world',
+    id: 'canyon', name: 'Death Canyon', sub: 'Level 70 – 100 · heroes fight heroes', kind: 'outdoor', pvp: true, calamities: true, levels: [70, 100], minLevel: 70, music: 'world',
     spawns: CANYON_SPAWNS, outdoor: canyon, contains: (x, z) => canyon.contains(x, z),
     camp: canyon.camp, waystone: null,
     arrive: { x: back.x, z: back.z + 2.6, yaw: 0 }, respawn: { map: 'canyon', x: canyon.camp.x - 2.5, z: canyon.camp.z - 3, yaw: Math.PI },

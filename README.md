@@ -55,6 +55,14 @@ automated tests; `&cls=scientist`, `rogue` or `healer` picks the class of a new 
   they had killed it alone, only faster). The team that dealt the most gets the loot; party members take turns. A world boss is fairer:
   everyone who dealt at least a tenth of its damage gets loot of their own too. Everyone credited counts the
   kill for their quests.
+- **Bots** (`server/bots.mjs`): heroes the server plays itself, with ordinary names, so the world never feels empty.
+  About two dozen of them come and go through the day (more in the evening, by Turkey's clock), each in its own
+  land: they rest in camp, walk out to the hunting grounds of their level and fight the monsters there (who fight
+  back: the world deals their blows to a bot itself), drink potions, now and then faint and wake up in camp, level
+  up slowly, and say a few things in the world chat (hello to newcomers, an answer when greeted or named). They
+  count among those online, leave a player's monsters alone, and say no to parties and trades; they never go into
+  dungeons, caves, the arena or the Death Canyon. Their heroes are kept in `bots.json` in the data folder, and no
+  player can take their names (one a player already has is left out).
 - **Parties:** up to 8. Tap a hero's name (or `/invite Name`) to invite; the party frame shows each member's level,
   life and land; `/p` is the party's chat; `/kick`, `/leave`, and the leader can pass the lead. A party shares one
   copy of each dungeon. Parties live on the server (a restart ends them); a member who drops out keeps their place
@@ -364,9 +372,14 @@ minimap too).
 **The Death Canyon** (`src/maps/canyon.js`, drawn by `src/canyon-view.js`), through a gate of red rock west of
 Shadowmere's camp, from **level 70**: a narrow gorge winding north between layered red mountains, from its camp
 past five wider chambers (the Red Gorge, the Dragon's Spine, the Scar, the Bone Pass and the Maw) to **Grakhul, the
-Canyon Tyrant**. Its monsters, levels 70–78 (Rock Slimes, Dust Stalkers, Canyon Ravagers, Canyon Firebrewers, Canyon
-Archers, Scorched Knights), are all **elites**: 40% more Life, 25% harder blows, 40% more XP. Go in alone or with a
-party, whenever you like; make a party there too. It is meant to be survived in a party.
+Canyon Tyrant** (levels 70–78), and on through two side gorges for heroes past that, so they can level up to 100 on
+monsters of their own level as well as in the caves: west from the Dragon's Spine through the Slag Fields (78–82)
+and the Ashen Reach (82–86) to the Broken Forge and **Ozric the Slagmaster** (88), east from the Scar through the
+Shattered Steps (88–92) and Glasswind Flats (92–96) to the Sunscar and **Kaelor the Dust King** (100). Its
+monsters (Rock Slimes, Dust Stalkers, Canyon Ravagers, Canyon Firebrewers, Canyon Archers, Scorched Knights, and in
+the side gorges Slag Brutes, Dune Raiders, Glasswind Archers and Sunscar Wardens) are all **elites**: 40% more
+Life, 25% harder blows, 40% more XP. Go in alone or with a party, whenever you like; make a party there too. It is
+meant to be survived in a party.
 
 - **Heroes fight heroes:** out of its camp, Last Rest (safe: a provisioner, a banker and the gate back to
   Shadowmere; no waystone), every hero not in your party is your foe, as in the arena's pit (blows a little under
@@ -535,7 +548,7 @@ Variants: `?size=192`, `?size=512&maskable` (Android adaptive icon), `?size=180&
 - `src/settings.js`: saved player settings
 - `src/classes.js`: the playable classes (shared with the server)
 - `src/net.js`, `src/account.js`: the connection to the game server, and the sign-in / hero screens
-- `server/`: the game server (`main.mjs` messages, `store.mjs` accounts on disk, `auth.mjs` passwords and tokens, `ws.mjs` WebSocket)
+- `server/`: the game server (`main.mjs` messages, `store.mjs` accounts on disk, `auth.mjs` passwords and tokens, `ws.mjs` WebSocket, `bots.mjs` the heroes it plays itself)
 - `src/quest-data.js`: every quest; `src/quests.js`: the notice boards, progress and rewards
 - `src/combat.js`: projectiles (arrows too) and ground loot
 - `src/ui.js`, `style.css`: HUD, action bar, minimap, inventory, tooltips

@@ -10,7 +10,7 @@
 // really stands, so dodging works). A kill's XP and loot are shared out here (see credits: parties
 // share theirs) and each hero's game rolls what it was given.
 // Plain numbers only (no three.js), so Node runs it as is.
-import { ENEMY_TYPES, monsterHp, xpFactor, WORLD_BOSSES, WORLD_BOSS_FIRST, WORLD_BOSS_RETURN } from '../monsters.js';
+import { ENEMY_TYPES, monsterHp, monsterDmg, xpFactor, WORLD_BOSSES, WORLD_BOSS_FIRST, WORLD_BOSS_RETURN } from '../monsters.js';
 import { planWorld, zoneAt, resolveCollision, isWalkable, randomWalkablePoint } from '../terrain.js';
 import { MAPS, START, portalTo, arrival } from '../maps.js';
 import { CAVES, STAGES, STAGE_ROOMS, MOUTH_REACH, stageSlots, caveLandFor, untilTomorrow } from '../caves.js';
@@ -387,6 +387,10 @@ class Monster {
     if (p && a.t < a.hitAt) this.faceTo(p.x, p.z, dt, a.slam ? 3 : 8);
     if (!a.hit && a.t >= a.hitAt) {
       a.hit = true;
+      if (p?.bot && !a.summon && !a.circles) { // a hero the server plays (server/bots.mjs): its blows are dealt here
+        const reach = a.slam ? 3.4 : d.kind === 'caster' ? d.range + 2 : d.range + HERO_RADIUS + 1;
+        if (dist <= reach) p.bot.hurt(monsterDmg(d, this.level) * this.dmgMul * (a.slam ? 1.6 : 1) * (this.enraged ? 1.3 : 1), this);
+      }
       if (a.summon) { // the first of each call is an elite after the first call
         const n = this.enraged ? 4 : 3, [common, elite = common] = d.summons || ['skeleton_minion', 'skeleton_warrior'];
         for (let i = 0; i < n; i++) {
@@ -1052,7 +1056,7 @@ export class WorldSim {
       }
     }
     const ts = this.now();
-    for (const p of this.players.values()) deliver(p.pid, this.snapshot(p, ts));
+    for (const p of this.players.values()) if (!p.bot) deliver(p.pid, this.snapshot(p, ts)); // (bots see without being told)
     for (const a of this.areas.values()) a.events.length = 0;
   }
 

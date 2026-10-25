@@ -18,7 +18,8 @@ export class OutdoorMap {
   //   paths, door: { x, z, yaw } (the dungeon's), trees: { kinds: { kind: weight }, density }, rocks, props(map, put, rng),
   //   corridor: a gorge between mountains instead of open ground (the Death Canyon): { spine: [[x, z], …] (its
   //   floor's middle line), width: half its width (or widths: one a point), cliff: how high the mountains rise,
-  //   low: how high they stay on the camera's side (south) }; its zones (not `all`) are clearings in it }
+  //   low: how high they stay on the camera's side (south), branches: [{ spine, widths }] (side gorges, each
+  //   starting on the main one) }; its zones (not `all`) are clearings in it }
   constructor(def) {
     this.id = def.id;
     this.def = def;
@@ -38,8 +39,9 @@ export class OutdoorMap {
     this.door = def.door ? at(def.door) : null;
     if (def.corridor) {
       const C = def.corridor;
+      const line = (L) => ({ spine: L.spine.map(([x, z]) => [x + cx, z + cz]), widths: L.spine.map((_, i) => L.widths?.[i] ?? L.width ?? C.width ?? 8) });
       this.corridor = {
-        spine: C.spine.map(([x, z]) => [x + cx, z + cz]), widths: C.spine.map((_, i) => C.widths?.[i] ?? C.width ?? 8),
+        lines: [line(C), ...(C.branches || []).map(line)], // (the gorge and its branches)
         cliff: C.cliff ?? 18, low: C.low ?? 5, rooms: this.zones.filter((zn) => !zn.all),
       };
     }
@@ -67,14 +69,16 @@ export class OutdoorMap {
   // How far (x, z) is outside the gorge's floor (negative: inside, that far from its edge), and the nearest
   // point of the floor's middle (or of a clearing) it is measured from: { out, nx, nz, w }.
   gorge(x, z) {
-    const C = this.corridor, sp = C.spine;
+    const C = this.corridor;
     let best = { out: Infinity, nx: x, nz: z, w: 0 };
-    for (let i = 0; i < sp.length - 1; i++) {
-      const [ax, az] = sp[i], [bx, bz] = sp[i + 1], dx = bx - ax, dz = bz - az;
-      const t = clamp(((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz), 0, 1);
-      const nx = ax + dx * t, nz = az + dz * t, w = lerp(C.widths[i], C.widths[i + 1], t);
-      const out = Math.hypot(x - nx, z - nz) - w;
-      if (out < best.out) best = { out, nx, nz, w };
+    for (const { spine: sp, widths } of C.lines) {
+      for (let i = 0; i < sp.length - 1; i++) {
+        const [ax, az] = sp[i], [bx, bz] = sp[i + 1], dx = bx - ax, dz = bz - az;
+        const t = clamp(((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz), 0, 1);
+        const nx = ax + dx * t, nz = az + dz * t, w = lerp(widths[i], widths[i + 1], t);
+        const out = Math.hypot(x - nx, z - nz) - w;
+        if (out < best.out) best = { out, nx, nz, w };
+      }
     }
     for (const r of C.rooms) {
       const out = Math.hypot(x - r.x, z - r.z) - r.r;

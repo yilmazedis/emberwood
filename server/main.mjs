@@ -14,6 +14,7 @@ import { ITEMS } from '../src/items.js';
 import { ENEMY_TYPES } from '../src/monsters.js';
 import { CAVES, dayNumber } from '../src/caves.js';
 import * as trades from './trade.mjs';
+import { Bots } from './bots.mjs';
 
 const PORT = Number(process.env.PORT) || 8787;
 const MAX_SAVE = 200 * 1024; // bytes of JSON per character save
@@ -76,9 +77,25 @@ const chatLog = []; // the last things said, for heroes who just arrived
 
 // A line from the world itself (someone came or went), to everyone in it.
 function announce(text, except = null) {
-  const msg = { t: 'chat', s: 1, x: text, o: inWorld.size };
+  const msg = { t: 'chat', s: 1, x: text, o: worldCount() };
   for (const c of inWorld.values()) if (c !== except) c.send(msg);
 }
+
+// The heroes the server plays itself (server/bots.mjs), so the world never feels empty. They count among
+// those online and talk in the world chat like anyone.
+const bots = new Bots(world, {
+  say(b, text) {
+    const msg = { t: 'chat', i: b.pid, n: b.name, c: b.cls, x: text, ts: Date.now() };
+    chatLog.push(msg);
+    if (chatLog.length > 50) chatLog.shift();
+    for (const o of inWorld.values()) o.send(msg);
+  },
+  announce: (text) => announce(text),
+  nameTaken: (name) => store.nameTaken(name),
+  dataDir: store.DATA_DIR,
+});
+const worldCount = () => inWorld.size + bots.online; // (heroes in the world, as players see it)
+const nameTaken = (name) => store.nameTaken(name) || bots.has(name);
 
 function leaveWorld(c, quiet = false) {
   if (!c.pid) return;
@@ -189,6 +206,7 @@ setInterval(() => {
   const now = Date.now();
   const dt = Math.min(0.25, (now - lastTick) / 1000); // (after a stall, don't jump far ahead)
   lastTick = now;
+  bots.tick(dt);
   world.step(dt, (pid, msg) => inWorld.get(pid)?.send(msg));
 }, TICK * 1000);
 
@@ -205,7 +223,7 @@ function signIn(c, acc) {
   online.set(acc.lower, c);
   acc.lastLogin = Date.now();
   store.markDirty(acc);
-  return { t: 'auth', user: acc.user, token: makeToken(secret, acc.lower), chars: charList(acc), world: inWorld.size };
+  return { t: 'auth', user: acc.user, token: makeToken(secret, acc.lower), chars: charList(acc), world: worldCount() };
 }
 
 function needAccount(c) {
@@ -271,7 +289,7 @@ function adminOrder(o) {
       const name = String(o.name || '');
       if (!NAME_RULE.test(name)) return 'Hero names are 3–14 letters, no spaces or numbers.';
       if (!Object.hasOwn(CLASSES, o.cls)) return `The class is one of: ${Object.keys(CLASSES).join(', ')}.`;
-      if (store.nameTaken(name)) return `Someone already has the name ${name}.`;
+      if (nameTaken(name)) return `Someone already has the name ${name}.`;
       if (acc.characters.length >= MAX_CHARACTERS) return `${acc.user} has ${MAX_CHARACTERS} heroes already.`;
       store.addCharacter(acc, { name, cls: o.cls, look: 0, save: o.save && typeof o.save === 'object' ? o.save : null });
       return `${name}, a level ${o.save?.level || 1} ${CLASSES[o.cls].name}, is in ${acc.user}'s heroes.`;
@@ -345,7 +363,7 @@ setTimeout(applyAdmin, 500);
 
 // ---------------------------------------------------------------- messages
 const handlers = {
-  hello: () => ({ t: 'hello', v: PROTOCOL, online: online.size, world: inWorld.size }),
+  hello: () => ({ t: 'hello', v: PROTOCOL, online: online.size, world: worldCount() }),
 
   async register(c, m) {
     throttle(c.ip);
@@ -373,7 +391,7 @@ const handlers = {
   },
 
   chars(c) {
-    return { t: 'chars', chars: charList(needAccount(c)), world: inWorld.size };
+    return { t: 'chars', chars: charList(needAccount(c)), world: worldCount() };
   },
 
   createChar(c, m) {
@@ -383,7 +401,7 @@ const handlers = {
     const look = Math.max(0, Math.min(CLASSES[cls].looks.length - 1, Math.round(Number(m.look) || 0)));
     if (!NAME_RULE.test(name)) throw new Oops('Names are 3–14 letters, no spaces or numbers.');
     if (acc.characters.length >= MAX_CHARACTERS) throw new Oops(`You can have up to ${MAX_CHARACTERS} characters.`);
-    if (store.nameTaken(name)) throw new Oops('Someone already has that name.');
+    if (nameTaken(name)) throw new Oops('Someone already has that name.');
     const ch = store.addCharacter(acc, { name, cls, look, save: null });
     console.log(`${acc.user} created ${cls} ${name}`);
     return { t: 'chars', chars: charList(acc), created: ch.id };
@@ -438,8 +456,9 @@ const handlers = {
     const where = world.join(c.pid, { name: c.char.name, cls: c.char.cls, key: c.char.id, party: party?.id || 0, map: String(m.map || ''), p: m.p, k: m.k });
     inWorld.set(c.pid, c);
     announce(`${c.char.name} has entered Emberwood.`, c);
+    bots.greet(c.char.name);
     if (party) setTimeout(() => partyChanged(c.char?.id), 0); // (after the reply: its game knows its pid)
-    return { t: 'entered', pid: c.pid, chat: chatLog.slice(-20), online: inWorld.size, ...where };
+    return { t: 'entered', pid: c.pid, chat: chatLog.slice(-20), online: worldCount(), ...where };
   },
 
   // The arena's champions (most fights won), and how we're doing.
@@ -452,6 +471,11 @@ const handlers = {
   // Invite a hero (by name) into our party; a new party is made when they say yes.
   partyInvite(c, m) {
     if (!c.pid) throw new Oops('Step into the world first.');
+    const bot = bots.byName(m.name);
+    if (bot?.p) { // (a bot is out hunting on its own: it says no, a few seconds later)
+      setTimeout(() => c.send({ t: 'chat', s: 1, p: 1, x: `${bot.name} said no to your party.` }), 3000 + Math.random() * 6000);
+      return { t: 'invited', name: bot.name };
+    }
     const them = findHero(m.name);
     if (!them?.pid) throw new Oops(`Nobody called ${String(m.name || '').slice(0, 20)} is in the world.`);
     if (them === c) throw new Oops('You are always in your own party.');
@@ -622,11 +646,16 @@ const handlers = {
     chatLog.push(msg);
     if (chatLog.length > 50) chatLog.shift();
     for (const o of inWorld.values()) o.send(msg);
+    bots.heard(c.char.name, text);
     return { t: 'said' };
   },
 
   // ---- trading (server/trade.mjs)
-  tradeRequest: (c, m) => trades.request(c, m, ctx),
+  tradeRequest: (c, m) => {
+    const bot = bots.isBot(Number(m.pid)) && world.players.get(Number(m.pid));
+    if (bot) throw new Oops(`${bot.name} is busy right now.`);
+    return trades.request(c, m, ctx);
+  },
   tradeAnswer: (c, m) => trades.answer(c, m, ctx),
   tradeOffer: (c, m) => trades.offer(c, m, ctx),
   tradeAccept: (c, m) => trades.accept(c, m, ctx),
@@ -669,7 +698,7 @@ const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://local');
   if (url.pathname === '/status' || url.pathname === '/') {
     res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' });
-    res.end(JSON.stringify({ ok: true, game: 'Emberwood', protocol: PROTOCOL, version: siteVersion, online: online.size, world: inWorld.size, uptimeS: Math.round((Date.now() - started) / 1000) }));
+    res.end(JSON.stringify({ ok: true, game: 'Emberwood', protocol: PROTOCOL, version: siteVersion, online: online.size, world: inWorld.size, bots: bots.online, uptimeS: Math.round((Date.now() - started) / 1000) }));
     return;
   }
   res.writeHead(404, { 'Content-Type': 'text/plain' });
