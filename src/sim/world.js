@@ -613,7 +613,7 @@ class Area {
     // one, ten seconds or so later (never two in a row like that)
     c.chained = !c.chained && Math.random() < 0.35;
     c.next = c.chained ? rand(8, 12) : Math.random() < 0.25 ? rand(30, 45) : rand(60, 90);
-    const out = heroes.filter((p) => p.alive && !p.away && !zoneAt(p.x, p.z)?.safe).slice(0, 10);
+    const out = heroes.filter((p) => p.alive && !p.away && !zoneAt(p.x, p.z)?.safe).sort((a, b) => (a.bot ? 1 : 0) - (b.bot ? 1 : 0)).slice(0, 10); // (players first)
     if (!out.length) { c.next = rand(20, 40); c.chained = false; return; } // (all in camp: a while after one steps out)
     const kinds = Object.keys(CALAMITIES).filter((k) => k !== c.last);
     const kind = kinds[Math.floor(Math.random() * kinds.length)], [dur, n, far] = CALAMITIES[kind];
@@ -630,6 +630,7 @@ class Area {
       }
     }
     this.events.push({ all: true, ev: ['Z', kind, dur, spots] });
+    for (const p of out) p.bot?.calamity(kind, dur, spots); // (a bot's game is the server: it takes its own hurt)
   }
 
   // A cave's chambers: the first one's monsters a moment after the first hero arrives; then, as each
@@ -1042,6 +1043,7 @@ export class WorldSim {
     const looks = eff && !miss ? { ...(eff.stun && { s: Math.min(1.5, eff.stun * 0.5) }), ...(eff.slow && { w: eff.slow[1], f: eff.slow[0] }) } : null;
     const ev = ['H', o.pid, dmg, h[2] && !miss ? 1 : 0, p.pid, looks && Object.keys(looks).length ? looks : 0, miss];
     p.area.events.push({ hero: o.pid, ev });
+    if (o.bot && !miss) o.bot.struck(dmg, p); // (a bot takes it here, and fights back)
   }
 
   // Advance the world by dt seconds, then hand each hero's game its update: deliver(pid, message).
@@ -1092,7 +1094,7 @@ export class WorldSim {
     for (const o of area.players) {
       if (o === me || Math.abs(o.x - me.x) > SEE_PLAYERS || Math.abs(o.z - me.z) > SEE_PLAYERS) continue;
       seenP.add(o.pid);
-      const u = [o.pid, r2(o.x), r2(o.z), r2(o.yaw), o.mode, r1(o.sp), o.alive ? 1 : 0, r2(o.hp), o.away ? 1 : 0, o.life || 0, o.mhp || 0];
+      const u = [o.pid, r2(o.x), r2(o.z), r2(o.yaw), o.mode, r1(o.sp), o.alive ? 1 : 0, r2(o.hp), o.away ? 1 : 0, Math.round(o.life || 0), Math.round(o.mhp || 0)];
       const key = u.join(), k = me.knownP.get(o.pid);
       if (!k || k.ver !== o.lookVer) {
         pl.push({ i: o.pid, n: o.name, c: o.cls, l: o.level, k: o.look, u });

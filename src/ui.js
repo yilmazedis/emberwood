@@ -639,7 +639,7 @@ export class UI {
     const frac = e.isHero ? e.hp : Math.max(0, e.hp / e.maxHp);
     this.el.targetFill.style.transform = `scaleX(${Math.max(0, Math.min(1, frac)).toFixed(3)})`;
     this.el.targetText.textContent = !e.isHero ? `${Math.max(0, Math.ceil(e.hp))} / ${e.maxHp}`
-      : !e.alive ? 'Fainted' : e.maxLife ? `${Math.min(e.life, e.maxLife)} / ${e.maxLife}` : `${Math.round(frac * 100)}%`;
+      : !e.alive ? 'Fainted' : e.maxLife ? `${Math.round(Math.min(e.life, e.maxLife))} / ${Math.round(e.maxLife)}` : `${Math.round(frac * 100)}%`;
     const fx = [];
     if (e.stunT > 0) fx.push('<b class="fx-stun">Stunned</b>');
     if (e.slowT > 0) fx.push('<b class="fx-slow">Slowed</b>');

@@ -56,13 +56,16 @@ automated tests; `&cls=scientist`, `rogue` or `healer` picks the class of a new 
   everyone who dealt at least a tenth of its damage gets loot of their own too. Everyone credited counts the
   kill for their quests.
 - **Bots** (`server/bots.mjs`): heroes the server plays itself, with ordinary names, so the world never feels empty.
-  About two dozen of them come and go through the day (more in the evening, by Turkey's clock), each in its own
+  About thirty of them come and go through the day (more in the evening, by Turkey's clock), each in its own
   land: they rest in camp, walk out to the hunting grounds of their level and fight the monsters there (who fight
   back: the world deals their blows to a bot itself), drink potions, now and then faint and wake up in camp, level
   up slowly, and say a few things in the world chat (hello to newcomers, an answer when greeted or named). They
   count among those online, leave a player's monsters alone, and say no to parties and trades; they never go into
-  dungeons, caves, the arena or the Death Canyon. Their heroes are kept in `bots.json` in the data folder, and no
-  player can take their names (one a player already has is left out).
+  dungeons, caves or the arena. Eight of the strongest (levels 72–97) live in the **Death Canyon**: they follow its
+  gorges (along the paths) to chambers they have a little outgrown, step out of the calamities' rings (mostly), and
+  when a hero attacks one it fights back blow for blow (they never start a fight with a hero; a hero who knocks one
+  out is announced as for any hero). Their heroes are kept in `bots.json` in the data folder, and no player can take
+  their names (one a player already has is left out).
 - **Parties:** up to 8. Tap a hero's name (or `/invite Name`) to invite; the party frame shows each member's level,
   life and land; `/p` is the party's chat; `/kick`, `/leave`, and the leader can pass the lead. A party shares one
   copy of each dungeon. Parties live on the server (a restart ends them); a member who drops out keeps their place

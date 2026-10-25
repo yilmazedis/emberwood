@@ -3,8 +3,10 @@
 // camp, walk out to the hunting grounds of their level, fight the monsters there (who fight back: the world
 // deals their blows to a bot itself, sim/world.js), drink potions, now and then faint and wake up in camp,
 // level up slowly, and say a few things in the world chat (hello to newcomers, an answer when greeted or
-// named). They don't join parties, trade, or go into dungeons, caves, the arena or the Death Canyon. Their
-// heroes (class, level, look) are kept in <data>/bots.json.
+// named). They don't join parties or trade, or go into dungeons, caves or the arena. A few of the strongest live
+// in the Death Canyon: they follow its gorges, step out of the calamities' rings (mostly), and when a hero attacks
+// one it fights back (they never start a fight with a hero). Their heroes (class, level, look) are kept in
+// <data>/bots.json.
 import fs from 'node:fs';
 import path from 'node:path';
 import { CLASSES } from '../src/classes.js';
@@ -16,6 +18,11 @@ import { resolveCollision, randomWalkablePoint, zoneAt } from '../src/terrain.js
 const FIRST_PID = 1_000_000; // (real heroes' world ids count up from 1)
 const RUN = 5.6; // m/s
 const LANDS = [['emberwood', 2, 10], ['frostfang', 11, 22], ['cinderfall', 23, 40], ['shadowmere', 41, 58]];
+const TOP = { emberwood: 10, frostfang: 22, cinderfall: 40, shadowmere: 58, canyon: 100 }; // (the most a land's bots grow to)
+const CANYON = [['Batu', 72], ['Ada', 75], ['Kuzey', 77], ['Eylul', 80], ['Efe', 84], ['Yaren', 88], ['Axel', 93], ['Leila', 97]];
+// the canyon's calamities, as they hit a hero (canyon-view.js has the same): damage, radius; scour: a second
+const CALAMITY = { quake: { dmg: 120, r: 4.5, tremor: 8 }, meteors: { dmg: 160, r: 5.5 }, storm: { dmg: 130, r: 3.5 }, sandstorm: { scour: 10 } };
+const HIT = { warrior: 7, healer: 6, rogue: 5, scientist: 7.5 }; // a blow on a hero, a level
 const NAMES = ['Mert', 'Elif', 'Kaan', 'Zeynep', 'Arda', 'Deniz', 'Emre', 'Selin', 'Burak', 'Ece', 'Baris', 'Defne',
   'Onur', 'Melis', 'Cem', 'Aylin', 'Tolga', 'Irem', 'Kerem', 'Derya', 'Lukas', 'Sofia', 'Mateo', 'Hana', 'Nora', 'Ivan'];
 const LOOKS = { warrior: 'sword', scientist: 'staff', rogue: 'daggers', healer: 'mace' };
@@ -31,6 +38,9 @@ const SAY = {
   frostfang: ['so cold here', 'berserkers on the ridge are no joke', 'hrimgar down, finally', 'frost alchemists slow me every time'],
   cinderfall: ['lava rivers look amazing', 'ember cutthroats everywhere', 'anyone seen ignis?', 'ash knights hit hard'],
   shadowmere: ['mist hermits poison me every time', 'marsh reavers lol', 'anyone for the sunken vault?', 'malakar down!', 'saving for the canyon'],
+  canyon: ['meteor right on my head lol', 'the sunscar is brutal', 'anyone seen kaelor up?', 'sandstorm again...', 'careful in the gorge, people are hunting',
+    'ozric down!', 'that quake almost got me', 'glasswind archers hurt'],
+  rival: ['really?', 'come on then', 'gg', 'nice try', 'bring a party next time', 'ok ok you win'],
   welcome: ['hi {name}', 'hey {name}', 'welcome!', 'selam {name}', 'yo', 'hey'],
   hello: ['hey!', 'hi', 'selam', 'as', 'hello', 'heyy', 'merhaba'],
   named: ['yeah?', 'hm?', 'busy hunting, sorry', 'sup', 'ne oldu?', 'here', "what's up"],
@@ -91,6 +101,11 @@ export class Bots {
       });
       i++;
     }
+    for (const [name, level] of CANYON) { // (the canyon's own, the strongest)
+      if (nameTaken(name)) continue;
+      const s = have.get(name), cls = s?.cls && CLASSES[s.cls] ? s.cls : Object.keys(CLASSES)[out.length % 4];
+      out.push({ name, cls, land: 'canyon', level: Math.round(s?.level || level), m: s?.m ?? (Math.random() < 0.5 ? 0 : 1), bow: s?.bow ?? (cls === 'rogue' && Math.random() < 0.4), xp: s?.xp || 0, pid: 0, p: null, offUntil: 0 });
+    }
     return out;
   }
 
@@ -121,7 +136,7 @@ export class Bots {
     b.pid = pid;
     b.p = p;
     p.bot = this.ai(b);
-    Object.assign(p, { mhp: this.maxLife(b), hp: 1 });
+    Object.assign(p, { mhp: this.maxLife(b), hp: 1, dr: DR[b.cls], ev: 0.05 }); // (armor and dodging: for heroes' blows on it)
     p.life = p.mhp;
     b.until = this.world.time + rand(25, 120) * 60;
     this.camp(b, true);
@@ -162,17 +177,53 @@ export class Bots {
       hurt: (raw, by) => {
         const p = b.p;
         if (!p?.alive) return;
-        p.life = Math.max(0, p.life - Math.max(1, Math.round(raw * (1 - DR[b.cls]) * 0.6 * rand(0.9, 1.1)))); // (0.6: what a player's skills and dodging spare it)
+        const spared = b.land === 'canyon' ? 0.18 : 0.6; // (what a player's skills and dodging spare it; a canyon hero is better geared)
+        p.life = Math.max(0, p.life - Math.max(1, Math.round(raw * (1 - DR[b.cls]) * spared * rand(0.9, 1.1))));
         p.hp = p.life / p.mhp;
         b.hitT = this.world.time;
         if (!b.foe || b.foe.state === 'dead') b.foe = by;
         if (p.life <= 0) this.faint(b);
       },
+      // a hero's blow (the world worked it out, armor counted): it fights back
+      struck: (dmg, by) => {
+        const p = b.p;
+        if (!p?.alive) return;
+        p.life = Math.max(0, p.life - dmg);
+        p.hp = p.life / p.mhp;
+        b.hitT = this.world.time;
+        if (b.rival !== by) { b.rival = by; if (Math.random() < 0.3) this.speak(b, pick(SAY.rival), rand(1, 3)); }
+        if (p.life <= 0) this.faint(b);
+      },
+      // a calamity in the canyon: its strikes (x, z, delay) come later; out of a ring it can see, it steps aside (mostly)
+      calamity: (kind, dur, spots) => {
+        const c = CALAMITY[kind], p = b.p, t = this.world.time;
+        if (!c || !p?.alive) return;
+        if (c.scour) { b.scourUntil = t + dur; return; }
+        if (c.tremor) b.tremorUntil = t + dur;
+        for (let i = 0; i + 2 < spots.length; i += 3) {
+          const x = spots[i], z = spots[i + 1], at = t + spots[i + 2];
+          (b.strikes ||= []).push({ x, z, at, dmg: c.dmg, r: c.r });
+          const d = Math.hypot(p.x - x, p.z - z);
+          if (d < c.r + 1 && Math.random() < 0.85) { // out of the ring, away from its middle
+            const a = d > 0.1 ? Math.atan2(p.x - x, p.z - z) : rand(0, Math.PI * 2);
+            b.dodge = { x: x + Math.sin(a) * (c.r + 2), z: z + Math.cos(a) * (c.r + 2), until: at };
+          }
+        }
+      },
     };
   }
 
   faint(b) {
-    const p = b.p;
+    const p = b.p, w = this.world;
+    const by = p.lastHit && w.time - p.lastHit.at < 10 ? w.players.get(p.lastHit.by) : null;
+    if (by && by.area === p.area) { // a hero knocked it out (the world tells everyone, as for a hero)
+      p.area.events.push({ all: true, ev: ['K', by.pid, p.pid] });
+      w.onHeroDown?.(by, p);
+    }
+    p.lastHit = null;
+    b.rival = null;
+    b.strikes = [];
+    b.dodge = null;
     p.alive = false;
     p.life = 0;
     p.hp = 0;
@@ -213,6 +264,19 @@ export class Bots {
       }
       return;
     }
+    // the canyon's calamities: strikes falling where it stands, the sand, the shaking
+    if (b.strikes?.length) {
+      for (const s of b.strikes) if (w.time >= s.at && Math.hypot(p.x - s.x, p.z - s.z) < s.r + 0.5) this.loseLife(b, Math.round(s.dmg * 0.5 * rand(0.9, 1.1))); // (half: it can't read the rings as a player can)
+      b.strikes = b.strikes.filter((s) => w.time < s.at);
+      if (!p.alive) return;
+    }
+    if (w.time < (b.scourUntil || 0) && !zoneAt(p.x, p.z)?.safe) this.loseLife(b, CALAMITY.sandstorm.scour * dt);
+    if (w.time < (b.tremorUntil || 0) && !zoneAt(p.x, p.z)?.safe) this.loseLife(b, CALAMITY.quake.tremor * dt);
+    if (!p.alive) return;
+    if (b.dodge) {
+      if (w.time >= b.dodge.until + 0.3) b.dodge = null;
+      else { this.walk(b, b.dodge, 0.4); return; }
+    }
     // Life: back a little at a time when nothing has hit it lately (a lot in camp), and a potion when low
     const calm = w.time - (b.hitT || -99) > 6, inCamp = zoneAt(p.x, p.z)?.safe;
     if (calm || inCamp) { p.life = Math.min(p.mhp, p.life + p.mhp * (inCamp ? 0.08 : 0.02) * dt); p.hp = p.life / p.mhp; }
@@ -228,13 +292,21 @@ export class Bots {
       p.hp = p.life / p.mhp;
       this.act(b, { k: 'dr' });
     }
+    if (this.rivalOk(b)) { this.fightRival(b); return; } // (a hero struck it: that first)
+    b.rival = null;
+    if (b.state !== 'hunt' && this.defend(b)) return; // (on its way somewhere: a monster on it is fought first)
     if (b.state === 'camp') {
       if (b.stateT <= 0) this.goHunt(b);
       else if (b.to && this.walk(b, b.to, 0.5, 2.2)) b.to = null;
       else if (!b.to && Math.random() < dt * 0.04) b.to = this.campSpot(b);
       else if (!b.to) this.stand(b);
     } else if (b.state === 'walk') {
-      if (this.walk(b, b.to, 2.5)) { b.state = b.back ? 'camp' : 'hunt'; b.stateT = b.back ? rand(30, 120) : rand(240, 720); b.to = null; if (b.back) b.pots = 8; }
+      if (b.route?.length) { // (along the paths first: a point is passed when near it, or when something there is in the way)
+        const n = b.route[0];
+        if (this.walk(b, n, 2.5) || (b.stuck > 0.8 && Math.hypot(n.x - b.p.x, n.z - b.p.z) < 5)) b.route.shift();
+        return;
+      }
+      if (this.walk(b, b.to, 2.5)) { b.state = b.back ? 'camp' : 'hunt'; b.stateT = b.back ? rand(30, 120) : rand(240, 720); b.to = null; if (b.back) b.pots = b.land === 'canyon' ? 12 : 8; }
     } else if (b.state === 'hunt') {
       this.hunt(b, dt);
     }
@@ -248,18 +320,20 @@ export class Bots {
     b.to = this.campSpot(b);
     b.foe = null;
     b.back = false;
-    b.pots = 8;
+    b.pots = b.land === 'canyon' ? 12 : 8;
   }
 
   // Out to the zone of its level in its land (the best one below it, if none is quite its own).
   goHunt(b) {
     const zones = zonesOf(MAPS[b.land]).filter((z) => !z.safe && !z.all && levelsOf(z) && !/Boss|Dungeon/.test(z.sub));
-    const fit = zones.filter((z) => { const [lo, hi] = levelsOf(z); return b.level >= lo - 1 && b.level <= hi + 2; });
+    // (in the canyon, alone, it plays it safe: a chamber it has outgrown a little, as a careful hero would)
+    const fit = zones.filter((z) => { const [lo, hi] = levelsOf(z); return b.land === 'canyon' ? b.level >= hi && b.level <= hi + 6 : b.level >= lo - 1 && b.level <= hi + 2; });
     const below = zones.filter((x) => levelsOf(x)[1] <= b.level).sort((x, y) => levelsOf(y)[1] - levelsOf(x)[1]);
     const z = fit.length ? pick(fit) : below[0] || zones.sort((x, y) => levelsOf(x)[0] - levelsOf(y)[0])[0];
     if (!z) { b.stateT = 60; return; }
     b.zone = z;
     b.to = randomWalkablePoint(z.x, z.z, Math.max(3, z.r * 0.5), 0.6);
+    b.route = this.route(b, b.to);
     b.state = 'walk';
     b.back = false;
   }
@@ -276,6 +350,7 @@ export class Bots {
 
   goBack(b) {
     b.to = this.campSpot(b);
+    b.route = this.route(b, b.to);
     b.state = 'walk';
     b.back = true;
     b.foe = null;
@@ -286,13 +361,13 @@ export class Bots {
   // and hurt, back to camp.
   hunt(b, dt) {
     const p = b.p, z = b.zone;
-    if (b.stateT <= 0 || (b.pots <= 0 && p.hp < 0.5) || (p.hp < 0.25 && b.potT > 3)) { this.goBack(b); return; } // (done, or running for it)
+    if (b.stateT <= 0 || (b.pots <= 0 && p.hp < 0.5) || (p.hp < (b.land === 'canyon' ? 0.35 : 0.25) && b.potT > 2)) { this.goBack(b); return; } // (done, or running for it)
     let m = b.foe;
     if (m && (m.state === 'dead' || m.area !== p.area || Math.hypot(m.x - z.x, m.z - z.z) > z.r + 14)) m = b.foe = null;
     if (!m) {
       let best = null, bd = 16;
       for (const o of p.area.monsters.values()) {
-        if (o.state === 'dead' || o.state === 'spawn' || o.def.boss || o.def.passive || o.level > b.level + 1) continue;
+        if (o.state === 'dead' || o.state === 'spawn' || o.def.boss || o.def.passive || o.level > b.level + (b.land === 'canyon' ? 0 : 1)) continue;
         if ((o.target && !o.target.bot) || [...o.hitters.keys()].some((pid) => !this.byPid.has(pid))) continue; // (a player's)
         if (Math.hypot(o.x - z.x, o.z - z.z) > z.r + 8) continue;
         const d = Math.hypot(o.x - p.x, o.z - p.z);
@@ -315,30 +390,52 @@ export class Bots {
     this.strike(b, m, ranged);
   }
 
+  // A monster after it (it struck it, or chases it), near: fight it where it stands. True while it does.
+  defend(b) {
+    const p = b.p, m = b.foe;
+    if (!m || m.state === 'dead' || m.area !== p.area || m.target !== p || Math.hypot(m.x - p.x, m.z - p.z) > 12) { b.foe = null; return false; }
+    const ranged = b.cls === 'scientist' || (b.cls === 'rogue' && b.bow), reach = ranged ? 9 : 1.6 + m.radius;
+    if (Math.hypot(m.x - p.x, m.z - p.z) > reach) { this.walk(b, m, reach - 0.3); return true; }
+    this.stand(b);
+    p.yaw = Math.atan2(m.x - p.x, m.z - p.z);
+    if (b.atkT <= 0) this.strike(b, m, ranged);
+    return true;
+  }
+
   // One blow (or bolt, or arrow), now and then a skill: a monster of its level falls in about eight seconds.
   strike(b, m, ranged) {
-    const p = b.p, gap = Math.max(0.6, m.level / b.level);
+    const p = b.p, gap = Math.max(0.5, m.level / b.level); // (a monster well below it falls much faster)
     const every = { warrior: 1.0, healer: 1.1, rogue: b.bow ? 1.0 : 0.65, scientist: 1.05 }[b.cls];
     b.atkT = every * rand(0.95, 1.1);
     const skill = b.skT <= 0 && Math.random() < 0.35;
     if (skill) b.skT = rand(5, 9);
     const crit = Math.random() < 0.12;
-    const dmg = Math.max(1, Math.round((m.maxHp * every / rand(7, 10)) / Math.pow(gap, 1.6) * (skill ? 1.8 : 1) * (crit ? 1.6 : 1)));
+    const dmg = Math.max(1, Math.round((m.maxHp * every / rand(7, 10)) / Math.pow(gap, gap < 1 ? 4 : 1.6) * (skill ? 1.8 : 1) * (crit ? 1.6 : 1)));
     if (skill) this.act(b, { k: 'sk', id: pick(SKILL[b.cls]), x: +m.x.toFixed(2), z: +m.z.toFixed(2), t: m.id, pw: 1 });
     else if (ranged) this.act(b, { k: b.cls === 'rogue' ? 'ar' : 'bo', x: +m.x.toFixed(2), z: +m.z.toFixed(2) });
     else this.act(b, { k: 'sw', s: b.cls === 'rogue' ? pick(['stab', 'slash']) : b.cls === 'healer' ? 'chop' : pick(['slash', 'backslash', 'chop']), d: 0.5 });
+    this.wound(b, m, dmg, crit);
+    // swarmed: its blows (cleaves, novas, volleys) catch the others on it too, at half
+    for (const o of [...p.area.monsters.values()]) {
+      if (o !== m && o.target === p && o.state === 'chase' && Math.hypot(o.x - p.x, o.z - p.z) < 3.5) this.wound(b, o, Math.round(dmg * 0.5 * Math.min(1, o.maxHp / m.maxHp)), false);
+    }
+  }
+
+  wound(b, m, dmg, crit) {
+    const p = b.p;
+    if (m.state === 'dead') return;
     m.hurt(dmg, p.x, p.z, 0.2, p, null);
     m.emit(['h', m.id, dmg, crit ? 1 : 0, p.pid]);
     if (m.hp <= 0) {
       m.die(p);
-      b.foe = null;
+      if (b.foe === m) b.foe = null;
       this.gain(b, m);
     }
   }
 
   // XP for a kill: it grows slowly (a bot's levels are a little slower than a player's), up to its land's last.
   gain(b, m) {
-    const top = LANDS.find(([land]) => land === b.land)?.[2] || 58;
+    const top = TOP[b.land] || 58;
     if (b.level >= top) return;
     b.xp += monsterXp(m.def, m.level) * (m.level >= b.level - 2 ? 1 : 0.4);
     const need = 55 * Math.pow(b.level, 1.55) * (1 + 0.1 * Math.max(0, b.level - 9)) * 8; // (a level in an hour or so of hunting)
@@ -383,6 +480,68 @@ export class Bots {
   }
 
   stand(b) { b.p.mode = 0; b.p.sp = 0; }
+
+  loseLife(b, n) {
+    const p = b.p;
+    p.life = Math.max(0, p.life - n);
+    p.hp = p.life / p.mhp;
+    if (p.life <= 0) this.faint(b);
+  }
+
+  // The way to `to` along the land's paths (the canyon's gorges wind between cliffs): the points of the paths
+  // from the one nearest it to the one nearest `to` (paths meeting where their points are close), then `to`.
+  route(b, to) {
+    const map = MAPS[b.land], paths = map.outdoor?.paths;
+    if (!paths?.length) return [];
+    if (!map.botGraph) {
+      const nodes = [], edges = new Map();
+      const link = (i, j) => { (edges.get(i) || edges.set(i, []).get(i)).push(j); (edges.get(j) || edges.set(j, []).get(j)).push(i); };
+      for (const line of paths) line.forEach(([x, z], k) => { nodes.push({ x, z }); if (k) link(nodes.length - 2, nodes.length - 1); });
+      for (let i = 0; i < nodes.length; i++) for (let j = i + 1; j < nodes.length; j++) if (Math.hypot(nodes[i].x - nodes[j].x, nodes[i].z - nodes[j].z) < 9) link(i, j);
+      map.botGraph = { nodes, edges };
+    }
+    const { nodes, edges } = map.botGraph, p = b.p;
+    const near = (x, z) => nodes.reduce((best, n, i) => (Math.hypot(n.x - x, n.z - z) < Math.hypot(nodes[best].x - x, nodes[best].z - z) ? i : best), 0);
+    const from = near(p.x, p.z), goal = near(to.x, to.z), prev = new Map([[from, -1]]), queue = [from];
+    while (queue.length) {
+      const i = queue.shift();
+      if (i === goal) break;
+      for (const j of edges.get(i) || []) if (!prev.has(j)) { prev.set(j, i); queue.push(j); }
+    }
+    if (!prev.has(goal)) return [];
+    const way = [];
+    for (let i = goal; i !== -1; i = prev.get(i)) way.unshift({ x: nodes[i].x, z: nodes[i].z });
+    const d = (a, c) => Math.hypot(a.x - c.x, a.z - c.z);
+    if (way.length > 1 && d(p, way[1]) < d(way[0], way[1])) way.shift(); // (the first is behind it)
+    return way;
+  }
+
+  // A hero who struck it and is still there to fight: alive, here, both out where heroes fight, not far.
+  rivalOk(b) {
+    const r = b.rival, p = b.p;
+    if (!r || !r.inWorld || !r.alive || r.away || r.area !== p.area) return false;
+    if (!zoneAt(p.x, p.z)?.pvp || !zoneAt(r.x, r.z)?.pvp) return false;
+    return Math.hypot(r.x - p.x, r.z - p.z) < 25;
+  }
+
+  // Fighting back: up close (or from range), blow for blow, until one of them falls, the hero gets away, or it is
+  // low and out of potions (then it runs for camp).
+  fightRival(b) {
+    const r = b.rival, p = b.p;
+    if (p.hp < 0.3 && (b.pots <= 0 || b.potT > 3)) { b.rival = null; this.goBack(b); return; }
+    const ranged = b.cls === 'scientist' || (b.cls === 'rogue' && b.bow), reach = ranged ? 9 : 2.2;
+    if (Math.hypot(r.x - p.x, r.z - p.z) > reach) { this.walk(b, r, reach - 0.3); return; }
+    this.stand(b);
+    p.yaw = Math.atan2(r.x - p.x, r.z - p.z);
+    if (b.atkT > 0) return;
+    const every = { warrior: 1.0, healer: 1.1, rogue: b.bow ? 1.0 : 0.65, scientist: 1.05 }[b.cls];
+    b.atkT = every * rand(0.95, 1.1);
+    const crit = Math.random() < 0.12;
+    const dmg = Math.round(b.level * HIT[b.cls] * every * rand(0.85, 1.15) * (crit ? 1.6 : 1)); // (the world scales a blow on a hero)
+    if (ranged) this.act(b, { k: b.cls === 'rogue' ? 'ar' : 'bo', x: +r.x.toFixed(2), z: +r.z.toFixed(2) });
+    else this.act(b, { k: 'sw', s: b.cls === 'rogue' ? pick(['stab', 'slash']) : b.cls === 'healer' ? 'chop' : pick(['slash', 'backslash', 'chop']), d: 0.5 });
+    this.world.hitHero(p, [r.pid, dmg, crit ? 1 : 0]);
+  }
 
   act(b, a) { b.p.area?.events.push({ pid: b.pid, ev: ['p', b.pid, a] }); }
 

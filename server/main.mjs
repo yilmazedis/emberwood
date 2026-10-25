@@ -52,10 +52,11 @@ const world = new WorldSim();
 // a hero beat another in the arena: the champions' board counts it, and the arena hears of it
 world.onHeroDown = (winner, loser) => {
   const cw = inWorld.get(winner.pid), cl = inWorld.get(loser.pid);
-  if (!cw?.char || !cl?.char) return;
+  const wn = cw?.char?.name || (winner.bot && winner.name), ln = cl?.char?.name || (loser.bot && loser.name); // (a bot: the server's own hero)
+  if (!wn || !ln) return;
   const arena = winner.area.map.kind === 'arena'; // (the Death Canyon's fights aren't on the champions' board)
-  if (arena) store.arenaResult({ ...cw.char, level: winner.level }, { ...cl.char, level: loser.level });
-  const msg = { t: 'chat', s: 1, x: arena ? `⚔ ${cw.char.name} defeated ${cl.char.name} in the Arena!` : `⚔ ${cw.char.name} knocked out ${cl.char.name} in the ${winner.area.map.name}!` };
+  if (arena && cw?.char && cl?.char) store.arenaResult({ ...cw.char, level: winner.level }, { ...cl.char, level: loser.level });
+  const msg = { t: 'chat', s: 1, x: arena ? `⚔ ${wn} defeated ${ln} in the Arena!` : `⚔ ${wn} knocked out ${ln} in the ${winner.area.map.name}!` };
   for (const p of winner.area.players) inWorld.get(p.pid)?.send(msg);
 };
 // a world boss rises in a land, or falls: everyone in that land hears
